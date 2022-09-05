@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(leo_fw)
+project(leo2_fw)
 
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
@@ -14,28 +14,28 @@ include_directories(
   ${YAML_CPP_INCLUDE_DIRS}
 )
 
-add_library(leo_fw SHARED
+add_library(leo2_fw SHARED
   src/firmware_message_converter.cpp
 )
-target_link_libraries(leo_fw
+target_link_libraries(leo2_fw
   rclcpp::rclcpp
-  rclcpp_components::component
   ${YAML_CPP_LIBRARIES}
 )
-ament_target_dependencies(leo_fw
+ament_target_dependencies(leo2_fw
   sensor_msgs
   leo_msgs
   nav_msgs
+  rclcpp_components
 )
-rclcpp_components_register_node(leo_fw
-  PLUGIN "leo_fw::FirmwareMessageConverter"
+rclcpp_components_register_node(leo2_fw
+  PLUGIN "leo2_fw::FirmwareMessageConverter"
   EXECUTABLE "firmware_message_converter"
 )
 
 ament_python_install_package(${PROJECT_NAME})
 
 install(
-  TARGETS leo_fw
+  TARGETS leo2_fw
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
 )

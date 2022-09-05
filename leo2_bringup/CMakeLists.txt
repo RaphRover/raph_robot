@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(leo_bringup)
+project(leo2_bringup)
 
 find_package(ament_cmake REQUIRED)
 
@@ -12,7 +12,7 @@ install(
 
 install(
   PROGRAMS
-    scripts/leo_system
+    scripts/leo2_system
   DESTINATION lib/${PROJECT_NAME}
 )
 

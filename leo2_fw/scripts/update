@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+
+import leo2_fw
+
+leo2_fw.flash_firmware()

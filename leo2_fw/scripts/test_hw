@@ -2,8 +2,8 @@
 
 import argparse
 
-import leo_fw
-from leo_fw.test_hw import TestMode
+import leo2_fw
+from leo2_fw.test_hw import TestMode
 
 parser = argparse.ArgumentParser(description="Test controller controller")
 
@@ -18,4 +18,4 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-leo_fw.test_hw(hardware=args.hardware)
+leo2_fw.test_hw(hardware=args.hardware)

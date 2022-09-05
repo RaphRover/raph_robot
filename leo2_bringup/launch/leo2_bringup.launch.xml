@@ -2,11 +2,11 @@
 
   <arg
     name="model"
-    default="$(find-pkg-share leo_description)/urdf/leo.urdf.xacro"
+    default="$(find-pkg-share leo2_description)/urdf/leo2.urdf.xacro"
     description="Absolute path to robot urdf.xacro file" />
   <arg name="tf_frame_prefix" default="" />
 
-  <include file="$(find-pkg-share leo_description)/launch/state_publisher.launch.xml">
+  <include file="$(find-pkg-share leo2_description)/launch/state_publisher.launch.xml">
     <arg name="model" value="$(var model)" />
   </include>
 
@@ -25,19 +25,19 @@
     <param name="params_glob" value="[*]" />
   </node>
 
-  <node pkg="leo_fw" exec="firmware_message_converter">
+  <node pkg="leo2_fw" exec="firmware_message_converter">
     <param name="tf_frame_prefix" value="$(var tf_frame_prefix)" />
-    <param from="$(find-pkg-share leo_bringup)/config/firmware_message_converter.yaml" />
+    <param from="$(find-pkg-share leo2_bringup)/config/firmware_message_converter.yaml" />
   </node>
 
   <node namespace="camera"
     name="v4l2_camera"
     pkg="v4l2_camera"
     exec="v4l2_camera_node">
-    <param from="$(find-pkg-share leo_bringup)/config/v4l2_camera.yaml" />
+    <param from="$(find-pkg-share leo2_bringup)/config/v4l2_camera.yaml" />
   </node>
 
-  <node pkg="leo_bringup"
-        exec="leo_system"/>
+  <node pkg="leo2_bringup"
+        exec="leo2_system"/>
 
 </launch>

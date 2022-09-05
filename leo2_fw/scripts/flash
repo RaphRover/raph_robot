@@ -2,8 +2,8 @@
 
 import argparse
 
-import leo_fw
-from leo_fw.board import BoardType
+import leo2_fw
+from leo2_fw.board import BoardType
 
 parser = argparse.ArgumentParser(description="Flash firmware to board.")
 
@@ -26,7 +26,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-leo_fw.flash_firmware(
+leo2_fw.flash_firmware(
     firmware_path=args.firmware_path,
     board_type=args.board_type,
     check_version=args.check_version,

@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>leo_robot</name>
+  <name>leo2_robot</name>
   <version>1.1.0</version>
   <description>Metapackage of software to install on Leo Rover.</description>
 
@@ -17,10 +17,10 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <exec_depend>leo_bringup</exec_depend>
-  <exec_depend>leo_fw</exec_depend>
+  <exec_depend>leo2_bringup</exec_depend>
+  <exec_depend>leo2_fw</exec_depend>
 
-  <exec_depend>leo</exec_depend>  
+  <exec_depend>leo2</exec_depend>  
 
   <export>
     <build_type>ament_cmake</build_type>

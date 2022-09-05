@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>leo_bringup</name>
+  <name>leo2_bringup</name>
   <version>1.1.0</version>
   <description>
     Scripts and launch files for starting basic Leo Rover functionalities. 
@@ -28,8 +28,8 @@
   <exec_depend>rosapi</exec_depend>
   <exec_depend>v4l2_camera</exec_depend>
 
-  <exec_depend>leo_description</exec_depend>
-  <exec_depend>leo_fw</exec_depend>
+  <exec_depend>leo2_description</exec_depend>
+  <exec_depend>leo2_fw</exec_depend>
 
   <!-- <exec_depend>web_video_server</exec_depend> -->
 
