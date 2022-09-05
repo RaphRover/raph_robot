@@ -39,7 +39,7 @@
 using namespace std::chrono_literals;
 using std::placeholders::_1;
 
-namespace leo_fw
+namespace leo2_fw
 {
 
 class FirmwareMessageConverter : public rclcpp::Node
@@ -55,7 +55,6 @@ public:
       std::bind(
         &FirmwareMessageConverter::set_imu_calibration_callback, this,
         std::placeholders::_1, std::placeholders::_2));
-
 
     robot_frame_id_ = declare_parameter("robot_frame_id", robot_frame_id_);
     odom_frame_id_ = declare_parameter("odom_frame_id", odom_frame_id_);
@@ -296,7 +295,7 @@ private:
   rclcpp::Service<leo_msgs::srv::SetImuCalibration>::SharedPtr set_imu_calibration_service;
 };
 
-}  // namespace leo_fw
+}  // namespace leo2_fw
 
 #include "rclcpp_components/register_node_macro.hpp"
-RCLCPP_COMPONENTS_REGISTER_NODE(leo_fw::FirmwareMessageConverter)
+RCLCPP_COMPONENTS_REGISTER_NODE(leo2_fw::FirmwareMessageConverter)
