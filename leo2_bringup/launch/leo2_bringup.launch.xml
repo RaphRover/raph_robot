@@ -10,34 +10,12 @@
     <arg name="model" value="$(var model)" />
   </include>
 
-  <node pkg="web_video_server"
-    exec="web_video_server" />
-
-  <node name="rosbridge_server"
-    pkg="rosbridge_server"
-    exec="rosbridge_websocket">
-    <param name="unregister_timeout" value="86400.0" />
-  </node>
-
-  <node pkg="rosapi" exec="rosapi_node">
-    <param name="topics_glob" value="[*]" />
-    <param name="services_glob" value="[*]" />
-    <param name="params_glob" value="[*]" />
-  </node>
-
   <node pkg="leo2_fw" exec="firmware_message_converter">
     <param name="tf_frame_prefix" value="$(var tf_frame_prefix)" />
     <param from="$(find-pkg-share leo2_bringup)/config/firmware_message_converter.yaml" />
   </node>
 
-  <node namespace="camera"
-    name="v4l2_camera"
-    pkg="v4l2_camera"
-    exec="v4l2_camera_node">
-    <param from="$(find-pkg-share leo2_bringup)/config/v4l2_camera.yaml" />
-  </node>
-
   <node pkg="leo2_bringup"
-        exec="leo2_system"/>
+    exec="leo2_system" />
 
 </launch>
