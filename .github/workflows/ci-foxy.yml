@@ -46,7 +46,7 @@ jobs:
           required-ros-distributions: ${{ env.ROS_DISTRO }}
       - uses: ros-tooling/action-ros-lint@v0.1
         with:
-          distribution: humble
+          distribution: ${{ env.ROS_DISTRO }}
           linter: ${{ matrix.linter }}
           package-name: |
             leo_bringup
