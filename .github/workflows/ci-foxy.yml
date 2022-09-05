@@ -34,7 +34,7 @@ jobs:
     name: ament_${{ matrix.linter }}
     runs-on: ubuntu-20.04
     container:
-      image: ubuntu:jammy
+      image: ubuntu:focal
     strategy:
       fail-fast: false
       matrix:
