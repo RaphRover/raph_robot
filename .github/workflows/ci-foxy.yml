@@ -26,7 +26,7 @@ jobs:
       - name: Source tests
         uses: "ros-industrial/industrial_ci@master"
         env:
-          UPSTREAM_WORKSPACE: "github:LeoRover/leo_common-ros2#foxy"
+          UPSTREAM_WORKSPACE: "github:LeoRover/leo_common-ros2#foxy github:fictionlab/leo2_common#foxy"
           PYLINT_CHECK: true
           PYLINT_ARGS: "--rcfile=src/leo2_robot/.pylintrc"
 
