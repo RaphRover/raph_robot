@@ -51,9 +51,9 @@ jobs:
           distribution: ${{ env.ROS_DISTRO }}
           linter: ${{ matrix.linter }}
           package-name: |
-            leo_bringup
-            leo_fw
-            leo_robot
+            leo2_bringup
+            leo2_fw
+            leo2_robot
 
   black_check:
     runs-on: ubuntu-20.04
