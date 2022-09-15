@@ -1,0 +1,25 @@
+<launch version="0.1.1">
+
+  <node name="lifecycle_manager_navigation" pkg="nav2_lifecycle_manager" exec="lifecycle_manager">
+    <param from="$(find-pkg-share leo2_nav)/config/navigation/lifecycle_manager.yaml" />
+  </node>
+
+  <node name="controller_server" pkg="nav2_controller" exec="controller_server">
+    <param from="$(find-pkg-share leo2_nav)/config/navigation/controller_server.yaml" />
+  </node>
+
+  <node name="planner_server" pkg="nav2_planner" exec="planner_server">
+    <param from="$(find-pkg-share leo2_nav)/config/navigation/planner_server.yaml" />
+  </node>
+
+  <node name="waypoint_follower" pkg="nav2_waypoint_follower" exec="waypoint_follower">
+    <param from="$(find-pkg-share leo2_nav)/config/navigation/waypoint_follower.yaml" />
+  </node>
+
+  <node name="bt_navigator" pkg="nav2_bt_navigator" exec="bt_navigator">
+    <param name="default_bt_xml_filename"
+      value="$(find-pkg-share leo2_nav)/config/behavior_trees/navigate_w_replanning_time.xml" />
+    <param from="$(find-pkg-share leo2_nav)/config/navigation/bt_navigator.yaml" />
+  </node>
+
+</launch>

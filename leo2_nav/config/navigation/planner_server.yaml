@@ -1,0 +1,55 @@
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      height: 20
+      width: 20
+      always_send_full_costmap: true
+      footprint_padding: 0.01
+      footprint: "[[0.21, 0.22], [0.21, -0.22], [-0.21, -0.22], [-0.21, 0.22]]"
+      global_frame: map
+      lethal_cost_threshold: 100
+      map_topic: map
+      publish_frequency: 1.0
+      resolution: 0.05
+      robot_base_frame: base_link
+      rolling_window: false
+      track_unknown_space: false
+      transform_tolerance: 0.3
+      trinary_costmap: true
+      unknown_cost_value: 255
+      update_frequency: 1.0
+      use_maximum: false
+      use_sim_time: false
+      plugins: ["obstacle_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        footprint_clearing_enabled: true
+        observation_sources: pointcloud
+        pointcloud:
+          topic: /zed2/point_cloud/cloud_registered
+          data_type: PointCloud2
+          expected_update_rate: 3.0
+          min_obstacle_height: 0.05
+          max_obstacle_height: 0.2
+          inf_is_valid: false
+          marking: true
+          clearing: true
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 5.0
+          obstacle_min_range: 0.0
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.55
+
+planner_server:
+  ros__parameters:
+    expoected_planner_frequency: 20.0
+    planner_plugins: ["GridBased"]
+    GridBased:
+      plugin: "nav2_navfn_planner/NavfnPlanner"
+      tolerance: 0.5
+      use_astar: false
+      allow_unknown: true

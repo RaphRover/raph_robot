@@ -1,0 +1,7 @@
+<launch version="0.1.1">
+
+  <node name="lifecycle_manager_localization" pkg="nav2_lifecycle_manager" exec="lifecycle_manager">
+    <param from="$(find-pkg-share leo2_nav)/config/localization/lifecycle_manager.yaml" />
+  </node>
+
+</launch>
