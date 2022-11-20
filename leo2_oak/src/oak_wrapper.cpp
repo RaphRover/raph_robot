@@ -38,19 +38,18 @@ class OakWrapper : public rclcpp::Node
 {
   std::unique_ptr<dai::Device> device_;
 
+  // DepthAI data queues
   std::shared_ptr<dai::DataOutputQueue> rgb_queue_;
+  std::shared_ptr<dai::DataOutputQueue> rgb_compressed_queue_;
   std::shared_ptr<dai::DataOutputQueue> left_queue_;
+  std::shared_ptr<dai::DataOutputQueue> left_compressed_queue_;
   std::shared_ptr<dai::DataOutputQueue> right_queue_;
-
+  std::shared_ptr<dai::DataOutputQueue> right_compressed_queue_;
   std::shared_ptr<dai::DataOutputQueue> depth_queue_;
-  // image_transport::CameraPublisher depth_pub_;
+  std::shared_ptr<dai::DataOutputQueue> imu_queue_;
 
   std::shared_ptr<dai::rosBridge::ImuConverter> imu_converter_;
-  std::shared_ptr<dai::DataOutputQueue> imu_queue_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
-
-  rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr rgb_compressed_pub_;
-  std::shared_ptr<dai::DataOutputQueue> rgb_compressed_queue_;
 
   std::chrono::time_point<std::chrono::steady_clock> steady_base_time_;
   rclcpp::Time ros_base_time_;
@@ -91,6 +90,15 @@ public:
         &OakWrapper::publish_image, this, rgb_img_pub, rgb_cam_info_pub, rgb_camera_info,
         std::placeholders::_1));
 
+    auto rgb_compressed_pub = create_publisher<sensor_msgs::msg::CompressedImage>(
+      "rgb/image_color/compressed", 10);
+    rgb_compressed_queue_ = device_->getOutputQueue("rgb_compressed", 30, false);
+    rgb_compressed_queue_->addCallback(
+      std::bind(
+        &OakWrapper::publish_compressed_image, this, rgb_compressed_pub,
+        "oak_rgb_camera_optical_frame",
+        std::placeholders::_1));
+
     left_queue_ = device_->getOutputQueue("left", 30, false);
     auto left_camera_info = img_converter.calibrationToCameraInfo(
       calibration_handler, dai::CameraBoardSocket::LEFT, 1280, 720);
@@ -103,10 +111,28 @@ public:
         &OakWrapper::publish_image, this, left_img_pub, left_cam_info_pub, left_camera_info,
         std::placeholders::_1));
 
+    auto left_compressed_pub = create_publisher<sensor_msgs::msg::CompressedImage>(
+      "left/image_mono/compressed", 10);
+    left_compressed_queue_ = device_->getOutputQueue("left_compressed", 30, false);
+    left_compressed_queue_->addCallback(
+      std::bind(
+        &OakWrapper::publish_compressed_image, this, left_compressed_pub,
+        "oak_left_camera_optical_frame",
+        std::placeholders::_1));
+
     right_queue_ = device_->getOutputQueue("right", 30, false);
     auto right_camera_info = img_converter.calibrationToCameraInfo(
       calibration_handler, dai::CameraBoardSocket::RIGHT, 1280, 720);
     right_camera_info.header.frame_id = "oak_right_camera_optical_frame";
+
+    auto right_compressed_pub = create_publisher<sensor_msgs::msg::CompressedImage>(
+      "right/image_mono/compressed", 10);
+    right_compressed_queue_ = device_->getOutputQueue("right_compressed", 30, false);
+    right_compressed_queue_->addCallback(
+      std::bind(
+        &OakWrapper::publish_compressed_image, this, right_compressed_pub,
+        "oak_right_camera_optical_frame",
+        std::placeholders::_1));
 
     auto right_img_pub = create_publisher<sensor_msgs::msg::Image>("right/image_mono", 10);
     auto right_cam_info_pub =
@@ -134,15 +160,6 @@ public:
     imu_queue_ = device_->getOutputQueue("imu", 30, false);
     imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("imu", 10);
     imu_queue_->addCallback(std::bind(&OakWrapper::publish_imu, this, std::placeholders::_1));
-
-    auto rgb_compressed_pub = create_publisher<sensor_msgs::msg::CompressedImage>(
-      "rgb/image_color/compressed", 10);
-    rgb_compressed_queue_ = device_->getOutputQueue("rgb_compressed", 30, false);
-    rgb_compressed_queue_->addCallback(
-      std::bind(
-        &OakWrapper::publish_compressed_image, this, rgb_compressed_pub,
-        "oak_rgb_camera_optical_frame",
-        std::placeholders::_1));
   }
 
 private:
@@ -154,8 +171,12 @@ private:
     auto mono_left_node = pipeline.create<dai::node::MonoCamera>();
     auto mono_right_node = pipeline.create<dai::node::MonoCamera>();
     auto stereo_depth_node = pipeline.create<dai::node::StereoDepth>();
+    auto left_encoder_node = pipeline.create<dai::node::VideoEncoder>();
+    auto right_encoder_node = pipeline.create<dai::node::VideoEncoder>();
     auto xout_left = pipeline.create<dai::node::XLinkOut>();
+    auto xout_left_compressed = pipeline.create<dai::node::XLinkOut>();
     auto xout_right = pipeline.create<dai::node::XLinkOut>();
+    auto xout_right_compressed = pipeline.create<dai::node::XLinkOut>();
     auto xout_depth = pipeline.create<dai::node::XLinkOut>();
     auto rgb_node = pipeline.create<dai::node::ColorCamera>();
     auto rgb_encoder_node = pipeline.create<dai::node::VideoEncoder>();
@@ -179,13 +200,27 @@ private:
     stereo_depth_node->setExtendedDisparity(false);
     stereo_depth_node->setSubpixel(false);
 
+    left_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
+    left_encoder_node->setQuality(80);
+
+    right_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
+    right_encoder_node->setQuality(80);
+
     xout_left->setStreamName("left");
     xout_left->input.setQueueSize(1);
     xout_left->input.setBlocking(false);
 
+    xout_left_compressed->setStreamName("left_compressed");
+    xout_left_compressed->input.setQueueSize(1);
+    xout_left_compressed->input.setBlocking(false);
+
     xout_right->setStreamName("right");
     xout_right->input.setQueueSize(1);
     xout_right->input.setBlocking(false);
+
+    xout_right_compressed->setStreamName("right_compressed");
+    xout_right_compressed->input.setQueueSize(1);
+    xout_right_compressed->input.setBlocking(false);
 
     xout_depth->setStreamName("depth");
     xout_depth->input.setQueueSize(1);
@@ -223,6 +258,12 @@ private:
     stereo_depth_node->rectifiedLeft.link(xout_left->input);
     stereo_depth_node->rectifiedRight.link(xout_right->input);
     stereo_depth_node->depth.link(xout_depth->input);
+
+    stereo_depth_node->rectifiedLeft.link(left_encoder_node->input);
+    stereo_depth_node->rectifiedRight.link(right_encoder_node->input);
+
+    left_encoder_node->bitstream.link(xout_left_compressed->input);
+    right_encoder_node->bitstream.link(xout_right_compressed->input);
 
     rgb_node->video.link(xout_rgb->input);
     rgb_node->video.link(rgb_encoder_node->input);
