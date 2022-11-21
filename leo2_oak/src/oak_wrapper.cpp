@@ -72,7 +72,7 @@ class OakWrapper : public rclcpp::Node
 
 public:
   OakWrapper(rclcpp::NodeOptions options)
-  : Node("oak_wrapper"),
+  : Node("oak_wrapper", options),
     steady_base_time_(std::chrono::steady_clock::now())
   {
     ros_base_time_ = rclcpp::Clock().now();
