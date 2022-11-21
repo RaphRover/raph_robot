@@ -31,6 +31,8 @@
 #include "sensor_msgs/msg/compressed_image.hpp"
 #include "image_transport/image_transport.hpp"
 
+using namespace std::chrono_literals;
+
 namespace leo2_oak
 {
 
@@ -48,11 +50,25 @@ class OakWrapper : public rclcpp::Node
   std::shared_ptr<dai::DataOutputQueue> depth_queue_;
   std::shared_ptr<dai::DataOutputQueue> imu_queue_;
 
+  // ROS Publishers
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> rgb_img_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> rgb_cam_info_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> rgb_compressed_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> left_img_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> left_cam_info_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> left_compressed_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> right_img_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> right_cam_info_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> right_compressed_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> stereo_depth_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> stereo_cam_info_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Imu>> imu_pub_;
+
   std::shared_ptr<dai::rosBridge::ImuConverter> imu_converter_;
-  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
 
   std::chrono::time_point<std::chrono::steady_clock> steady_base_time_;
   rclcpp::Time ros_base_time_;
+  std::shared_ptr<rclcpp::TimerBase> timer_;
 
 public:
   OakWrapper(rclcpp::NodeOptions options)
@@ -79,95 +95,96 @@ public:
     auto img_converter = dai::rosBridge::ImageConverter(false);
 
     // RGB
-    rgb_queue_ = device_->getOutputQueue("rgb", 30, false);
+    rgb_queue_ = device_->getOutputQueue("rgb", 1, true);
     auto rgb_camera_info = img_converter.calibrationToCameraInfo(
       calibration_handler, dai::CameraBoardSocket::RGB, 1280, 720);
     rgb_camera_info.header.frame_id = "oak_rgb_camera_optical_frame";
 
-    auto rgb_img_pub = create_publisher<sensor_msgs::msg::Image>("rgb/image_color", 10);
-    auto rgb_cam_info_pub = create_publisher<sensor_msgs::msg::CameraInfo>("rgb/camera_info", 10);
+    rgb_img_pub_ = create_publisher<sensor_msgs::msg::Image>("rgb/image_color", 10);
+    rgb_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("rgb/camera_info", 10);
     rgb_queue_->addCallback(
       std::bind(
-        &OakWrapper::publish_image, this, rgb_img_pub, rgb_cam_info_pub, rgb_camera_info,
+        &OakWrapper::publish_image, this, rgb_img_pub_, rgb_cam_info_pub_, rgb_camera_info,
         std::placeholders::_1));
 
     // RGB Compressed
-    auto rgb_compressed_pub = create_publisher<sensor_msgs::msg::CompressedImage>(
+    rgb_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
       "rgb/image_color/compressed", 10);
-    rgb_compressed_queue_ = device_->getOutputQueue("rgb_compressed", 30, false);
+    rgb_compressed_queue_ = device_->getOutputQueue("rgb_compressed", 1, true);
     rgb_compressed_queue_->addCallback(
       std::bind(
-        &OakWrapper::publish_compressed_image, this, rgb_compressed_pub,
+        &OakWrapper::publish_compressed_image, this, rgb_compressed_pub_,
         "oak_rgb_camera_optical_frame",
         std::placeholders::_1));
 
     // Left
-    left_queue_ = device_->getOutputQueue("left", 30, false);
+    left_queue_ = device_->getOutputQueue("left", 1, true);
     auto left_camera_info = img_converter.calibrationToCameraInfo(
       calibration_handler, dai::CameraBoardSocket::LEFT, 1280, 720);
     left_camera_info.header.frame_id = "oak_left_camera_optical_frame";
 
-    auto left_img_pub = create_publisher<sensor_msgs::msg::Image>("left/image_rect", 10);
-    auto left_cam_info_pub = create_publisher<sensor_msgs::msg::CameraInfo>("left/camera_info", 10);
+    left_img_pub_ = create_publisher<sensor_msgs::msg::Image>("left/image_rect", 10);
+    left_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("left/camera_info", 10);
     left_queue_->addCallback(
       std::bind(
-        &OakWrapper::publish_image, this, left_img_pub, left_cam_info_pub, left_camera_info,
+        &OakWrapper::publish_image, this, left_img_pub_, left_cam_info_pub_, left_camera_info,
         std::placeholders::_1));
 
     // Left Compressed
-    auto left_compressed_pub = create_publisher<sensor_msgs::msg::CompressedImage>(
+    left_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
       "left/image_rect/compressed", 10);
-    left_compressed_queue_ = device_->getOutputQueue("left_compressed", 30, false);
+    left_compressed_queue_ = device_->getOutputQueue("left_compressed", 1, true);
     left_compressed_queue_->addCallback(
       std::bind(
-        &OakWrapper::publish_compressed_image, this, left_compressed_pub,
+        &OakWrapper::publish_compressed_image, this, left_compressed_pub_,
         "oak_left_camera_optical_frame",
         std::placeholders::_1));
 
     // Right
-    right_queue_ = device_->getOutputQueue("right", 30, false);
+    right_queue_ = device_->getOutputQueue("right", 1, true);
     auto right_camera_info = img_converter.calibrationToCameraInfo(
       calibration_handler, dai::CameraBoardSocket::RIGHT, 1280, 720);
     right_camera_info.header.frame_id = "oak_right_camera_optical_frame";
 
-    auto right_img_pub = create_publisher<sensor_msgs::msg::Image>("right/image_rect", 10);
-    auto right_cam_info_pub =
+    right_img_pub_ = create_publisher<sensor_msgs::msg::Image>("right/image_rect", 10);
+    right_cam_info_pub_ =
       create_publisher<sensor_msgs::msg::CameraInfo>("right/camera_info", 10);
     right_queue_->addCallback(
       std::bind(
-        &OakWrapper::publish_image, this, right_img_pub, right_cam_info_pub, right_camera_info,
+        &OakWrapper::publish_image, this, right_img_pub_, right_cam_info_pub_, right_camera_info,
         std::placeholders::_1));
 
     // Right Compressed
-    auto right_compressed_pub = create_publisher<sensor_msgs::msg::CompressedImage>(
+    right_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
       "right/image_rect/compressed", 10);
-    right_compressed_queue_ = device_->getOutputQueue("right_compressed", 30, false);
+    right_compressed_queue_ = device_->getOutputQueue("right_compressed", 1, true);
     right_compressed_queue_->addCallback(
       std::bind(
-        &OakWrapper::publish_compressed_image, this, right_compressed_pub,
+        &OakWrapper::publish_compressed_image, this, right_compressed_pub_,
         "oak_right_camera_optical_frame",
         std::placeholders::_1));
 
     // Depth
-    depth_queue_ = device_->getOutputQueue("depth", 30, false);
+    depth_queue_ = device_->getOutputQueue("depth", 1, true);
 
-    auto depth_img_pub = create_publisher<sensor_msgs::msg::Image>("stereo/depth", 10);
-    auto stereo_cam_info_pub =
+    stereo_depth_pub_ = create_publisher<sensor_msgs::msg::Image>("stereo/depth", 10);
+    stereo_cam_info_pub_ =
       create_publisher<sensor_msgs::msg::CameraInfo>("stereo/camera_info", 10);
     depth_queue_->addCallback(
       std::bind(
-        &OakWrapper::publish_image, this, depth_img_pub, stereo_cam_info_pub, right_camera_info,
-        std::placeholders::_1
-      )
-    );
+        &OakWrapper::publish_image, this, stereo_depth_pub_, stereo_cam_info_pub_,
+        right_camera_info,
+        std::placeholders::_1));
 
     // IMU
     imu_converter_ = std::make_shared<dai::rosBridge::ImuConverter>(
       "oak_imu_frame",
       dai::ros::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO);
-    imu_queue_ = device_->getOutputQueue("imu", 30, false);
+    imu_queue_ = device_->getOutputQueue("imu", 1, true);
     imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("imu", 10);
     imu_queue_->addCallback(std::bind(&OakWrapper::publish_imu, this, std::placeholders::_1));
+
+    timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check_publishers, this));
   }
 
 private:
@@ -281,6 +298,36 @@ private:
     return pipeline;
   }
 
+  void check_queue(int subscription_count, const std::shared_ptr<dai::DataOutputQueue> & queue)
+  {
+    if (subscription_count > 0 && queue->getBlocking()) {
+      queue->setBlocking(false);
+      queue->tryGetAll();
+    } else if (subscription_count == 0 && !queue->getBlocking()) {
+      queue->setBlocking(true);
+    }
+  }
+
+  void check_publishers()
+  {
+    check_queue(
+      rgb_img_pub_->get_subscription_count() + rgb_cam_info_pub_->get_subscription_count(),
+      rgb_queue_);
+    check_queue(rgb_compressed_pub_->get_subscription_count(), rgb_compressed_queue_);
+    check_queue(
+      left_img_pub_->get_subscription_count() + left_cam_info_pub_->get_subscription_count(),
+      left_queue_);
+    check_queue(left_compressed_pub_->get_subscription_count(), left_compressed_queue_);
+    check_queue(
+      right_img_pub_->get_subscription_count() + right_cam_info_pub_->get_subscription_count(),
+      right_queue_);
+    check_queue(right_compressed_pub_->get_subscription_count(), right_compressed_queue_);
+    check_queue(
+      stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count(),
+      depth_queue_);
+    check_queue(imu_pub_->get_subscription_count(), imu_queue_);
+  }
+
   void publish_image(
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> img_pub,
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
@@ -293,8 +340,6 @@ private:
       ros_base_time_, steady_base_time_,
       in_data->getTimestamp());
     cam_info_pub->publish(cam_info);
-
-    if (img_pub->get_subscription_count() == 0) {return;}
 
     auto image = std::make_unique<sensor_msgs::msg::Image>();
 
@@ -332,8 +377,6 @@ private:
     std::string frame_id,
     std::shared_ptr<dai::ADatatype> data)
   {
-    if (img_pub->get_subscription_count() == 0) {return;}
-
     auto in_data = std::dynamic_pointer_cast<dai::ImgFrame>(data);
 
     auto image = std::make_unique<sensor_msgs::msg::CompressedImage>();
@@ -349,8 +392,6 @@ private:
 
   void publish_imu(std::shared_ptr<dai::ADatatype> data)
   {
-    if (imu_pub_->get_subscription_count() == 0) {return;}
-
     auto in_data = std::dynamic_pointer_cast<dai::IMUData>(data);
 
     std::deque<sensor_msgs::msg::Imu> op_msgs;
