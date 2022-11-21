@@ -78,6 +78,7 @@ public:
     // Only used to get camera info matrices
     auto img_converter = dai::rosBridge::ImageConverter(false);
 
+    // RGB
     rgb_queue_ = device_->getOutputQueue("rgb", 30, false);
     auto rgb_camera_info = img_converter.calibrationToCameraInfo(
       calibration_handler, dai::CameraBoardSocket::RGB, 1280, 720);
@@ -90,6 +91,7 @@ public:
         &OakWrapper::publish_image, this, rgb_img_pub, rgb_cam_info_pub, rgb_camera_info,
         std::placeholders::_1));
 
+    // RGB Compressed
     auto rgb_compressed_pub = create_publisher<sensor_msgs::msg::CompressedImage>(
       "rgb/image_color/compressed", 10);
     rgb_compressed_queue_ = device_->getOutputQueue("rgb_compressed", 30, false);
@@ -99,20 +101,22 @@ public:
         "oak_rgb_camera_optical_frame",
         std::placeholders::_1));
 
+    // Left
     left_queue_ = device_->getOutputQueue("left", 30, false);
     auto left_camera_info = img_converter.calibrationToCameraInfo(
       calibration_handler, dai::CameraBoardSocket::LEFT, 1280, 720);
     left_camera_info.header.frame_id = "oak_left_camera_optical_frame";
 
-    auto left_img_pub = create_publisher<sensor_msgs::msg::Image>("left/image_mono", 10);
+    auto left_img_pub = create_publisher<sensor_msgs::msg::Image>("left/image_rect", 10);
     auto left_cam_info_pub = create_publisher<sensor_msgs::msg::CameraInfo>("left/camera_info", 10);
     left_queue_->addCallback(
       std::bind(
         &OakWrapper::publish_image, this, left_img_pub, left_cam_info_pub, left_camera_info,
         std::placeholders::_1));
 
+    // Left Compressed
     auto left_compressed_pub = create_publisher<sensor_msgs::msg::CompressedImage>(
-      "left/image_mono/compressed", 10);
+      "left/image_rect/compressed", 10);
     left_compressed_queue_ = device_->getOutputQueue("left_compressed", 30, false);
     left_compressed_queue_->addCallback(
       std::bind(
@@ -120,21 +124,13 @@ public:
         "oak_left_camera_optical_frame",
         std::placeholders::_1));
 
+    // Right
     right_queue_ = device_->getOutputQueue("right", 30, false);
     auto right_camera_info = img_converter.calibrationToCameraInfo(
       calibration_handler, dai::CameraBoardSocket::RIGHT, 1280, 720);
     right_camera_info.header.frame_id = "oak_right_camera_optical_frame";
 
-    auto right_compressed_pub = create_publisher<sensor_msgs::msg::CompressedImage>(
-      "right/image_mono/compressed", 10);
-    right_compressed_queue_ = device_->getOutputQueue("right_compressed", 30, false);
-    right_compressed_queue_->addCallback(
-      std::bind(
-        &OakWrapper::publish_compressed_image, this, right_compressed_pub,
-        "oak_right_camera_optical_frame",
-        std::placeholders::_1));
-
-    auto right_img_pub = create_publisher<sensor_msgs::msg::Image>("right/image_mono", 10);
+    auto right_img_pub = create_publisher<sensor_msgs::msg::Image>("right/image_rect", 10);
     auto right_cam_info_pub =
       create_publisher<sensor_msgs::msg::CameraInfo>("right/camera_info", 10);
     right_queue_->addCallback(
@@ -142,6 +138,17 @@ public:
         &OakWrapper::publish_image, this, right_img_pub, right_cam_info_pub, right_camera_info,
         std::placeholders::_1));
 
+    // Right Compressed
+    auto right_compressed_pub = create_publisher<sensor_msgs::msg::CompressedImage>(
+      "right/image_rect/compressed", 10);
+    right_compressed_queue_ = device_->getOutputQueue("right_compressed", 30, false);
+    right_compressed_queue_->addCallback(
+      std::bind(
+        &OakWrapper::publish_compressed_image, this, right_compressed_pub,
+        "oak_right_camera_optical_frame",
+        std::placeholders::_1));
+
+    // Depth
     depth_queue_ = device_->getOutputQueue("depth", 30, false);
 
     auto depth_img_pub = create_publisher<sensor_msgs::msg::Image>("stereo/depth", 10);
@@ -154,6 +161,7 @@ public:
       )
     );
 
+    // IMU
     imu_converter_ = std::make_shared<dai::rosBridge::ImuConverter>(
       "oak_imu_frame",
       dai::ros::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO);
