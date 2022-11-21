@@ -213,10 +213,10 @@ private:
     // Configure nodes
     mono_left_node->setBoardSocket(dai::CameraBoardSocket::LEFT);
     mono_left_node->setResolution(dai::MonoCameraProperties::SensorResolution::THE_720_P);
-    mono_left_node->setFps(30);
+    mono_left_node->setFps(5);
     mono_right_node->setBoardSocket(dai::CameraBoardSocket::RIGHT);
     mono_right_node->setResolution(dai::MonoCameraProperties::SensorResolution::THE_720_P);
-    mono_right_node->setFps(30);
+    mono_right_node->setFps(5);
 
     stereo_depth_node->setRectifyEdgeFillColor(0);
     stereo_depth_node->initialConfig.setConfidenceThreshold(100);
