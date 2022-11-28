@@ -1,0 +1,9 @@
+<launch version="0.1.1">
+
+  <node name="ekf_filter"
+    pkg="robot_localization"
+    exec="ekf_node">
+    <param from="$(find-pkg-share leo2_nav)/config/ekf.yaml" />
+  </node>
+
+</launch>
