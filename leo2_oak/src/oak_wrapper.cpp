@@ -120,7 +120,7 @@ public:
     // Left
     left_queue_ = device_->getOutputQueue("left", 1, true);
     auto left_camera_info = img_converter.calibrationToCameraInfo(
-      calibration_handler, dai::CameraBoardSocket::LEFT, 1280, 720);
+      calibration_handler, dai::CameraBoardSocket::LEFT, 640, 400);
     left_camera_info.header.frame_id = "oak_left_camera_optical_frame";
 
     left_img_pub_ = create_publisher<sensor_msgs::msg::Image>("left/image_rect", 10);
@@ -143,7 +143,7 @@ public:
     // Right
     right_queue_ = device_->getOutputQueue("right", 1, true);
     auto right_camera_info = img_converter.calibrationToCameraInfo(
-      calibration_handler, dai::CameraBoardSocket::RIGHT, 1280, 720);
+      calibration_handler, dai::CameraBoardSocket::RIGHT, 640, 400);
     right_camera_info.header.frame_id = "oak_right_camera_optical_frame";
 
     right_img_pub_ = create_publisher<sensor_msgs::msg::Image>("right/image_rect", 10);
@@ -179,7 +179,7 @@ public:
     // IMU
     imu_converter_ = std::make_shared<dai::rosBridge::ImuConverter>(
       "oak_imu_frame",
-      dai::ros::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO);
+      dai::ros::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO, 0.001, 0.00001);
     imu_queue_ = device_->getOutputQueue("imu", 1, true);
     imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("imu", 10);
     imu_queue_->addCallback(std::bind(&OakWrapper::publish_imu, this, std::placeholders::_1));
@@ -212,14 +212,14 @@ private:
 
     // Configure nodes
     mono_left_node->setBoardSocket(dai::CameraBoardSocket::LEFT);
-    mono_left_node->setResolution(dai::MonoCameraProperties::SensorResolution::THE_720_P);
-    mono_left_node->setFps(5);
+    mono_left_node->setResolution(dai::MonoCameraProperties::SensorResolution::THE_400_P);
+    mono_left_node->setFps(3);
     mono_right_node->setBoardSocket(dai::CameraBoardSocket::RIGHT);
-    mono_right_node->setResolution(dai::MonoCameraProperties::SensorResolution::THE_720_P);
-    mono_right_node->setFps(5);
+    mono_right_node->setResolution(dai::MonoCameraProperties::SensorResolution::THE_400_P);
+    mono_right_node->setFps(3);
 
     stereo_depth_node->setRectifyEdgeFillColor(0);
-    stereo_depth_node->initialConfig.setConfidenceThreshold(100);
+    stereo_depth_node->initialConfig.setConfidenceThreshold(50);
     stereo_depth_node->setLeftRightCheck(true);
     stereo_depth_node->initialConfig.setLeftRightCheckThreshold(5);
     stereo_depth_node->setExtendedDisparity(false);
