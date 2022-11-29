@@ -4,7 +4,7 @@ oak:
       depth:
         min_distance: 0.0
         max_distance: 3.0
-        confidence_threshold: 50
+        confidence_threshold: 30
         lr_check_enabled: true
         lr_check_threshold: 1
         subpixel_enabled: true
