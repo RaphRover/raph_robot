@@ -29,7 +29,8 @@
 #include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
-#include "image_transport/image_transport.hpp"
+
+#include "oak_wrapper_parameters.hpp"
 
 using namespace std::chrono_literals;
 
@@ -49,6 +50,7 @@ class OakWrapper : public rclcpp::Node
   std::shared_ptr<dai::DataOutputQueue> right_compressed_queue_;
   std::shared_ptr<dai::DataOutputQueue> depth_queue_;
   std::shared_ptr<dai::DataOutputQueue> imu_queue_;
+  std::shared_ptr<dai::DataInputQueue> depth_config_queue_;
 
   // ROS Publishers
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> rgb_img_pub_;
@@ -70,12 +72,19 @@ class OakWrapper : public rclcpp::Node
   rclcpp::Time ros_base_time_;
   std::shared_ptr<rclcpp::TimerBase> timer_;
 
+  ParamListener param_listener_;
+  Params params_;
+
+  dai::RawStereoDepthConfig depth_config_;
+
 public:
   OakWrapper(rclcpp::NodeOptions options)
   : Node("oak_wrapper", options),
-    steady_base_time_(std::chrono::steady_clock::now())
+    steady_base_time_(std::chrono::steady_clock::now()),
+    param_listener_(get_node_parameters_interface())
   {
     ros_base_time_ = rclcpp::Clock().now();
+    update_parameters();
 
     auto pipeline = create_dai_pipeline();
     device_ = std::make_unique<dai::Device>(pipeline, dai::UsbSpeed::FULL);
@@ -176,6 +185,9 @@ public:
         right_camera_info,
         std::placeholders::_1));
 
+    // Depth Config
+    depth_config_queue_ = device_->getInputQueue("depth_config");
+
     // IMU
     imu_converter_ = std::make_shared<dai::rosBridge::ImuConverter>(
       "oak_imu_frame",
@@ -184,7 +196,7 @@ public:
     imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("imu", 10);
     imu_queue_->addCallback(std::bind(&OakWrapper::publish_imu, this, std::placeholders::_1));
 
-    timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check_publishers, this));
+    timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check, this));
   }
 
 private:
@@ -203,6 +215,7 @@ private:
     auto xout_right = pipeline.create<dai::node::XLinkOut>();
     auto xout_right_compressed = pipeline.create<dai::node::XLinkOut>();
     auto xout_depth = pipeline.create<dai::node::XLinkOut>();
+    auto xin_depth_config = pipeline.create<dai::node::XLinkIn>();
     auto rgb_node = pipeline.create<dai::node::ColorCamera>();
     auto rgb_encoder_node = pipeline.create<dai::node::VideoEncoder>();
     auto xout_rgb = pipeline.create<dai::node::XLinkOut>();
@@ -219,11 +232,8 @@ private:
     mono_right_node->setFps(3);
 
     stereo_depth_node->setRectifyEdgeFillColor(0);
-    stereo_depth_node->initialConfig.setConfidenceThreshold(50);
-    stereo_depth_node->setLeftRightCheck(true);
-    stereo_depth_node->initialConfig.setLeftRightCheckThreshold(5);
     stereo_depth_node->setExtendedDisparity(false);
-    stereo_depth_node->setSubpixel(false);
+    stereo_depth_node->initialConfig.set(depth_config_);
 
     left_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
     left_encoder_node->setQuality(80);
@@ -250,6 +260,8 @@ private:
     xout_depth->setStreamName("depth");
     xout_depth->input.setQueueSize(1);
     xout_depth->input.setBlocking(false);
+
+    xin_depth_config->setStreamName("depth_config");
 
     rgb_node->setBoardSocket(dai::CameraBoardSocket::RGB);
     rgb_node->setResolution(dai::ColorCameraProperties::SensorResolution::THE_4_K);
@@ -286,6 +298,8 @@ private:
 
     stereo_depth_node->rectifiedLeft.link(left_encoder_node->input);
     stereo_depth_node->rectifiedRight.link(right_encoder_node->input);
+
+    xin_depth_config->out.link(stereo_depth_node->inputConfig);
 
     left_encoder_node->bitstream.link(xout_left_compressed->input);
     right_encoder_node->bitstream.link(xout_right_compressed->input);
@@ -326,6 +340,43 @@ private:
       stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count(),
       depth_queue_);
     check_queue(imu_pub_->get_subscription_count(), imu_queue_);
+  }
+
+  void check_parameters()
+  {
+    if (param_listener_.is_old(params_)) {
+      update_parameters();
+      send_parameters();
+    }
+  }
+
+  void update_parameters()
+  {
+    param_listener_.refresh_dynamic_parameters();
+    params_ = param_listener_.get_params();
+
+    depth_config_.costMatching.confidenceThreshold = params_.depth.confidence_threshold;
+    depth_config_.algorithmControl.enableLeftRightCheck = params_.depth.lr_check_enabled;
+    depth_config_.algorithmControl.leftRightCheckThreshold = params_.depth.lr_check_threshold;
+    depth_config_.algorithmControl.enableSubpixel = params_.depth.subpixel_enabled;
+    depth_config_.algorithmControl.subpixelFractionalBits = params_.depth.subpixel_fractional_bits;
+    depth_config_.postProcessing.thresholdFilter.minRange =
+      static_cast<int>(params_.depth.min_distance * 1000.0);
+    depth_config_.postProcessing.thresholdFilter.maxRange =
+      static_cast<int>(params_.depth.max_distance * 1000.0);
+  }
+
+  void send_parameters()
+  {
+    dai::StereoDepthConfig config;
+    config.set(depth_config_);
+    depth_config_queue_->send(config);
+  }
+
+  void check()
+  {
+    check_publishers();
+    check_parameters();
   }
 
   void publish_image(
