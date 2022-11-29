@@ -18,4 +18,6 @@
   <node pkg="leo2_bringup"
     exec="leo2_system" />
 
+  <include file="$(find-pkg-share leo2_bringup)/launch/oak.launch.xml" />
+
 </launch>
