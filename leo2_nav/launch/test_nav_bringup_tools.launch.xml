@@ -1,0 +1,13 @@
+<launch>
+
+  <include file="$(find-pkg-share leo2_nav)/launch/ekf.launch.xml" />
+  <include file="$(find-pkg-share leo2_description)/launch/state_publisher.launch.xml" />
+  <!--<include file="$(find-pkg-share leo2_teleop)/launch/joy_teleop.launch.xml" />-->
+
+  <node name="vel_to_ackermann_converter" pkg="leo2_nav" exec="cmd_vel_to_ackermann_drive" >
+    <param name="wheelbase" value="0.31"/>
+  </node>
+
+  <node name="static_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 map odom"/>
+
+</launch>
