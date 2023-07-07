@@ -10,4 +10,10 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(
+  PROGRAMS
+    scripts/cmd_vel_to_ackermann_drive
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()
