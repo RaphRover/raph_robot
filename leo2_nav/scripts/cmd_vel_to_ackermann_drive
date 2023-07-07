@@ -6,49 +6,52 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from ackermann_msgs.msg import AckermannDrive
 
+
 class Converter(Node):
     def __init__(self):
         super().__init__("vel_to_ackermann_converter")
 
-        self.declare_parameter('wheelbase', 0.31)
+        self.declare_parameter("wheelbase", 0.31)
 
-        self.wheelbase = self.get_parameter('wheelbase').value
+        self.wheelbase = self.get_parameter("wheelbase").value
 
         self.cmd_vel_sub = self.create_subscription(
-          Twist, '/cmd_vel', self.twist_cmd_callback, 1
+            Twist, "/cmd_vel", self.twist_cmd_callback, 1
         )
 
         self.ackermann_pub = self.create_publisher(
-          AckermannDrive, '/controller/cmd_ackermann', 1
+            AckermannDrive, "/controller/cmd_ackermann", 1
         )
 
         self.get_logger().info("Vel to Ackermann converter started")
 
     def convert_trans_rot_vel_to_steering_angle(self, v, omega, wheelbase):
         if omega == 0 or v == 0:
-          return 0
+            return 0
 
         radius = v / omega
         return math.atan(wheelbase / radius)
 
     def twist_cmd_callback(self, data):
         v = data.linear.x
-        steering = self.convert_trans_rot_vel_to_steering_angle(v, data.angular.z, self.wheelbase)
-        
+        steering = self.convert_trans_rot_vel_to_steering_angle(
+            v, data.angular.z, self.wheelbase
+        )
+
         msg = AckermannDrive()
         msg.steering_angle = float(steering)
         msg.speed = v
         msg.acceleration = 2.0
         msg.steering_angle_velocity = 2.0
-        
+
         self.ackermann_pub.publish(msg)
 
 
-if __name__ == '__main__':
-  rclpy.init()
-  converter = Converter()
+if __name__ == "__main__":
+    rclpy.init()
+    converter = Converter()
 
-  try:
-    rclpy.spin(converter)
-  except KeyboardInterrupt as exception:
-    converter.destroy_node()
+    try:
+        rclpy.spin(converter)
+    except KeyboardInterrupt as exception:
+        converter.destroy_node()
