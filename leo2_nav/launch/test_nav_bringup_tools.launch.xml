@@ -8,6 +8,10 @@
     <param name="wheelbase" value="0.31"/>
   </node>
 
+  <node name="trajectory_path" pkg="leo2_nav" exec="trajectory_path" >
+    <param name="frame_id" value="odom"/>
+  </node>
+  
   <node name="static_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 map odom"/>
 
 </launch>

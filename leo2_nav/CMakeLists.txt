@@ -13,6 +13,7 @@ install(
 install(
   PROGRAMS
     scripts/cmd_vel_to_ackermann_drive
+    scripts/trajectory_path
   DESTINATION lib/${PROJECT_NAME}
 )
 
