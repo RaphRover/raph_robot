@@ -19,7 +19,9 @@ class TrajectoryPath(Node):
         )
 
         self.declare_parameter("max_poses", 1000)
-        self.declare_parameter("movement_threshold", 0.005)
+        self.declare_parameter(
+            "movement_threshold", 0.005
+        )  # TODO find good default value - this might be too low
         self.declare_parameter("frame_id", "odom")
 
         self.trajectory_path_msg = Path()
@@ -31,7 +33,7 @@ class TrajectoryPath(Node):
             Odometry, "/odom", self.odom_callback, qos_profile
         )
 
-        self.path_pub = self.create_publisher(Path, "/trajectory_path", 1)
+        self.path_pub = self.create_publisher(Path, "trajectory_path", 1)
 
         self.create_service(
             Trigger, "trajectory_path/clear_trajectory", self.clear_trajectory_callback

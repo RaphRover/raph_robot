@@ -19,10 +19,10 @@ ekf_filter:
     world_frame: odom
 
     odom0: odom
-    odom0_config: [true,  true,  true,
-                       false, false, false,
-                       false, false, false,
+    odom0_config: [true,  true,  false,
                        false, false, true,
+                       false, false, false,
+                       false, false, false,
                        false, false, false]
     #odom0_config: [false, false, false,
     #                false, false, false,

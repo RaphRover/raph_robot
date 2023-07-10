@@ -20,7 +20,7 @@ class Converter(Node):
         )
 
         self.ackermann_pub = self.create_publisher(
-            AckermannDrive, "/controller/cmd_ackermann", 1
+            AckermannDrive, "controller/cmd_ackermann", 1
         )
 
         self.get_logger().info("Vel to Ackermann converter started")
