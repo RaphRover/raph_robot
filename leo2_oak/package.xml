@@ -26,6 +26,7 @@
   <exec_depend>rclcpp_components</exec_depend>
   <exec_depend>depthai</exec_depend>
   <exec_depend>depthai_bridge</exec_depend>
+  <exec_depend>depthai_ros_driver</exec_depend>
   <exec_depend>generate_parameter_library</exec_depend>
 
   <export>

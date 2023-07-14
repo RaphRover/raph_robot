@@ -1,0 +1,17 @@
+/oak:
+  ros__parameters:
+    camera:
+      i_nn_type: none
+      i_laser_dot_brightness: 1200
+    right:
+      i_publish_topic: true
+    stereo:
+      i_align_depth: true
+      i_subpixel: true
+      i_stereo_conf_threshold: 110 #most important parameter
+      i_enable_brightness_filter: true
+      i_brightness_filter_min_brightness: 1
+      i_brightness_filter_max_brightness: 225
+      i_enable_decimation_filter: true
+      i_lrc_threshold: 5
+      i_extended_disp: false #if true lowers perfomance, but greatly reduces number of inaccurate points in pointcloud, might be overkill
