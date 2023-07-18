@@ -11,3 +11,5 @@ cd <path to leo2_nav>/leo2_nav/map_server
 ros2 run nav2_map_server map_server --ros-args --params-file map_server_params.yaml 
 ros2 lifecycle set /map_server configure
 ros2 lifecycle set /map_server activate
+
+ros2 launch slam_toolbox online_async_launch.py use_sim_time:=false slam_params_file:=src/leo2_robot/leo2_nav/config/slam.yaml 
