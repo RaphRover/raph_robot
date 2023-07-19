@@ -106,29 +106,25 @@ global_costmap:
 
       use_sim_time: false
 
-      plugins: ["obstacle_layer", "inflation_layer"]
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       #plugins: ["static_layer", "inflation_layer"]
 
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
         footprint_clearing_enabled: true 
-        observation_sources: pointcloud
+        observation_sources: scan
         combination_method: 1
-        pointcloud:
-          topic: /oak/points
-          data_type: PointCloud2       
-          expected_update_rate: 1.0
-          min_obstacle_height: 0.05
-          max_obstacle_height: 0.2  
-          inf_is_valid: false
-          marking: true
-          clearing: true
-          raytrace_max_range: 3.0
-          raytrace_min_range: 0.0
-          obstacle_max_range: 3.0
-          obstacle_min_range: 0.0
-
+        scan:
+          topic: /scan
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+          data_type: "LaserScan"
+          raytrace_max_range: 10.0
+          raytrace_min_range: 0.2
+          obstacle_max_range: 5.0
+          obstacle_min_range: 0.2 
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
@@ -140,19 +136,6 @@ global_costmap:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
         inflation_radius: 0.55
-        
-
-lifecycle_manager_navigation:
-  ros__parameters:
-    autostart: true
-    node_names:
-      - "planner_server"
-      - "controller_server"
-      - "bt_navigator"
-      - "waypoint_follower"
-    bond_timeout: 4.0
-    attempt_respawn_reconnection: true
-    bond_respawn_max_duration: 10.0
 
 local_costmap:
   local_costmap:
@@ -188,19 +171,16 @@ local_costmap:
         footprint_clearing_enabled: true
         observation_sources: scan
         combination_method: 1
-        pointcloud:
+        scan:
           topic: /scan
-          data_type: LaserScan
-          expected_update_rate: 1.0
-          min_obstacle_height: 0.05
-          max_obstacle_height: 0.2
-          inf_is_valid: false
-          marking: true
-          clearing: true
-          raytrace_max_range: 3.0
-          raytrace_min_range: 0.0
-          obstacle_max_range: 3.0
-          obstacle_min_range: 0.0
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+          data_type: "LaserScan"
+          raytrace_max_range: 10.0
+          raytrace_min_range: 0.2
+          obstacle_max_range: 5.0
+          obstacle_min_range: 0.2 
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
@@ -255,4 +235,15 @@ waypoint_follower:
       enabled: true
       waypoint_pause_duration: 1000
 
+lifecycle_manager_navigation:
+  ros__parameters:
+    autostart: true
+    node_names:
+      - "planner_server"
+      - "controller_server"
+      - "bt_navigator"
+      - "waypoint_follower"
+    bond_timeout: 4.0
+    attempt_respawn_reconnection: true
+    bond_respawn_max_duration: 10.0
 #TODO? add velocity smoother
