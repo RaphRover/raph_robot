@@ -2,7 +2,7 @@
 
   <include file="$(find-pkg-share leo2_nav)/launch/ekf.launch.xml" />
   <include file="$(find-pkg-share leo2_description)/launch/state_publisher.launch.xml" />
-  <include file="$(find-pkg-share leo2_oak)/launch/pointcloud.launch.py" />
+  <!--<include file="$(find-pkg-share leo2_oak)/launch/pointcloud.launch.py" />-->
 
   <node name="vel_to_ackermann_converter" pkg="leo2_nav" exec="cmd_vel_to_ackermann_drive" >
     <param name="wheelbase" value="0.31"/>
@@ -10,6 +10,10 @@
 
   <node name="trajectory_path" pkg="leo2_nav" exec="trajectory_path" >
     <param name="frame_id" value="odom"/>
+  </node>
+
+  <node name="rplidar_node" pkg="rplidar_ros" exec="rplidar_composition">
+    <param name="frame_id" value="oak_base_link" /> <!-- temporary -->
   </node>
   <!--
   <node name="static_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 map odom"/>
