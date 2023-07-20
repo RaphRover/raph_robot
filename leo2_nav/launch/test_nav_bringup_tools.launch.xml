@@ -12,9 +12,21 @@
     <param name="frame_id" value="odom"/>
   </node>
 
+  <node name="static_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0.15 3.14159 0 0 oak_base_link laser_link"/>
+
   <node name="rplidar_node" pkg="rplidar_ros" exec="rplidar_composition">
-    <param name="frame_id" value="oak_base_link" /> <!-- temporary -->
+    <param name="frame_id" value="laser_link" />
   </node>
+  <!--
+  <node name="slam_toolbox_node" pkg="slam_toolbox" exec="async_slam_toolbox_node">
+    <param name="minimum_travel_distance" value="0.01" />
+    <param name="minimum_travel_heading" value="0.01" />
+    <param name="map_update_interval" value="1.0" />
+    <param name="loop_search_maximum_distance" value="0.5" />
+    <param name="debug_logging" value="true" />
+    <param name="enable_interactive_mode" value="false" />
+  </node>
+  -->
   <!--
   <node name="static_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 map odom"/>
 

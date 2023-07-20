@@ -50,7 +50,7 @@ controller_server:
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.25
+      xy_goal_tolerance: 0.10
       yaw_goal_tolerance: 0.25
 
     #RPP
@@ -60,7 +60,7 @@ controller_server:
       approach_velocity_scaling_dist: 0.6
       cost_scaling_dist: 0.6
       cost_scaling_gain: 1.0
-      desired_linear_vel: 0.5
+      desired_linear_vel: 0.3
       inflation_cost_scaling_factor: 3.0
       lookahead_dist: 0.6
       lookahead_time: 1.5
@@ -101,8 +101,8 @@ global_costmap:
       footprint_padding: 0.01
       footprint: "[[0.21, 0.22], [0.21, -0.22], [-0.21, -0.22], [-0.21, 0.22]]"
 
-      publish_frequency: 3.0
-      update_frequency: 3.0
+      publish_frequency: 1.0 #TODO find optimal frequencies for global and local costmaps
+      update_frequency: 1.0
 
       use_sim_time: false
 
@@ -125,6 +125,7 @@ global_costmap:
           raytrace_min_range: 0.2
           obstacle_max_range: 5.0
           obstacle_min_range: 0.2 
+          
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
@@ -135,13 +136,13 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 0.55
+        inflation_radius: 0.22
 
 local_costmap:
   local_costmap:
     ros__parameters:
-      height: 5
-      width: 5
+      height: 6
+      width: 6
       resolution: 0.1
       rolling_window: true
       trinary_costmap: true
@@ -157,8 +158,8 @@ local_costmap:
       footprint_padding: 0.01
       footprint: "[[0.21, 0.22], [0.21, -0.22], [-0.21, -0.22], [-0.21, 0.22]]"
 
-      update_frequency: 1.0
-      publish_frequency: 1.0
+      update_frequency: 3.0
+      publish_frequency: 3.0
 
       use_sim_time: false
 
@@ -185,7 +186,7 @@ local_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 0.55
+        inflation_radius: 0.22
 
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
@@ -246,4 +247,17 @@ lifecycle_manager_navigation:
     bond_timeout: 4.0
     attempt_respawn_reconnection: true
     bond_respawn_max_duration: 10.0
-#TODO? add velocity smoother
+
+velocity_smoother:
+  ros__parameters:
+    smoothing_frequency: 20.0             # Hz
+    scale_velocities: true                # true = adjust angular to keep same trajectory
+    feedback: "OPEN_LOOP"                 # CLOSED_LOOP means use velocities from odom, odom must be high rate compared to smoothing_frequency
+    max_velocity: [5.0, 0.0, 92.5]         # x, y, theta
+    min_velocity: [-5.0, 0.0, -92.5]       # x, y, theta, maximum reverse velocities (should be negative)
+    deadband_velocity: [0.0, 0.0, 0.0]    # velocities less than this will be translted to zero
+    velocity_timeout: 1.0                 # if no cmd_vel is sent after this time, zeros will be sent
+    max_accel: [2.5, 0.0, 933.2]
+    max_decel: [-2.5, 0.0, -933.2]
+    odom_topic: "/odom"                    # topic for closed loop velocities
+    odom_duration: 0.1                    # time to buffer odometry to esimate speed

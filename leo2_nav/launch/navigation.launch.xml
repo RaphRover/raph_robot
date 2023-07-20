@@ -45,6 +45,12 @@
       <param from="$(var param_file)" />
     </composable_node>
 
+    <composable_node name="velocity_smoother"
+      pkg="nav2_velocity_smoother"
+      plugin="nav2_velocity_smoother::VelocitySmoother">
+      <param from="$(var param_file)" />
+    </composable_node>
+
   </node_container>
 
 </launch>
