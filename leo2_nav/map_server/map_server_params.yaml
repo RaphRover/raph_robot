@@ -10,4 +10,4 @@ map_server:
         frame_id: map   
         topic_name: map
         use_sim_time: false
-        yaml_filename: "/home/jh/colcon_ws/src/leo2_robot/leo2_nav/map_server/static_map.yaml"
+        yaml_filename: "/home/leo2/leo_ws/src/leo2_robot/leo2_nav/map_server/office_map.yaml"
