@@ -15,4 +15,5 @@ ros2 lifecycle set /map_server activate
 ros2 lifecycle set /amcl_node configure
 ros2 lifecycle set /amcl_node activate
 
+*7. For SLAM without using the node in test launch
 ros2 launch slam_toolbox online_async_launch.py use_sim_time:=false slam_params_file:=src/leo2_robot/leo2_nav/config/slam.yaml 
