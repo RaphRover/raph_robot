@@ -6,11 +6,13 @@ ros2 service call /controller/calibrate_servos std_srvs/srv/Trigger {}
 ros2 launch leo2_nav test_nav_bringup_tools.launch.xml
 4. Launch navigation
 ros2 launch leo2_nav navigation.launch.xml
-5. Add empty map provided by map_server
+
+*5. For static map provided by map_server
 cd <path to leo2_nav>/leo2_nav/map_server
 ros2 run nav2_map_server map_server --ros-args --params-file map_server_params.yaml 
 ros2 lifecycle set /map_server configure
 ros2 lifecycle set /map_server activate
+
 *6. For AMCL
 ros2 lifecycle set /amcl_node configure
 ros2 lifecycle set /amcl_node activate
