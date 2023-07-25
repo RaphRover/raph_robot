@@ -54,7 +54,7 @@ def generate_launch_description():
     leo2_oak_prefix = get_package_share_directory("leo2_oak")
     declared_arguments = [
         DeclareLaunchArgument("name", default_value="oak"),
-        DeclareLaunchArgument("parent_frame", default_value="oak_base_link"),
+        DeclareLaunchArgument("parent_frame", default_value="base_link"),
         DeclareLaunchArgument("cam_pos_x", default_value="0.0"),
         DeclareLaunchArgument("cam_pos_y", default_value="0.0"),
         DeclareLaunchArgument("cam_pos_z", default_value="0.0"),

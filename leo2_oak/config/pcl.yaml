@@ -6,7 +6,7 @@
     right:
       i_publish_topic: true
     stereo:
-      i_align_depth: true
+      i_align_depth: false #if true for some reason changes the frame of the pointcloud
       i_subpixel: true
       i_stereo_conf_threshold: 110 #most important parameter
       i_enable_brightness_filter: true
