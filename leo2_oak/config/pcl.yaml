@@ -3,8 +3,13 @@
     camera:
       i_nn_type: none
       i_laser_dot_brightness: 1200
+    rgb:
+      i_fps: 10.0
+    left:
+      i_fps: 9.0
     right:
       i_publish_topic: true
+      i_fps: 9.0
     stereo:
       i_align_depth: false #if true for some reason changes the frame of the pointcloud
       i_subpixel: true
@@ -13,5 +18,4 @@
       i_brightness_filter_min_brightness: 1
       i_brightness_filter_max_brightness: 225
       i_enable_decimation_filter: true
-      i_lrc_threshold: 5
-      i_extended_disp: false #if true lowers perfomance, but greatly reduces number of inaccurate points in pointcloud, might be overkill
+      #i_lrc_threshold: 5
