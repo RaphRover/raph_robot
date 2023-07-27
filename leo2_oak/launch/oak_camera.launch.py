@@ -5,7 +5,6 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch.conditions import IfCondition
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 
@@ -32,7 +31,20 @@ def launch_setup(context, *args, **kwargs):
                         plugin="depthai_ros_driver::Camera",
                         name=name,
                         parameters=[params_file],
-                    )
+                    ),
+                    #PointCloudXyziNode moved to leo2_nav/navigation.launch as a component for performance
+                    
+                    #ComposableNode(
+                    #    package='depth_image_proc',
+                    #    plugin='depth_image_proc::PointCloudXyziNode',
+                    #    name='point_cloud_xyzi',
+                    #    parameters=[{'queue_size': 1}],
+#
+                    #    remappings=[('depth/image_rect', name+'/stereo/image_raw'),
+                    #                ('intensity/image_rect', name+'/right/image_raw'),
+                    #                ('intensity/camera_info', name+'/right/camera_info'),
+                    #                ('points', name+'/points')]
+                    #),
             ],
             arguments=['--ros-args', '--log-level', log_level],
             output="both",
@@ -41,11 +53,11 @@ def launch_setup(context, *args, **kwargs):
 
 
 def generate_launch_description():
-    depthai_prefix = get_package_share_directory("depthai_ros_driver")
+    leo2_oak_prefix = get_package_share_directory("leo2_oak")
 
     declared_arguments = [
         DeclareLaunchArgument("name", default_value="oak"),
-        DeclareLaunchArgument("params_file", default_value=os.path.join(depthai_prefix, 'config', 'camera.yaml')),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(leo2_oak_prefix, 'config', 'pcl_oak.yaml')),
     ]
 
     return LaunchDescription(

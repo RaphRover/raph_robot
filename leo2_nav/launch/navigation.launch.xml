@@ -7,13 +7,17 @@
     pkg="rclcpp_components"
     exec="component_container_isolated">
     <param from="$(var param_file)" />
-<!--
-    <composable_node name="amcl_node"
-      pkg="nav2_amcl"
-      plugin="nav2_amcl::AmclNode">
-      <param from="$(var param_file)" />
+
+    <composable_node name="pointcloud_xyzi"
+      pkg="depth_image_proc"
+      plugin="depth_image_proc::PointCloudXyziNode">
+      <param name="queue_size" value="1" />
+      <remap from="depth/image_rect" to="oak/stereo/image_raw" />
+      <remap from="intensity/image_rect" to="oak/right/image_raw" />
+      <remap from="intensity/camera_info" to="oak/right/camera_info" />
+      <remap from="points" to="oak/points" />
     </composable_node>
--->    
+
     <composable_node name="planner_server"
       pkg="nav2_planner"
       plugin="nav2_planner::PlannerServer">
