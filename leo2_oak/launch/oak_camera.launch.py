@@ -32,6 +32,15 @@ def launch_setup(context, *args, **kwargs):
                         name=name,
                         parameters=[params_file],
                     ),
+                    ComposableNode(
+                        package='depthimage_to_laserscan',
+                        plugin='depthimage_to_laserscan::DepthImageToLaserScanROS',
+                        name='depthimage_to_laserscan',
+                        parameters=[{'range_min': 0.3, 'range_max': 3.0, 'scan_height': 20, 'output_frame': 'oak_base_link'}],
+
+                        remappings=[('depth', '/oak/stereo/image_raw'),
+                                    ('depth_camera_info', '/oak/stereo/camera_info')]
+                    ),
                     #PointCloudXyziNode moved to leo2_nav/navigation.launch as a component for performance
                     
                     #ComposableNode(

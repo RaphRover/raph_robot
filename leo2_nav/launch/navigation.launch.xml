@@ -18,6 +18,14 @@
       <remap from="points" to="oak/points" />
     </composable_node>
 
+    <composable_node name="pointcloud_to_laserscan" 
+      pkg="pointcloud_to_laserscan" 
+      plugin="pointcloud_to_laserscan::PointCloudToLaserScanNode" >
+      <param name="target_frame" value="base_link" />
+      <remap from="cloud_in" to="/oak/points"/>
+      <remap from="scan" to="/pcl_scan"/>
+    </composable_node>
+
     <composable_node name="planner_server"
       pkg="nav2_planner"
       plugin="nav2_planner::PlannerServer">
