@@ -3,6 +3,10 @@
     camera:
       i_nn_type: none
       i_laser_dot_brightness: 1200
+    imu:
+      i_acc_freq: 50
+      i_rot_freq: 50
+      i_gyro_freq: 50
     rgb:
       i_fps: 5.0
     left:

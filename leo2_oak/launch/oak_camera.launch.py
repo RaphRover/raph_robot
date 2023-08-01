@@ -31,6 +31,7 @@ def launch_setup(context, *args, **kwargs):
                         plugin="depthai_ros_driver::Camera",
                         name=name,
                         parameters=[params_file],
+                        remappings=[('oak/imu/data', 'oak/imu/data_raw'),]
                     ),
                     ComposableNode(
                         package='depthimage_to_laserscan',
@@ -38,8 +39,17 @@ def launch_setup(context, *args, **kwargs):
                         name='depthimage_to_laserscan',
                         parameters=[{'range_min': 0.3, 'range_max': 3.0, 'scan_height': 20, 'output_frame': 'oak_base_link'}],
 
-                        remappings=[('depth', '/oak/stereo/image_raw'),
-                                    ('depth_camera_info', '/oak/stereo/camera_info')]
+                        remappings=[('depth', 'oak/stereo/image_raw'),
+                                    ('depth_camera_info', 'oak/stereo/camera_info')]
+                    ),
+                    ComposableNode(
+                        package='imu_filter_madgwick',
+                        plugin='ImuFilterMadgwickRos',
+                        name='imu_madgwick_filter',
+                        parameters=[{'use_mag': False, 'publish_tf': False}],
+
+                        remappings=[('imu/data_raw', 'oak/imu/data_raw'),
+                                    ('imu/data', 'oak/imu/data')]
                     ),
                     #PointCloudXyziNode moved to leo2_nav/navigation.launch as a component for performance
                     
