@@ -1,6 +1,7 @@
 <launch version="0.1.1">
 
   <let name="param_file" value="$(find-pkg-share leo2_nav)/config/navigation.yaml" />
+  <let name="slam_param_file" value="$(find-pkg-share leo2_nav)/config/graphslam.yaml" />
 
   <node_container namespace=""
     name="navigation_container"
@@ -12,12 +13,12 @@
       pkg="depth_image_proc"
       plugin="depth_image_proc::PointCloudXyziNode">
       <param name="queue_size" value="1" />
-      <remap from="depth/image_rect" to="oak/stereo/image_raw" />
-      <remap from="intensity/image_rect" to="oak/right/image_raw" />
-      <remap from="intensity/camera_info" to="oak/right/camera_info" />
-      <remap from="points" to="oak/points" />
+      <remap from="depth/image_rect" to="/oak/stereo/image_raw" />
+      <remap from="intensity/image_rect" to="/oak/right/image_raw" />
+      <remap from="intensity/camera_info" to="/oak/right/camera_info" />
+      <remap from="points" to="/oak/points" />
     </composable_node>
-
+<!--
     <composable_node name="pointcloud_to_laserscan" 
       pkg="pointcloud_to_laserscan" 
       plugin="pointcloud_to_laserscan::PointCloudToLaserScanNode" >
@@ -25,7 +26,7 @@
       <remap from="cloud_in" to="/oak/points"/>
       <remap from="scan" to="/pcl_scan"/>
     </composable_node>
-
+-->
     <composable_node name="planner_server"
       pkg="nav2_planner"
       plugin="nav2_planner::PlannerServer">
