@@ -1,6 +1,4 @@
 <launch>
-
-  <include file="$(find-pkg-share leo2_nav)/launch/ekf.launch.xml" />
   <include file="$(find-pkg-share leo2_description)/launch/state_publisher.launch.xml" />
   <include file="$(find-pkg-share leo2_oak)/launch/oak_camera.launch.py" />
 
@@ -10,8 +8,18 @@
 
   <node name="trajectory_path" pkg="leo2_nav" exec="trajectory_path" >
     <param name="frame_id" value="odom"/>
+    <remap from="/odom" to="/controller/odom"/>
   </node>
 
   <node name="static_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 map odom"/>
-  
+<!--
+  <node name="slam_toolbox_node" pkg="slam_toolbox" exec="async_slam_toolbox_node">
+    <param name="minimum_travel_distance" value="0.5" />
+    <param name="minimum_travel_heading" value="0.5" />
+    <param name="map_update_interval" value="1.0" />
+    <param name="loop_search_maximum_distance" value="0.5" />
+    <param name="enable_interactive_mode" value="false" />
+    <param name="max_laser_range" value="3.0" />
+  </node>
+-->
 </launch>

@@ -14,6 +14,7 @@ install(
   PROGRAMS
     scripts/cmd_vel_to_ackermann_drive
     scripts/trajectory_path
+    scripts/topic_frequency
   DESTINATION lib/${PROJECT_NAME}
 )
 

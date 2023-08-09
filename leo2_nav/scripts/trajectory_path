@@ -18,7 +18,7 @@ class TrajectoryPath(Node):
             depth=1,
         )
 
-        self.declare_parameter("max_poses", 1000)
+        self.declare_parameter("max_poses", 5000)
         self.declare_parameter(
             "movement_threshold", 0.005
         )  # TODO find good default value - this might be too low

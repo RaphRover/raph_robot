@@ -18,7 +18,24 @@ def launch_setup(context, *args, **kwargs):
     camera_model = LaunchConfiguration('camera_model',  default = 'OAK-D')
 
     name = LaunchConfiguration('name').perform(context)
-    
+
+    #parameters = [
+    #    {
+    #        "frame_id": "base_footprint",
+    #        "subscribe_rgb": True,
+    #        "subscribe_depth": True,
+    #        "subscribe_odom_info": False,
+    #        "approx_sync": True,
+    #        "Rtabmap/DetectionRate": "3.5",
+    #    }
+    #]
+    #remappings = [
+    #    ("rgb/image", name+"/rgb/image_rect"),
+    #    ("rgb/camera_info", name+"/rgb/camera_info"),
+    #    ("depth/image", name+"/stereo/image_raw"),
+    #    ("odom", "/controller/odom"),
+    #]
+
     return [
         ComposableNodeContainer(
             name=name+"_container",
@@ -42,15 +59,32 @@ def launch_setup(context, *args, **kwargs):
                         remappings=[('depth', 'oak/stereo/image_raw'),
                                     ('depth_camera_info', 'oak/stereo/camera_info')]
                     ),
-                    ComposableNode(
-                        package='imu_filter_madgwick',
-                        plugin='ImuFilterMadgwickRos',
-                        name='imu_madgwick_filter',
-                        parameters=[{'use_mag': False, 'publish_tf': False}],
-
-                        remappings=[('imu/data_raw', 'oak/imu/data_raw'),
-                                    ('imu/data', 'oak/imu/data')]
-                    ),
+                    #ComposableNode(
+                    #    package='imu_filter_madgwick',
+                    #    plugin='ImuFilterMadgwickRos',
+                    #    name='imu_madgwick_filter',
+                    #    parameters=[{'use_mag': False, 'publish_tf': False}],
+                    #    remappings=[('imu/data_raw', 'oak/imu/data_raw'),
+                    #                ('imu/data', 'oak/imu/data')]
+                    #),
+                    #ComposableNode(
+                    #    package="image_proc",
+                    #    plugin="image_proc::RectifyNode",
+                    #    name="rectify_color_node",
+                    #    remappings=[('image', name+'/rgb/image_raw'),
+                    #                ('camera_info', name+'/rgb/camera_info'),
+                    #                ('image_rect', name+'/rgb/image_rect'),
+                    #                ('image_rect/compressed', name+'/rgb/image_rect/compressed'),
+                    #                ('image_rect/compressedDepth', name+'/rgb/image_rect/compressedDepth'),
+                    #                ('image_rect/theora', name+'/rgb/image_rect/theora')]
+                    #),
+                    #ComposableNode(
+                    #    package='rtabmap_slam',
+                    #    plugin='rtabmap_slam::CoreWrapper',
+                    #    name='rtabmap',
+                    #    parameters=parameters,
+                    #    remappings=remappings,
+                    #),
                     #PointCloudXyziNode moved to leo2_nav/navigation.launch as a component for performance
                     
                     #ComposableNode(

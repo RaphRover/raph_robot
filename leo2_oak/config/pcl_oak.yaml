@@ -9,11 +9,14 @@
       i_gyro_freq: 50
     rgb:
       i_fps: 5.0
+      #i_camera_img_orientation: ROTATE_180_DEG
     left:
       i_fps: 5.0
-    right:
+      #i_camera_img_orientation: ROTATE_180_DEG
+    right:  
       i_publish_topic: true
       i_fps: 5.0
+      #i_camera_img_orientation: ROTATE_180_DEG
     stereo:
       i_align_depth: false #if true for some reason changes the frame of the pointcloud
       i_subpixel: true
