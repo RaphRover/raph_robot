@@ -11,7 +11,8 @@
     <remap from="/odom" to="/controller/odom"/>
   </node>
 
-  <node name="static_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 map odom"/>
+  <!--<node name="static_imu_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 3.14 base_link imu"/>-->
+  <node name="static_map_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 map odom"/>
 <!--
   <node name="slam_toolbox_node" pkg="slam_toolbox" exec="async_slam_toolbox_node">
     <param name="minimum_travel_distance" value="0.5" />
