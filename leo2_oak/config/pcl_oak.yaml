@@ -11,11 +11,11 @@
       i_fps: 5.0
       #i_camera_img_orientation: ROTATE_180_DEG
     left:
-      i_publish_topic: true
+      i_publish_topic: false
       i_fps: 5.0
       #i_camera_img_orientation: ROTATE_180_DEG
     right:  
-      i_publish_topic: false
+      i_publish_topic: true
       i_fps: 5.0
       #i_camera_img_orientation: ROTATE_180_DEG
     stereo:

@@ -42,53 +42,17 @@ def launch_setup(context, *args, **kwargs):
                         remappings=[('depth', 'oak/stereo/image_raw'),
                                     ('depth_camera_info', 'oak/stereo/camera_info')]
                     ),
-                    #Rtabmap odom nodes
-                    """
-                    ComposableNode(
-                        package="image_proc",
-                        plugin="image_proc::RectifyNode",
-                        name="right_rectify_mono_node",
-                        remappings=[('image', '/oak/right/image_raw'),
-                                    ('camera_info', '/oak/right/camera_info'),
-                                    ('image_rect', '/oak/right/image_rect'),
-                                    ('image_rect/compressed', '/oak/right/image_rect/compressed'),
-                                    ('image_rect/compressedDepth', '/oak/right/image_rect/compressedDepth'),
-                                    ('image_rect/theora', '/oak/right/image_rect/theora')]
-                    ),
-                    ComposableNode(
-                        package="image_proc",
-                        plugin="image_proc::RectifyNode",
-                        name="left_rectify_mono_node",
-                        remappings=[('image', '/oak/left/image_raw'),
-                                    ('camera_info', '/oak/left/camera_info'),
-                                    ('image_rect', '/oak/left/image_rect'),
-                                    ('image_rect/compressed', '/oak/left/image_rect/compressed'),
-                                    ('image_rect/compressedDepth', '/oak/left/image_rect/compressedDepth'),
-                                    ('image_rect/theora', '/oak/left/image_rect/theora')]
-                    ),
-                    ComposableNode(
-                        package='rtabmap_odom',
-                        plugin='rtabmap_odom::StereoOdometry',
-                        name='stereo_odometry',
-                        parameters=[{
-                                        "frame_id": "base_footprint",
-                                        "subscribe_rgb": True,
-                                        "subscribe_depth": True,
-                                        "subscribe_odom_info": False,
-                                        "approx_sync": True,
-                                        "Rtabmap/DetectionRate": "3.5",
-                                        "publish_tf": False,
-                                        "wait_imu_to_init": False,
-                                    }],
-                        remappings=[
-                                        ('right/camera_info', '/oak/right/camera_info'),
-                                        ('right/image_rect', '/oak/right/image_rect'),
-                                        ('left/camera_info', '/oak/left/camera_info'),
-                                        ('left/image_rect', '/oak/left/image_rect'),
-                                        ('imu', '/controller/imu'),
-                                    ],
-                    ),
-                    """
+                    #Temporary pointcloud node
+                    #ComposableNode(
+                    #    package='depth_image_proc',
+                    #    plugin='depth_image_proc::PointCloudXyziNode',
+                    #    name='point_cloud_xyzi',
+                    #    remappings=[('depth/image_rect', 'oak/stereo/image_raw'),
+                    #                ('intensity/image_rect', 'oak/right/image_raw'),
+                    #                ('intensity/camera_info', 'oak/right/camera_info'),
+                    #                ('points', 'oak/points')
+                    #                ]
+                    #),
             ],
             arguments=['--ros-args', '--log-level', log_level],
             output="both",
