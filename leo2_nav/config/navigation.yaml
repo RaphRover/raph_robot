@@ -99,15 +99,14 @@ global_costmap:
       robot_base_frame: base_link
       transform_tolerance: 1.0
       footprint_padding: 0.01
-      footprint: "[[0.21, 0.22], [0.21, -0.22], [-0.21, -0.22], [-0.21, 0.22]]"
+      footprint: "[[0.21, 0.22], [0.21, -0.22], [-0.21, -0.22], [-0.21, 0.22]]" #TODO update footprint
 
       publish_frequency: 1.0 #TODO find optimal frequencies for global and local costmaps
       update_frequency: 1.0
 
       use_sim_time: false
 
-      plugins: ["static_layer", "obstacle_layer", "denoise_layer"]
-      #plugins: ["static_layer", "inflation_layer"], "inflation_layer"
+      plugins: ["static_layer", "obstacle_layer", "denoise_layer", "inflation_layer"]
 
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
@@ -119,22 +118,19 @@ global_costmap:
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
-        footprint_clearing_enabled: true
+        footprint_clearing_enabled: true 
+        observation_sources: scan
         combination_method: 1
-        observation_sources: pointcloud
-        pointcloud:
-          topic: /oak/points
-          data_type: PointCloud2
-          expected_update_rate: 1.0
-          min_obstacle_height: 0.12
-          max_obstacle_height: 0.35
-          inf_is_valid: false
-          marking: true
-          clearing: true
-          raytrace_max_range: 3.0
-          raytrace_min_range: 0.0
-          obstacle_max_range: 3.0
-          obstacle_min_range: 0.0
+        scan:
+          topic: /scan
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+          data_type: "LaserScan"
+          raytrace_max_range: 10.0
+          raytrace_min_range: 0.2
+          obstacle_max_range: 5.0
+          obstacle_min_range: 0.2 
           
       denoise_layer:
         plugin: "nav2_costmap_2d::DenoiseLayer"
@@ -165,16 +161,16 @@ local_costmap:
       robot_base_frame: base_link
       transform_tolerance: 1.0
       footprint_padding: 0.01
-      footprint: "[[0.21, 0.22], [0.21, -0.22], [-0.21, -0.22], [-0.21, 0.22]]"
+      footprint: "[[0.21, 0.22], [0.21, -0.22], [-0.21, -0.22], [-0.21, 0.22]]" #TODO update footprint
 
       update_frequency: 3.0
       publish_frequency: 3.0
 
       use_sim_time: false
 
-      plugins: ["obstacle_layer", "denoise_layer"] #, "inflation_layer"
+      plugins: ["voxel_layer", "obstacle_layer", "denoise_layer", "inflation_layer"]
 
-      obstacle_layer:
+      voxel_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
         footprint_clearing_enabled: true
@@ -193,6 +189,23 @@ local_costmap:
           raytrace_min_range: 0.0
           obstacle_max_range: 3.0
           obstacle_min_range: 0.0
+
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        footprint_clearing_enabled: true 
+        observation_sources: scan
+        combination_method: 1
+        scan:
+          topic: /scan
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+          data_type: "LaserScan"
+          raytrace_max_range: 10.0
+          raytrace_min_range: 0.2
+          obstacle_max_range: 5.0
+          obstacle_min_range: 0.2 
 
       denoise_layer:
         plugin: "nav2_costmap_2d::DenoiseLayer"

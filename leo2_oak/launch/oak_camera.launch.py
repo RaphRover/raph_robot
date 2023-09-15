@@ -33,15 +33,6 @@ def launch_setup(context, *args, **kwargs):
                         parameters=[params_file],
                         remappings=[('oak/imu/data', 'oak/imu/data_raw'),]
                     ),
-                    ComposableNode(
-                        package='depthimage_to_laserscan',
-                        plugin='depthimage_to_laserscan::DepthImageToLaserScanROS',
-                        name='depthimage_to_laserscan',
-                        parameters=[{'range_min': 0.3, 'range_max': 3.0, 'scan_height': 20, 'output_frame': 'oak_base_link'}],
-
-                        remappings=[('depth', 'oak/stereo/image_raw'),
-                                    ('depth_camera_info', 'oak/stereo/camera_info')]
-                    ),
                     #Temporary pointcloud node
                     #ComposableNode(
                     #    package='depth_image_proc',
