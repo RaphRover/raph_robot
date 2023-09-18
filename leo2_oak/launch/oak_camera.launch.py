@@ -31,7 +31,6 @@ def launch_setup(context, *args, **kwargs):
                         plugin="depthai_ros_driver::Camera",
                         name=name,
                         parameters=[params_file],
-                        remappings=[('oak/imu/data', 'oak/imu/data_raw'),]
                     ),
                     #Temporary pointcloud node
                     #ComposableNode(

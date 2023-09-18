@@ -21,7 +21,7 @@ class TrajectoryPath(Node):
         self.declare_parameter("max_poses", 5000)
         self.declare_parameter(
             "movement_threshold", 0.005
-        )  # TODO find good default value - this might be too low
+        )
         self.declare_parameter("frame_id", "odom")
 
         self.trajectory_path_msg = Path()

@@ -1,7 +1,6 @@
 <launch version="0.1.1">
 
   <let name="param_file" value="$(find-pkg-share leo2_nav)/config/navigation.yaml" />
-  <let name="slam_param_file" value="$(find-pkg-share leo2_nav)/config/graphslam.yaml" />
 
   <node_container namespace=""
     name="navigation_container"
