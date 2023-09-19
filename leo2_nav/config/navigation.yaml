@@ -3,7 +3,7 @@ bt_navigator:
     global_frame: map
     robot_base_frame: base_link
     odom_topic: /controller/odom
-    enable_groot_monitoring: False #TODO try to disable this
+    enable_groot_monitoring: False
     groot_zmq_publisher_port: 1666
     groot_zmq_server_port: 1667
     plugin_lib_names:
@@ -100,7 +100,7 @@ global_costmap:
       footprint_padding: 0.01
       footprint: "[[0.23, 0.255], [0.23, -0.255], [-0.28, -0.255], [-0.28, 0.255]]"
 
-      publish_frequency: 1.0 #TODO find optimal frequencies for global and local costmaps
+      publish_frequency: 1.0
       update_frequency: 1.0
 
       use_sim_time: false
@@ -121,7 +121,7 @@ global_costmap:
         observation_sources: scan
         combination_method: 1
         scan:
-          topic: /scan
+          topic: /scan_filtered
           max_obstacle_height: 2.0
           clearing: True
           marking: True
@@ -165,10 +165,10 @@ local_costmap:
 
       use_sim_time: false
 
-      plugins: ["voxel_layer", "denoise_layer", "inflation_layer"] # "obstacle_layer",
+      plugins: ["voxel_layer", "obstacle_layer", "denoise_layer", "inflation_layer"]
 
       voxel_layer:
-        plugin: "nav2_costmap_2d::ObstacleLayer"
+        plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: true
         footprint_clearing_enabled: true
         combination_method: 1
@@ -177,12 +177,12 @@ local_costmap:
           topic: /oak/points
           data_type: PointCloud2
           expected_update_rate: 1.0
-          min_obstacle_height: 0.12 #TODO adjust obstacle heights
+          min_obstacle_height: 0.08
           max_obstacle_height: 0.35
           inf_is_valid: false
           marking: true
           clearing: true
-          raytrace_max_range: 3.0 #TODO adjust max ranges
+          raytrace_max_range: 3.0
           raytrace_min_range: 0.0
           obstacle_max_range: 3.0
           obstacle_min_range: 0.0
@@ -194,7 +194,7 @@ local_costmap:
         observation_sources: scan
         combination_method: 1
         scan:
-          topic: /scan
+          topic: /scan_filtered
           max_obstacle_height: 2.0
           clearing: True
           marking: True

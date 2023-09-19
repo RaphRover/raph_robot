@@ -14,11 +14,11 @@
     left:
       i_publish_topic: false
       i_fps: 5.0
-      i_sensor_img_orientation: ROTATE_180_DEG
+      #i_sensor_img_orientation: ROTATE_180_DEG
     right:  
       i_publish_topic: true
       i_fps: 5.0
-      i_sensor_img_orientation: ROTATE_180_DEG
+      #i_sensor_img_orientation: ROTATE_180_DEG
     stereo:
       i_align_depth: false #if true for some reason changes the frame of the pointcloud
       i_subpixel: true
