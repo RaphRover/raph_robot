@@ -11,17 +11,16 @@
     <remap from="/odom" to="/controller/odom"/>
   </node>
 
-  <!--<node name="static_imu_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 3.14 base_link imu"/>-->
-  <!--TODO Calculate laser_link -> oak_base_link tf and delete odom tf-->
+  <!--TODO delete odom tf-->
   <!--TODO maybe change oak camera height in urdf or maybe nav2 parameters are enough-->
-  <node name="static_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0.15 3.14159 0 0 oak_base_link laser_link"/>
+  <node name="static_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0.06 0 0 0 base_link laser_link"/>
   <node name="static_map_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 map odom"/>
   <node name="static_odom_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 odom base_footprint"/>
 
   <node name="rplidar_node" pkg="rplidar_ros" exec="rplidar_composition">
     <param name="frame_id" value="laser_link" />
     <param name="angle_compensate" value="true" />
-    <param name="serial_baudrate" value="115200" /> <!--TODO UpBoard may have a different baudrate-->
+    <param name="serial_baudrate" value="115200" />
   </node>
 
   <node name="slam_toolbox_node" pkg="slam_toolbox" exec="async_slam_toolbox_node">

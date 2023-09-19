@@ -3,7 +3,7 @@ bt_navigator:
     global_frame: map
     robot_base_frame: base_link
     odom_topic: /controller/odom
-    enable_groot_monitoring: True #TODO try to disable this
+    enable_groot_monitoring: False #TODO try to disable this
     groot_zmq_publisher_port: 1666
     groot_zmq_server_port: 1667
     plugin_lib_names:
@@ -127,9 +127,9 @@ global_costmap:
           marking: True
           data_type: "LaserScan"
           raytrace_max_range: 10.0
-          raytrace_min_range: 0.2
+          raytrace_min_range: 0.3
           obstacle_max_range: 5.0
-          obstacle_min_range: 0.2 
+          obstacle_min_range: 0.3
           
       denoise_layer:
         plugin: "nav2_costmap_2d::DenoiseLayer"
@@ -165,7 +165,7 @@ local_costmap:
 
       use_sim_time: false
 
-      plugins: ["voxel_layer", "obstacle_layer", "denoise_layer", "inflation_layer"]
+      plugins: ["voxel_layer", "denoise_layer", "inflation_layer"] # "obstacle_layer",
 
       voxel_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
@@ -200,9 +200,9 @@ local_costmap:
           marking: True
           data_type: "LaserScan"
           raytrace_max_range: 10.0
-          raytrace_min_range: 0.2
+          raytrace_min_range: 0.3
           obstacle_max_range: 5.0
-          obstacle_min_range: 0.2 
+          obstacle_min_range: 0.3 
 
       denoise_layer:
         plugin: "nav2_costmap_2d::DenoiseLayer"
