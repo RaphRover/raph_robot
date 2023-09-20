@@ -9,7 +9,7 @@
       i_gyro_freq: 50
     #TODO adjust fps for UpBoard
     rgb:
-      i_fps: 10.0
+      i_fps: 5.0
       i_sensor_img_orientation: ROTATE_180_DEG
     left:
       i_publish_topic: false
