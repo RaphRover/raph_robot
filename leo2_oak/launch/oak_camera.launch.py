@@ -15,7 +15,6 @@ def launch_setup(context, *args, **kwargs):
         log_level='debug'
     
     params_file = LaunchConfiguration("params_file")
-    camera_model = LaunchConfiguration('camera_model',  default = 'OAK-D')
 
     name = LaunchConfiguration('name').perform(context)
 
@@ -33,16 +32,16 @@ def launch_setup(context, *args, **kwargs):
                         parameters=[params_file],
                     ),
                     #Temporary pointcloud node
-                    #ComposableNode(
-                    #    package='depth_image_proc',
-                    #    plugin='depth_image_proc::PointCloudXyziNode',
-                    #    name='point_cloud_xyzi',
-                    #    remappings=[('depth/image_rect', 'oak/stereo/image_raw'),
-                    #                ('intensity/image_rect', 'oak/right/image_raw'),
-                    #                ('intensity/camera_info', 'oak/right/camera_info'),
-                    #                ('points', 'oak/points')
-                    #                ]
-                    #),
+                    ComposableNode(
+                        package='depth_image_proc',
+                        plugin='depth_image_proc::PointCloudXyziNode',
+                        name='point_cloud_xyzi',
+                        remappings=[('depth/image_rect', 'oak/stereo/image_raw'),
+                                    ('intensity/image_rect', 'oak/right/image_rect'),
+                                    ('intensity/camera_info', 'oak/stereo/camera_info'),
+                                    ('points', 'oak/points')
+                                    ],
+                    ),
             ],
             arguments=['--ros-args', '--log-level', log_level],
             output="both",
