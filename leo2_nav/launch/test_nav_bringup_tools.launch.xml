@@ -15,10 +15,11 @@
   <!--<node name="static_map_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 map odom"/>-->
   <!--<node name="static_odom_tf_publisher" pkg="tf2_ros" exec="static_transform_publisher" args="0 0 0 0 0 0 odom base_footprint"/>-->
 
-  <node name="rplidar_node" pkg="rplidar_ros" exec="rplidar_composition">
+  <node name="rplidar_node" pkg="rplidar_ros" exec="rplidar_node">
+    <param name="channel_type" value="serial" />
     <param name="frame_id" value="laser_link" />
     <param name="angle_compensate" value="true" />
-    <param name="serial_baudrate" value="115200" />
+    <param name="serial_baudrate" value="1000000" />
   </node>
 
   <node name="laserscan_filter" pkg="laser_filters" exec="scan_to_scan_filter_chain">
