@@ -21,7 +21,10 @@
     <param name="angle_compensate" value="true" />
     <param name="serial_baudrate" value="1000000" />
   </node>
-
+<!--
+  <node name="laserscan_filter" pkg="laser_filters" exec="scan_to_scan_filter_chain">
+    <param from="$(find-pkg-share leo2_nav)/config/angle_filters.yaml" />
+  </node>-->
   <node name="laserscan_filter" pkg="laser_filters" exec="scan_to_scan_filter_chain">
     <param from="$(find-pkg-share leo2_nav)/config/laser_filter.yaml" />
   </node>
