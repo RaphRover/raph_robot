@@ -24,6 +24,10 @@
   <exec_depend>nav2_dwb_controller</exec_depend>
   <exec_depend>robot_localization</exec_depend>
 
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_cmake_lint_cmake</test_depend>
+  <test_depend>ament_cmake_xmllint</test_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
     <architecture_independent/>
