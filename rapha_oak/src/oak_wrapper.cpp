@@ -34,7 +34,7 @@
 
 using namespace std::chrono_literals;
 
-namespace leo2_oak
+namespace rapha_oak
 {
 
 class OakWrapper : public rclcpp::Node
@@ -458,7 +458,7 @@ private:
 };
 
 
-}  // namespace leo2_oak
+}  // namespace rapha_oak
 
 #include "rclcpp_components/register_node_macro.hpp"
-RCLCPP_COMPONENTS_REGISTER_NODE(leo2_oak::OakWrapper)
+RCLCPP_COMPONENTS_REGISTER_NODE(rapha_oak::OakWrapper)

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(leo2_bringup)
+project(rapha_bringup)
 
 find_package(ament_cmake REQUIRED)
 
@@ -12,7 +12,7 @@ install(
 
 install(
   PROGRAMS
-    scripts/leo2_system
+    scripts/rapha_system
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -9,9 +9,9 @@ from std_msgs.msg import Empty
 from std_msgs.msg import String
 
 
-class LeoSystem(Node):
+class RaphaSystem(Node):
     def __init__(self):
-        super().__init__("leo_system")
+        super().__init__("rapha_system")
         self.reboot_sub = self.create_subscription(
             Empty, "system/shutdown", self.shutdown_callback, 1
         )
@@ -19,7 +19,7 @@ class LeoSystem(Node):
             Empty, "system/reboot", self.reboot_callback, 1
         )
         self.publish_namespace()
-        self.get_logger().info("Leo system node started!")
+        self.get_logger().info("Rapha system node started!")
 
     def reboot_callback(self, data):
         self.get_logger().info("Reboot command invoked")
@@ -45,12 +45,12 @@ class LeoSystem(Node):
 
 if __name__ == "__main__":
     rclpy.init()
-    leo_system = LeoSystem()
+    rapha_system = RaphaSystem()
 
     try:
-        rclpy.spin(leo_system)
+        rclpy.spin(rapha_system)
     except KeyboardInterrupt as exception:
-        leo_system.get_logger().info("Got Ctrl+C, shuting down.")
-        leo_system.destroy_node()
+        rapha_system.get_logger().info("Got Ctrl+C, shuting down.")
+        rapha_system.destroy_node()
     finally:
         rclpy.shutdown()

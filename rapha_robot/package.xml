@@ -1,25 +1,22 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>leo2_robot</name>
+  <name>rapha_robot</name>
   <version>1.1.0</version>
-  <description>Metapackage of software to install on Leo Rover.</description>
+  <description>Packages for Rapha Rover running on the robot.</description>
 
   <maintainer email="support@fictionlab.pl">Fictionlab</maintainer>
   
   <license>MIT</license>
-  
-  <url type="website">http://wiki.ros.org/leo_robot</url>
-  <url type="bugtracker">https://github.com/LeoRover/leo_robot-ros2/issues</url>
-  <url type="repository">https://github.com/LeoRover/leo_robot-ros2</url>
 
   <author email="blazej@fictionlab.pl">Błażej Sowa</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <exec_depend>leo2_bringup</exec_depend>
-
-  <exec_depend>leo2</exec_depend>  
+  <exec_depend>rapha</exec_depend>  
+  <exec_depend>rapha_bringup</exec_depend>
+  <exec_depend>rapha_nav</exec_depend>
+  <exec_depend>rapha_oak</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

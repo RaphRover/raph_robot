@@ -6,10 +6,10 @@
     exec="component_container_isolated">
     <composable_node namespace="oak"
       name="oak_wrapper"
-      pkg="leo2_oak"
-      plugin="leo2_oak::OakWrapper">
+      pkg="rapha_oak"
+      plugin="rapha_oak::OakWrapper">
       <extra_arg name="use_intra_process_comms" value="true" />
-      <param from="$(find-pkg-share leo2_bringup)/config/oak_wrapper.yaml" />
+      <param from="$(find-pkg-share rapha_bringup)/config/oak_wrapper.yaml" />
     </composable_node>
     <composable_node namespace="oak"
       name="point_cloud_xyz"

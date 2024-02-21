@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(leo2_oak)
+project(rapha_oak)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -14,32 +14,25 @@ generate_parameter_library(
   src/oak_wrapper_parameters.yaml
 )
 
-add_library(leo2_oak SHARED
+add_library(rapha_oak SHARED
   src/oak_wrapper.cpp
 )
-target_link_libraries(leo2_oak
+target_link_libraries(rapha_oak
   rclcpp::rclcpp
   rclcpp_components::component
   depthai::core
   depthai_bridge::depthai_bridge
   oak_wrapper_parameters
 )
-rclcpp_components_register_node(leo2_oak
-  PLUGIN "leo2_oak::OakWrapper"
+rclcpp_components_register_node(rapha_oak
+  PLUGIN "rapha_oak::OakWrapper"
   EXECUTABLE "oak_wrapper"
 )
 
 install(
-  TARGETS leo2_oak
+  TARGETS rapha_oak
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
 )
-
-# install(
-#   DIRECTORY
-#     config
-#     launch
-#   DESTINATION share/${PROJECT_NAME}
-# )
 
 ament_package()
