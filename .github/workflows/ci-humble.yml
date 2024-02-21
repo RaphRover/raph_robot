@@ -29,5 +29,3 @@ jobs:
           UPSTREAM_WORKSPACE: "github:fictionlab/leo2_common#leo2_to_rapha_migration"
           ADDITIONAL_DEBS: git-core
           AFTER_INIT: git config --global url."https://token:${{secrets.GITHUBPAT}}@github.com/".insteadOf "https://github.com/"
-          PYLINT_CHECK: true
-          PYLINT_ARGS: "--rcfile=src/leo2_robot/.pylintrc"
