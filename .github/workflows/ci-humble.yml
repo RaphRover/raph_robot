@@ -26,6 +26,6 @@ jobs:
       - name: Source tests
         uses: "ros-industrial/industrial_ci@master"
         env:
-          UPSTREAM_WORKSPACE: "github:fictionlab/leo2_common#leo2_to_rapha_migration"
+          UPSTREAM_WORKSPACE: "github:fictionlab/rapha_common#humble"
           ADDITIONAL_DEBS: git-core
           AFTER_INIT: git config --global url."https://token:${{secrets.GITHUBPAT}}@github.com/".insteadOf "https://github.com/"
