@@ -7,7 +7,13 @@
     pkg="rclcpp_components"
     exec="component_container_isolated">
     <param from="$(var param_file)" />
-
+<!--
+    <composable_node name="amcl_node"
+      pkg="nav2_amcl"
+      plugin="nav2_amcl::AmclNode">
+      <param from="$(var param_file)" />
+    </composable_node>
+-->    
     <composable_node name="planner_server"
       pkg="nav2_planner"
       plugin="nav2_planner::PlannerServer">
@@ -44,7 +50,13 @@
       <extra_arg name="use_intra_process_comms" value="true" />
       <param from="$(var param_file)" />
     </composable_node>
-
+    <!--
+    <composable_node name="velocity_smoother"
+      pkg="nav2_velocity_smoother"
+      plugin="nav2_velocity_smoother::VelocitySmoother">
+      <param from="$(var param_file)" />
+    </composable_node>
+    -->
   </node_container>
 
 </launch>

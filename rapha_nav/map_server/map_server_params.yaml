@@ -1,0 +1,13 @@
+#Save map:
+#ros2 run nav2_map_server map_saver_cli -t "/local_costmap/costmap" -f "static_map"
+#Load map:
+#ros2 run nav2_map_server map_server --ros-args --params-file map_server_params.yaml 
+#ros2 lifecycle set /map_server configure
+#ros2 lifecycle set /map_server activate
+
+map_server:
+    ros__parameters:
+        frame_id: map   
+        topic_name: map
+        use_sim_time: false
+        yaml_filename: "/home/leo2/leo_ws/src/leo2_robot/leo2_nav/map_server/office_map.yaml"

@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+
+import rclpy
+from rclpy.node import Node
+from nav_msgs.msg import Odometry, Path
+from geometry_msgs.msg import PoseStamped, Point
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from std_srvs.srv import Trigger
+
+
+class TrajectoryPath(Node):
+    def __init__(self):
+        super().__init__("trajectory_path")
+
+        qos_profile = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
+
+        self.declare_parameter("max_poses", 1000)
+        self.declare_parameter(
+            "movement_threshold", 0.005
+        )  # TODO find good default value - this might be too low
+        self.declare_parameter("frame_id", "odom")
+
+        self.trajectory_path_msg = Path()
+        self.previous_pose_position = Point()
+
+        self.load_params()
+
+        self.odom_sub = self.create_subscription(
+            Odometry, "/odom", self.odom_callback, qos_profile
+        )
+
+        self.path_pub = self.create_publisher(Path, "trajectory_path", 1)
+
+        self.create_service(
+            Trigger, "trajectory_path/clear_trajectory", self.clear_trajectory_callback
+        )
+
+        self.get_logger().info("Trajectory path node started")
+
+    def load_params(self):
+        self.max_poses = self.get_parameter("max_poses").value
+        self.threshold = self.get_parameter("movement_threshold").value
+        self.frame_id = self.get_parameter("frame_id").value
+
+    def odom_callback(self, odom_msg):
+        if odom_msg.header.frame_id == self.frame_id:
+            self.publish_trajectory_path(odom_msg.pose.pose.position)
+        else:
+            self.get_logger().warning(
+                "Odometry message frame:"
+                + odom_msg.header.frame_id
+                + " does not correspond to trajectory frame"
+                + self.frame_id
+            )
+
+    def publish_trajectory_path(self, position):
+        if (
+            (abs(self.previous_pose_position.x - position.x) > self.threshold)
+            or (abs(self.previous_pose_position.y - position.y) > self.threshold)
+            or (abs(self.previous_pose_position.z - position.z) > self.threshold)
+        ):
+            # self.get_logger().info("adding point to path")
+            self.trajectory_path_msg.header.stamp = self.get_clock().now().to_msg()
+            self.trajectory_path_msg.header.frame_id = self.frame_id
+            pose_stamped_msg = PoseStamped()
+            pose_stamped_msg.header.stamp = self.get_clock().now().to_msg()
+
+            pose_stamped_msg.pose.position.x = position.x
+            pose_stamped_msg.pose.position.y = position.y
+            pose_stamped_msg.pose.position.z = position.z
+            pose_stamped_msg.pose.orientation.w = 1.0  # rotation doesn't matter
+
+            if len(self.trajectory_path_msg.poses) < self.max_poses:
+                self.trajectory_path_msg.poses.append(pose_stamped_msg)
+            else:  # If max number of poses reached delete the first element of path
+                self.trajectory_path_msg.poses = self.trajectory_path_msg.poses[1:]
+                self.trajectory_path_msg.poses.append(pose_stamped_msg)
+
+            self.previous_pose_position = pose_stamped_msg.pose.position
+            self.path_pub.publish(self.trajectory_path_msg)
+
+    def clear_trajectory_callback(self, request, response):
+        self.trajectory_path_msg.poses = []
+        response.success = True
+        response.message = "Succesfully cleared trajectory path"
+        return response
+
+
+if __name__ == "__main__":
+    rclpy.init()
+    trajectoryNode = TrajectoryPath()
+
+    try:
+        rclpy.spin(trajectoryNode)
+    except KeyboardInterrupt as exception:
+        trajectoryNode.destroy_node()
