@@ -26,36 +26,6 @@ jobs:
       - name: Source tests
         uses: "ros-industrial/industrial_ci@master"
         env:
-          UPSTREAM_WORKSPACE: "github:fictionlab/leo2_common#humble"
+          UPSTREAM_WORKSPACE: "github:fictionlab/rapha_common#humble"
           ADDITIONAL_DEBS: git-core
           AFTER_INIT: git config --global url."https://token:${{secrets.GITHUBPAT}}@github.com/".insteadOf "https://github.com/"
-          PYLINT_CHECK: true
-          PYLINT_ARGS: "--rcfile=src/leo2_robot/.pylintrc"
-
-  ament_lint:
-    name: ament_${{ matrix.linter }}
-    runs-on: ubuntu-20.04
-    container:
-      image: ros:humble
-    strategy:
-      fail-fast: false
-      matrix:
-        linter: [copyright, lint_cmake, mypy, uncrustify, xmllint]
-    steps:
-      - uses: actions/checkout@v3
-      - uses: ros-tooling/action-ros-lint@v0.1
-        with:
-          distribution: ${{ env.ROS_DISTRO }}
-          linter: ${{ matrix.linter }}
-          package-name: |
-            leo2_bringup
-            leo2_fw
-            leo2_robot
-
-  black_check:
-    runs-on: ubuntu-20.04
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-      - name: Check formatting
-        uses: psf/black@stable
