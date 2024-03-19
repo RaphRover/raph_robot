@@ -15,8 +15,10 @@
 
   <exec_depend>rapha</exec_depend>  
   <exec_depend>rapha_bringup</exec_depend>
-  <exec_depend>rapha_nav</exec_depend>
-  <exec_depend>rapha_oak</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_cmake_lint_cmake</test_depend>
+  <test_depend>ament_cmake_xmllint</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
