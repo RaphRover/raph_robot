@@ -4,21 +4,20 @@
     name="oak_container"
     pkg="rclcpp_components"
     exec="component_container_isolated">
-    <composable_node namespace="oak"
-      name="oak_wrapper"
-      pkg="rapha_oak"
-      plugin="rapha_oak::OakWrapper">
+    <composable_node namespace=""
+      name="oak"
+      pkg="depthai_ros_driver"
+      plugin="depthai_ros_driver::Camera">
       <extra_arg name="use_intra_process_comms" value="true" />
-      <param from="$(find-pkg-share rapha_bringup)/config/oak_wrapper.yaml" />
+      <param from="$(find-pkg-share rapha_bringup)/config/oak.yaml" />
     </composable_node>
     <composable_node namespace="oak"
       name="point_cloud_xyz"
       pkg="depth_image_proc"
       plugin="depth_image_proc::PointCloudXyzNode">
       <extra_arg name="use_intra_process_comms" value="true" />
-      <remap from="image_rect" to="stereo/depth" />
+      <remap from="image_rect" to="stereo/image_raw" />
       <remap from="camera_info" to="stereo/camera_info" />
-      <remap from="points" to="stereo/points" />
     </composable_node>
   </node_container>
 

@@ -16,6 +16,10 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <exec_depend>depth_image_proc</exec_depend>
+  <exec_depend>depthai_ros_driver</exec_depend>
+  <exec_depend>rplidar_ros</exec_depend>
+
   <exec_depend>rapha_description</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>

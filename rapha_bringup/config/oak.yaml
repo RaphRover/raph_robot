@@ -1,0 +1,37 @@
+/oak:
+  ros__parameters:
+    camera:
+      i_pipeline_type: RGBD
+      i_nn_type: none
+      i_laser_dot_brightness: 1000
+    imu:
+      i_acc_freq: 50
+      i_rot_freq: 50
+      i_gyro_freq: 50
+    rgb:
+      i_publish_topic: true
+      i_fps: 30.0
+      i_resolution: 12MP
+      i_isp_num: 1
+      i_isp_den: 3
+      i_output_isp: true
+      i_width: 1344
+      i_height: 1008
+    left:
+      i_publish_topic: true
+      i_fps: 10.0
+      i_resolution: 800P
+    right:
+      i_publish_topic: true
+      i_fps: 10.0
+      i_resolution: 800P
+    stereo:
+      i_align_depth: true
+      i_subpixel: true
+      i_stereo_conf_threshold: 110 #most important parameter
+      i_enable_brightness_filter: false
+      i_brightness_filter_min_brightness: 1
+      i_brightness_filter_max_brightness: 225
+      i_enable_decimation_filter: true
+      i_publish_left_rect: false
+      i_publish_right_rect: false

@@ -10,9 +10,16 @@
     <arg name="model" value="$(var model)" />
   </include>
 
-  <node pkg="rapha_bringup"
-    exec="rapha_system" />
-
   <include file="$(find-pkg-share rapha_bringup)/launch/oak.launch.xml" />
+
+  <node name="rplidar_node" pkg="rplidar_ros" exec="rplidar_node">
+    <param name="channel_type" value="serial" />
+    <param name="frame_id" value="laser_frame" />
+    <param name="serial_port" value="/dev/ttyS5" />
+    <param name="angle_compensate" value="true" />
+    <param name="serial_baudrate" value="1000000" />
+  </node>
+
+  <node pkg="rapha_bringup" exec="rapha_system" />
 
 </launch>
