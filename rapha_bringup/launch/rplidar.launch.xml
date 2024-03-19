@@ -1,0 +1,11 @@
+<launch version="0.1.1">
+
+  <node name="rplidar_node" pkg="rplidar_ros" exec="rplidar_node">
+    <param name="channel_type" value="serial" />
+    <param name="frame_id" value="laser_frame" />
+    <param name="serial_port" value="/dev/ttyS5" />
+    <param name="angle_compensate" value="true" />
+    <param name="serial_baudrate" value="1000000" />
+  </node>
+
+</launch>
