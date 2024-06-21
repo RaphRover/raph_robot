@@ -7,7 +7,7 @@
     pkg="rclcpp_components"
     exec="component_container_isolated">
     <param from="$(var param_file)" />
-
+<!--
     <composable_node name="pointcloud_xyzi"
       pkg="depth_image_proc"
       plugin="depth_image_proc::PointCloudXyziNode">
@@ -17,7 +17,7 @@
       <remap from="intensity/camera_info" to="/oak/right/camera_info" />
       <remap from="points" to="/oak/points" />
     </composable_node>
-
+-->
     <composable_node name="planner_server"
       pkg="nav2_planner"
       plugin="nav2_planner::PlannerServer">
