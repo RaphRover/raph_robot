@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+
+import rapha_fw
+
+rapha_fw.flash_firmware()

@@ -1,7 +1,0 @@
-<launch version="0.1.1">
-
-  <node name="zed2" pkg="zed_wrapper" exec="zed_wrapper">
-    <param from="$(find-pkg-share leo2_bringup)/config/zed2.yaml" />
-  </node>
-
-</launch>
