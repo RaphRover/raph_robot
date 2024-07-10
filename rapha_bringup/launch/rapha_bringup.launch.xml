@@ -19,7 +19,12 @@
 
   <node pkg="rapha_bringup" exec="rapha_system" />
 
-  <include file="$(find-pkg-share rapha_bringup)/launch/oak.launch.xml" />
-  <include file="$(find-pkg-share rapha_bringup)/launch/rplidar.launch.xml" />
+  <include file="$(find-pkg-share rapha_bringup)/launch/oak.launch.xml">
+    <arg name="tf_frame_prefix" value="$(var tf_frame_prefix)" />
+  </include>
+
+  <include file="$(find-pkg-share rapha_bringup)/launch/rplidar.launch.xml">
+    <arg name="tf_frame_prefix" value="$(var tf_frame_prefix)" />
+  </include>
 
 </launch>
