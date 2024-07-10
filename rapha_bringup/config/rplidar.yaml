@@ -1,0 +1,7 @@
+/rplidar/rplidar_node:
+  ros__parameters:
+    channel_type: serial
+    serial_port: /dev/ttyS5
+    serial_baudrate: 1000000
+    angle_compensate: true
+
