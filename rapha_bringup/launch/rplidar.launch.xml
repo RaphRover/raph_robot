@@ -1,11 +1,15 @@
 <launch version="0.1.1">
 
-  <node name="rplidar_node" pkg="rplidar_ros" exec="rplidar_node">
-    <param name="channel_type" value="serial" />
-    <param name="frame_id" value="laser_frame" />
-    <param name="serial_port" value="/dev/ttyS5" />
-    <param name="angle_compensate" value="true" />
-    <param name="serial_baudrate" value="1000000" />
+  <arg name="tf_frame_prefix"
+    default=""
+    description="The prefix added to each published TF frame id" />
+
+  <node namespace="rplidar"
+    name="rplidar_node"
+    pkg="rplidar_ros"
+    exec="rplidar_node">
+    <param from="$(find-pkg-share rapha_bringup)/config/rplidar.yaml" />
+    <param name="frame_id" value="$(var tf_frame_prefix)laser_frame" />
   </node>
 
 </launch>
