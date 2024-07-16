@@ -1,0 +1,9 @@
+<launch version="0.1.1">
+
+  <node namespace="rplidar"
+    pkg="laser_filters"
+    exec="scan_to_scan_filter_chain">
+    <param from="$(find-pkg-share rapha_bringup)/config/rplidar.yaml" />
+  </node>
+
+</launch>
