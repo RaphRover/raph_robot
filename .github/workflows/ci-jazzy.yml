@@ -1,16 +1,16 @@
-name: CI-Humble
+name: CI-Jazzy
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - humble
+      - jazzy
   pull_request:
     branches:
-      - humble
+      - jazzy
 
 env:
- ROS_DISTRO: humble
+ ROS_DISTRO: jazzy
 
 jobs:
   industrial_ci:
@@ -26,6 +26,6 @@ jobs:
       - name: Source tests
         uses: "ros-industrial/industrial_ci@master"
         env:
-          UPSTREAM_WORKSPACE: "github:fictionlab/rapha_common#humble"
+          UPSTREAM_WORKSPACE: "github:fictionlab/rapha_common#jazzy"
           ADDITIONAL_DEBS: git-core
           AFTER_INIT: git config --global url."https://token:${{secrets.GITHUBPAT}}@github.com/".insteadOf "https://github.com/"
