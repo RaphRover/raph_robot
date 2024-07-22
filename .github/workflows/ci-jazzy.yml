@@ -29,3 +29,5 @@ jobs:
           UPSTREAM_WORKSPACE: "github:fictionlab/rapha_common#jazzy"
           ADDITIONAL_DEBS: git-core
           AFTER_INIT: git config --global url."https://token:${{secrets.GITHUBPAT}}@github.com/".insteadOf "https://github.com/"
+          # TODO: Remove once released to ROS Jazzy
+          ROSDEP_SKIP_KEYS: "depthai_ros_driver"
