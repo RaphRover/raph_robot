@@ -5,7 +5,7 @@
     description="Whether to start the robot_state_publisher node" />
 
   <arg name="model"
-    default="$(find-pkg-share rapha_description)/urdf/rapha.urdf.xacro"
+    default="$(find-pkg-share raph_description)/urdf/raph.urdf.xacro"
     description="Absolute path to robot urdf.xacro file" />
 
   <arg name="tf_frame_prefix"
@@ -13,15 +13,15 @@
     description="The prefix added to each published TF frame id" />
 
   <include if="$(var spawn_state_publisher)"
-    file="$(find-pkg-share rapha_description)/launch/state_publisher.launch.xml">
+    file="$(find-pkg-share raph_description)/launch/state_publisher.launch.xml">
     <arg name="model" value="$(var model)" />
   </include>
 
-  <node pkg="rapha_bringup" exec="rapha_system" />
+  <node pkg="raph_bringup" exec="raph_system" />
 
-  <include file="$(find-pkg-share rapha_bringup)/launch/oak.launch.xml"/>
+  <include file="$(find-pkg-share raph_bringup)/launch/oak.launch.xml"/>
 
-  <include file="$(find-pkg-share rapha_bringup)/launch/rplidar.launch.xml">
+  <include file="$(find-pkg-share raph_bringup)/launch/rplidar.launch.xml">
     <arg name="tf_frame_prefix" value="$(var tf_frame_prefix)" />
   </include>
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(rapha_bringup)
+project(raph_bringup)
 
 find_package(ament_cmake REQUIRED)
 
@@ -12,7 +12,7 @@ install(
 
 install(
   PROGRAMS
-    scripts/rapha_system
+    scripts/raph_system
   DESTINATION lib/${PROJECT_NAME}
 )
 

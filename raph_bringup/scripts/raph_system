@@ -9,9 +9,9 @@ from std_msgs.msg import Empty
 from std_msgs.msg import String
 
 
-class RaphaSystem(Node):
+class RaphSystem(Node):
     def __init__(self):
-        super().__init__("rapha_system")
+        super().__init__("raph_system")
         self.reboot_sub = self.create_subscription(
             Empty, "system/shutdown", self.shutdown_callback, 1
         )
@@ -19,7 +19,7 @@ class RaphaSystem(Node):
             Empty, "system/reboot", self.reboot_callback, 1
         )
         self.publish_namespace()
-        self.get_logger().info("Rapha system node started!")
+        self.get_logger().info("Raph system node started!")
 
     def reboot_callback(self, data):
         self.get_logger().info("Reboot command invoked")
@@ -45,12 +45,12 @@ class RaphaSystem(Node):
 
 if __name__ == "__main__":
     rclpy.init()
-    rapha_system = RaphaSystem()
+    raph_system = RaphSystem()
 
     try:
-        rclpy.spin(rapha_system)
+        rclpy.spin(raph_system)
     except KeyboardInterrupt as exception:
-        rapha_system.get_logger().info("Got Ctrl+C, shuting down.")
-        rapha_system.destroy_node()
+        raph_system.get_logger().info("Got Ctrl+C, shuting down.")
+        raph_system.destroy_node()
     finally:
         rclpy.shutdown()
