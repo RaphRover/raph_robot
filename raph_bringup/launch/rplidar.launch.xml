@@ -8,7 +8,7 @@
     name="rplidar_node"
     pkg="rplidar_ros"
     exec="rplidar_node">
-    <param from="$(find-pkg-share rapha_bringup)/config/rplidar.yaml" />
+    <param from="$(find-pkg-share raph_bringup)/config/rplidar.yaml" />
     <param name="frame_id" value="$(var tf_frame_prefix)laser_frame" />
   </node>
 

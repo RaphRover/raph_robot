@@ -14,7 +14,7 @@ env:
 
 jobs:
   industrial_ci:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         ROS_REPO: [testing, main]
@@ -26,8 +26,6 @@ jobs:
       - name: Source tests
         uses: "ros-industrial/industrial_ci@master"
         env:
-          UPSTREAM_WORKSPACE: "github:fictionlab/rapha_common#jazzy"
+          UPSTREAM_WORKSPACE: "github:RaphRover/raph_common#jazzy"
           ADDITIONAL_DEBS: git-core
           AFTER_INIT: git config --global url."https://token:${{secrets.GITHUBPAT}}@github.com/".insteadOf "https://github.com/"
-          # TODO: Remove once released to ROS Jazzy
-          ROSDEP_SKIP_KEYS: "depthai_ros_driver"

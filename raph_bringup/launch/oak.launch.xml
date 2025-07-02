@@ -9,7 +9,7 @@
       pkg="depthai_ros_driver"
       plugin="depthai_ros_driver::Camera">
       <extra_arg name="use_intra_process_comms" value="true" />
-      <param from="$(find-pkg-share rapha_bringup)/config/oak.yaml" />
+      <param from="$(find-pkg-share raph_bringup)/config/oak.yaml" />
     </composable_node>
     <composable_node namespace="oak"
       name="point_cloud_xyz"
