@@ -10,6 +10,11 @@
       plugin="depthai_ros_driver::Camera">
       <extra_arg name="use_intra_process_comms" value="true" />
       <param from="$(find-pkg-share raph_bringup)/config/oak.yaml" />
+      <!-- Remap left and right cameras to match physical orientation -->
+      <remap from="oak/left/image_raw" to="oak/right/image_raw" />
+      <remap from="oak/left/camera_info" to="oak/right/camera_info" />
+      <remap from="oak/right/image_raw" to="oak/left/image_raw" />
+      <remap from="oak/right/camera_info" to="oak/left/camera_info" />
     </composable_node>
     <composable_node namespace="oak"
       name="point_cloud_xyz"
