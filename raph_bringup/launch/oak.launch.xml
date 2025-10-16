@@ -24,6 +24,46 @@
       <remap from="image_rect" to="stereo/image_raw" />
       <remap from="camera_info" to="stereo/camera_info" />
     </composable_node>
+    <composable_node namespace="oak/left"
+      name="compressed_republisher"
+      pkg="image_transport"
+      plugin="image_transport::Republisher">
+      <extra_arg name="use_intra_process_comms" value="true" />
+      <param name="in_transport" value="raw" />
+      <param name="out_transport" value="compressed" />
+      <remap from="in" to="image_raw" />
+      <remap from="out/compressed" to="image_raw/compressed" />
+    </composable_node>
+    <composable_node namespace="oak/rgb"
+      name="compressed_republisher"
+      pkg="image_transport"
+      plugin="image_transport::Republisher">
+      <extra_arg name="use_intra_process_comms" value="true" />
+      <param name="in_transport" value="raw" />
+      <param name="out_transport" value="compressed" />
+      <remap from="in" to="image_raw" />
+      <remap from="out/compressed" to="image_raw/compressed" />
+    </composable_node>
+    <composable_node namespace="oak/right"
+      name="compressed_republisher"
+      pkg="image_transport"
+      plugin="image_transport::Republisher">
+      <extra_arg name="use_intra_process_comms" value="true" />
+      <param name="in_transport" value="raw" />
+      <param name="out_transport" value="compressed" />
+      <remap from="in" to="image_raw" />
+      <remap from="out/compressed" to="image_raw/compressed" />
+    </composable_node>
+    <composable_node namespace="oak/stereo"
+      name="compressed_republisher"
+      pkg="image_transport"
+      plugin="image_transport::Republisher">
+      <extra_arg name="use_intra_process_comms" value="true" />
+      <param name="in_transport" value="raw" />
+      <param name="out_transport" value="compressedDepth" />
+      <remap from="in" to="image_raw" />
+      <remap from="out/compressedDepth" to="image_raw/compressedDepth" />
+    </composable_node>
   </node_container>
 
 </launch>
