@@ -10,7 +10,7 @@
       i_gyro_freq: 50
     rgb:
       i_publish_topic: true
-      i_fps: 30.0
+      i_fps: 15.0
       i_resolution: 12MP
       i_isp_num: 1
       i_isp_den: 3
