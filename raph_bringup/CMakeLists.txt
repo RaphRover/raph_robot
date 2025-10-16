@@ -12,6 +12,7 @@ install(
 
 install(
   PROGRAMS
+    scripts/raph_system.py
     scripts/raph_system
   DESTINATION lib/${PROJECT_NAME}
 )
