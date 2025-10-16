@@ -1,0 +1,6 @@
+/**:
+  ros__parameters:
+    unregister_timeout: 60.0
+    websocket_ping_timeout: 4
+    websocket_ping_interval: 1
+    call_services_in_new_thread: true

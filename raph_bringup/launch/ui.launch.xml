@@ -1,0 +1,23 @@
+<launch version="0.1.1">
+
+  <node name="web_video_server"
+    pkg="web_video_server"
+    exec="web_video_server"
+    respawn="true"
+    respawn_max_retries="5" />
+
+  <node name="rosbridge_server"
+    pkg="rosbridge_server"
+    exec="rosbridge_websocket"
+    respawn="true"
+    respawn_max_retries="5" >
+    <param from="$(find-pkg-share raph_bringup)/config/rosbridge_server.yaml" />
+  </node>
+
+  <node name="rosapi"
+    pkg="rosapi"
+    exec="rosapi_node"
+    respawn="true"
+    respawn_max_retries="5" />
+
+</launch>
