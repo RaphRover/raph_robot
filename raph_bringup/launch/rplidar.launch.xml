@@ -12,4 +12,12 @@
     <param name="frame_id" value="$(var tf_frame_prefix)laser_frame" />
   </node>
 
+  <node namespace="rplidar"
+    name="box_filter"
+    pkg="laser_filters"
+    exec="scan_to_scan_filter_chain">
+    <param from="$(find-pkg-share raph_bringup)/config/box_filter.yaml" />
+    <remap from="scan_in" to="scan" />
+  </node>
+
 </launch>

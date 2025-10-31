@@ -1,0 +1,14 @@
+/**:
+  ros__parameters:
+    filter1:
+      name: box_filter
+      type: laser_filters/LaserScanBoxFilter
+      params:
+        box_frame: base_link
+        max_x: -0.28
+        max_y: 0.25
+        max_z: 0.3
+        min_x: -0.48
+        min_y: -0.25
+        min_z: -0.3
+        invert: false
