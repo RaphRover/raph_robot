@@ -1,4 +1,4 @@
-/rplidar/box_filter:
+/**:
   ros__parameters:
     filter1:
       name: box_filter
