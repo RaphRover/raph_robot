@@ -21,6 +21,7 @@
   <exec_depend>depth_image_proc</exec_depend>
   <exec_depend>depthai_ros_driver</exec_depend>
   <exec_depend>image_transport</exec_depend>
+  <exec_depend>laser_filters</exec_depend>
   <exec_depend>rosapi</exec_depend>
   <exec_depend>rosbridge_server</exec_depend>
   <exec_depend>rplidar_ros</exec_depend>
