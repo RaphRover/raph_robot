@@ -2,8 +2,8 @@
 Changelog for package raph_bringup
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.0.0 (2025-12-08)
+------------------
 * feat: Add box filter to rplidar scans (`#6 <https://github.com/Rapha-Rover/rapha_robot/issues/6>`_)
 * feat: Improve Oak configuration (`#5 <https://github.com/Rapha-Rover/rapha_robot/issues/5>`_)
 * Add rosbridge and web_video_server to raph_bringup

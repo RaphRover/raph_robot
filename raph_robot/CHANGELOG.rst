@@ -2,8 +2,8 @@
 Changelog for package raph_robot
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.0.0 (2025-12-08)
+------------------
 * Change all names to Raph (`#4 <https://github.com/Rapha-Rover/rapha_robot/issues/4>`_)
 * Contributors: Jan Hernas
 
