@@ -243,7 +243,7 @@ private:
     manip_right->initialConfig.setRotationDegrees(180);
     manip_depth->initialConfig.setRotationDegrees(180);
     // has to be changed if differetn resolution for mono cameras is chosen
-    manip_depth->setMaxOutputFrameSize(1280*800*2);
+    manip_depth->setMaxOutputFrameSize(1280 * 800 * 2);
 
     left_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
     left_encoder_node->setQuality(80);
@@ -305,7 +305,7 @@ private:
 
     stereo_depth_node->rectifiedLeft.link(manip_right->inputImage);
     stereo_depth_node->rectifiedRight.link(manip_left->inputImage);
-    
+
     manip_left->out.link(xout_left->input);
     manip_left->out.link(left_encoder_node->input);
     manip_right->out.link(xout_right->input);
