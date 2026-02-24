@@ -37,6 +37,41 @@ using namespace std::chrono_literals;
 namespace raph_oak
 {
 
+// Calculate the camera info for the images rotated by 180 degrees
+static sensor_msgs::msg::CameraInfo get_rotated_camera_info(
+  const sensor_msgs::msg::CameraInfo & original_info,
+  bool is_rectified = false)
+{
+  sensor_msgs::msg::CameraInfo rotated_info = original_info;
+  double w = static_cast<double>(original_info.width);
+  double h = static_cast<double>(original_info.height);
+
+  // 1. Shift Principal Point in K (Intrinsics)
+  // K[2] is cx, K[5] is cy
+  rotated_info.k[2] = w - 1.0 - original_info.k[2];
+  rotated_info.k[5] = h - 1.0 - original_info.k[5];
+
+  // 2. Shift Principal Point in P (Projection)
+  // P[2] is cx, P[6] is cy
+  rotated_info.p[2] = w - 1.0 - original_info.p[2];
+  rotated_info.p[6] = h - 1.0 - original_info.p[6];
+
+  // 3. Handle Distortion (D)
+  if (!is_rectified) {
+    // If NOT rectified, flip the tangential distortion coefficients (p1, p2) in D,
+    // and keep the radial coefficients (k1, k2, k3, k4) the same.
+    if (rotated_info.d.size() >= 4) {
+      rotated_info.d[2] = -original_info.d[2]; // p1
+      rotated_info.d[3] = -original_info.d[3]; // p2
+    }
+  } else {
+    // If ALREADY rectified, D should be zeros. Ensure it stays that way.
+    std::fill(rotated_info.d.begin(), rotated_info.d.end(), 0.0);
+  }
+
+  return rotated_info;
+}
+
 class OakWrapper : public rclcpp::Node
 {
   std::unique_ptr<dai::Device> device_;
@@ -82,6 +117,7 @@ class OakWrapper : public rclcpp::Node
   sensor_msgs::msg::CameraInfo rgb_camera_info_;
   sensor_msgs::msg::CameraInfo left_camera_info_;
   sensor_msgs::msg::CameraInfo right_camera_info_;
+  sensor_msgs::msg::CameraInfo stereo_camera_info_;
 
   std::chrono::time_point<std::chrono::steady_clock> steady_base_time_;
   rclcpp::Time ros_base_time_;
@@ -133,8 +169,8 @@ public:
     auto img_converter = dai::rosBridge::ImageConverter(false);
 
     // RGB
-    rgb_camera_info_ = img_converter.calibrationToCameraInfo(
-      calibration_handler, dai::CameraBoardSocket::CAM_A, 1280, 720);
+    rgb_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
+      calibration_handler, dai::CameraBoardSocket::CAM_A, 1344, 1008));
     rgb_camera_info_.header.frame_id = "oak_rgb_camera_optical_frame";
     rgb_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/rgb/image_raw", 10);
     rgb_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/rgb/camera_info", 10);
@@ -143,30 +179,33 @@ public:
     rgb_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
       "~/rgb/image_raw/compressed", 10);
 
-    // Left
-    left_camera_info_ = img_converter.calibrationToCameraInfo(
-      calibration_handler, calibration_handler.getStereoLeftCameraId(), 640, 400);
+    // Left (physically right camera, but becomes left after 180 degree rotation)
+    left_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
+      calibration_handler, calibration_handler.getStereoRightCameraId(), 1280, 800), true);
     left_camera_info_.header.frame_id = "oak_left_camera_optical_frame";
-    left_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/left/image_raw", 10);
+    left_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/left/image_rect", 10);
     left_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/left/camera_info", 10);
 
     // Left Compressed
     left_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
-      "~/left/image_raw/compressed", 10);
+      "~/left/image_rect/compressed", 10);
 
-    // Right
-    right_camera_info_ = img_converter.calibrationToCameraInfo(
-      calibration_handler, calibration_handler.getStereoRightCameraId(), 640, 400);
+    // Right (physically left camera, but becomes right after 180 degree rotation)
+    right_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
+      calibration_handler, calibration_handler.getStereoLeftCameraId(), 1280, 800), true);
     right_camera_info_.header.frame_id = "oak_right_camera_optical_frame";
-    right_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/right/image_raw", 10);
+    right_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/right/image_rect", 10);
     right_cam_info_pub_ =
       create_publisher<sensor_msgs::msg::CameraInfo>("~/right/camera_info", 10);
 
     // Right Compressed
     right_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
-      "~/right/image_raw/compressed", 10);
+      "~/right/image_rect/compressed", 10);
 
     // Depth
+    stereo_camera_info_ = img_converter.calibrationToCameraInfo(calibration_handler,
+        calibration_handler.getStereoRightCameraId(), 1280, 800);
+    stereo_camera_info_.header.frame_id = "oak_stereo_camera_optical_frame";
     stereo_depth_pub_ = create_publisher<sensor_msgs::msg::Image>("~/stereo/image_raw", 10);
     stereo_cam_info_pub_ =
       create_publisher<sensor_msgs::msg::CameraInfo>("~/stereo/camera_info", 10);
@@ -208,7 +247,6 @@ private:
     auto xout_imu = pipeline.create<dai::node::XLinkOut>();
     auto manip_left = pipeline.create<dai::node::ImageManip>();
     auto manip_right = pipeline.create<dai::node::ImageManip>();
-    auto manip_depth = pipeline.create<dai::node::ImageManip>();
 
     // Configure nodes
     mono_left_node->setCamera("left");
@@ -222,13 +260,12 @@ private:
     stereo_depth_node->setRectifyEdgeFillColor(0);
     stereo_depth_node->setExtendedDisparity(false);
     stereo_depth_node->setRuntimeModeSwitch(true);
+    // Align to right (which becomes left after 180-degree rotation)
+    stereo_depth_node->setDepthAlign(dai::StereoDepthProperties::DepthAlign::RECTIFIED_RIGHT);
     stereo_depth_node->initialConfig.set(depth_config_);
 
     manip_left->initialConfig.setRotationDegrees(180);
     manip_right->initialConfig.setRotationDegrees(180);
-    manip_depth->initialConfig.setRotationDegrees(180);
-    // has to be changed if different resolution for mono cameras is chosen
-    manip_depth->setMaxOutputFrameSize(1280 * 800 * 2);
 
     left_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
     left_encoder_node->setQuality(80);
@@ -296,8 +333,7 @@ private:
     manip_right->out.link(xout_right->input);
     manip_right->out.link(right_encoder_node->input);
 
-    stereo_depth_node->depth.link(manip_depth->inputImage);
-    manip_depth->out.link(xout_depth->input);
+    stereo_depth_node->depth.link(xout_depth->input);
 
     xin_depth_config->out.link(stereo_depth_node->inputConfig);
 
@@ -376,7 +412,7 @@ private:
       stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count(),
       depth_queue_, depth_callback_id_,
       std::bind(&OakWrapper::publish_image, this, stereo_depth_pub_, stereo_cam_info_pub_,
-        right_camera_info_, depth_queue_));
+        stereo_camera_info_, depth_queue_));
 
     manage_callback(
       imu_pub_->get_subscription_count(),
@@ -391,6 +427,7 @@ private:
     }
 
     update_parameters();
+    send_parameters();
   }
 
   void update_parameters()
