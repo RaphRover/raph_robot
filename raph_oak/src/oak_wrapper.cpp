@@ -70,10 +70,11 @@ class OakWrapper : public rclcpp::Node
 
   std::chrono::time_point<std::chrono::steady_clock> steady_base_time_;
   rclcpp::Time ros_base_time_;
-  std::shared_ptr<rclcpp::TimerBase> timer_;
+  std::shared_ptr<rclcpp::TimerBase> check_timer_;
 
   ParamListener param_listener_;
   Params params_;
+  PostSetParametersCallbackHandle::SharedPtr parameter_callback_handle_;
 
   dai::RawStereoDepthConfig depth_config_;
 
@@ -85,6 +86,9 @@ public:
   {
     ros_base_time_ = rclcpp::Clock().now();
     update_parameters();
+    parameter_callback_handle_ =
+      this->add_post_set_parameters_callback(std::bind(&OakWrapper::post_set_parameters_callback,
+        this, std::placeholders::_1));
 
     auto pipeline = create_dai_pipeline();
     device_ = std::make_unique<dai::Device>(pipeline, dai::UsbSpeed::FULL);
@@ -196,7 +200,7 @@ public:
     imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("~/imu", 10);
     imu_queue_->addCallback(std::bind(&OakWrapper::publish_imu, this, std::placeholders::_1));
 
-    timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check, this));
+    check_timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check_publishers, this));
   }
 
 private:
@@ -237,6 +241,7 @@ private:
 
     stereo_depth_node->setRectifyEdgeFillColor(0);
     stereo_depth_node->setExtendedDisparity(false);
+    stereo_depth_node->setRuntimeModeSwitch(true);
     stereo_depth_node->initialConfig.set(depth_config_);
 
     manip_left->initialConfig.setRotationDegrees(180);
@@ -359,12 +364,14 @@ private:
     check_queue(imu_pub_->get_subscription_count(), imu_queue_);
   }
 
-  void check_parameters()
+  void post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters)
   {
-    if (param_listener_.is_old(params_)) {
-      update_parameters();
-      send_parameters();
+    for (auto & param: parameters) {
+      RCLCPP_INFO_STREAM(this->get_logger(),
+          "Parameter " << param.get_name() << " changed to: " << param.value_to_string());
     }
+
+    update_parameters();
   }
 
   void update_parameters()
@@ -388,12 +395,6 @@ private:
     dai::StereoDepthConfig config;
     config.set(depth_config_);
     depth_config_queue_->send(config);
-  }
-
-  void check()
-  {
-    check_publishers();
-    check_parameters();
   }
 
   void publish_image(
