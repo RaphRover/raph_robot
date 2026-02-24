@@ -68,6 +68,21 @@ class OakWrapper : public rclcpp::Node
 
   std::shared_ptr<dai::rosBridge::ImuConverter> imu_converter_;
 
+  // Callback IDs for dynamic callback management
+  int rgb_callback_id_{-1};
+  int rgb_compressed_callback_id_{-1};
+  int left_callback_id_{-1};
+  int left_compressed_callback_id_{-1};
+  int right_callback_id_{-1};
+  int right_compressed_callback_id_{-1};
+  int depth_callback_id_{-1};
+  int imu_callback_id_{-1};
+
+  // Camera info for callbacks
+  sensor_msgs::msg::CameraInfo rgb_camera_info_;
+  sensor_msgs::msg::CameraInfo left_camera_info_;
+  sensor_msgs::msg::CameraInfo right_camera_info_;
+
   std::chrono::time_point<std::chrono::steady_clock> steady_base_time_;
   rclcpp::Time ros_base_time_;
   std::shared_ptr<rclcpp::TimerBase> check_timer_;
@@ -104,90 +119,57 @@ public:
     RCLCPP_INFO_STREAM(get_logger(), "Hardware Conf: " << eeprom.hardwareConf);
     RCLCPP_INFO_STREAM(get_logger(), "Batch name: " << eeprom.batchName);
 
+    // Set all output queues to non-blocking with size 1
+    rgb_queue_ = device_->getOutputQueue("rgb", 1, true);
+    rgb_compressed_queue_ = device_->getOutputQueue("rgb_compressed", 1, true);
+    left_queue_ = device_->getOutputQueue("left", 1, true);
+    left_compressed_queue_ = device_->getOutputQueue("left_compressed", 1, true);
+    right_queue_ = device_->getOutputQueue("right", 1, true);
+    right_compressed_queue_ = device_->getOutputQueue("right_compressed", 1, true);
+    depth_queue_ = device_->getOutputQueue("depth", 1, true);
+    imu_queue_ = device_->getOutputQueue("imu", 1, true);
+
     // Only used to get camera info matrices
     auto img_converter = dai::rosBridge::ImageConverter(false);
 
     // RGB
-    rgb_queue_ = device_->getOutputQueue("rgb", 1, true);
-    auto rgb_camera_info = img_converter.calibrationToCameraInfo(
+    rgb_camera_info_ = img_converter.calibrationToCameraInfo(
       calibration_handler, dai::CameraBoardSocket::CAM_A, 1280, 720);
-    rgb_camera_info.header.frame_id = "oak_rgb_camera_optical_frame";
-
+    rgb_camera_info_.header.frame_id = "oak_rgb_camera_optical_frame";
     rgb_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/rgb/image_raw", 10);
     rgb_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/rgb/camera_info", 10);
-    rgb_queue_->addCallback(
-      std::bind(
-        &OakWrapper::publish_image, this, rgb_img_pub_, rgb_cam_info_pub_, rgb_camera_info,
-        std::placeholders::_1));
 
     // RGB Compressed
     rgb_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
       "~/rgb/image_raw/compressed", 10);
-    rgb_compressed_queue_ = device_->getOutputQueue("rgb_compressed", 1, true);
-    rgb_compressed_queue_->addCallback(
-      std::bind(
-        &OakWrapper::publish_compressed_image, this, rgb_compressed_pub_,
-        "oak_rgb_camera_optical_frame",
-        std::placeholders::_1));
 
     // Left
-    left_queue_ = device_->getOutputQueue("left", 1, true);
-    auto left_camera_info = img_converter.calibrationToCameraInfo(
+    left_camera_info_ = img_converter.calibrationToCameraInfo(
       calibration_handler, calibration_handler.getStereoLeftCameraId(), 640, 400);
-    left_camera_info.header.frame_id = "oak_left_camera_optical_frame";
-
+    left_camera_info_.header.frame_id = "oak_left_camera_optical_frame";
     left_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/left/image_raw", 10);
     left_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/left/camera_info", 10);
-    left_queue_->addCallback(
-      std::bind(
-        &OakWrapper::publish_image, this, left_img_pub_, left_cam_info_pub_, left_camera_info,
-        std::placeholders::_1));
 
     // Left Compressed
     left_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
       "~/left/image_raw/compressed", 10);
-    left_compressed_queue_ = device_->getOutputQueue("left_compressed", 1, true);
-    left_compressed_queue_->addCallback(
-      std::bind(
-        &OakWrapper::publish_compressed_image, this, left_compressed_pub_,
-        "oak_left_camera_optical_frame",
-        std::placeholders::_1));
 
     // Right
-    right_queue_ = device_->getOutputQueue("right", 1, true);
-    auto right_camera_info = img_converter.calibrationToCameraInfo(
+    right_camera_info_ = img_converter.calibrationToCameraInfo(
       calibration_handler, calibration_handler.getStereoRightCameraId(), 640, 400);
-    right_camera_info.header.frame_id = "oak_right_camera_optical_frame";
-
+    right_camera_info_.header.frame_id = "oak_right_camera_optical_frame";
     right_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/right/image_raw", 10);
     right_cam_info_pub_ =
       create_publisher<sensor_msgs::msg::CameraInfo>("~/right/camera_info", 10);
-    right_queue_->addCallback(
-      std::bind(
-        &OakWrapper::publish_image, this, right_img_pub_, right_cam_info_pub_, right_camera_info,
-        std::placeholders::_1));
 
     // Right Compressed
     right_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
       "~/right/image_raw/compressed", 10);
-    right_compressed_queue_ = device_->getOutputQueue("right_compressed", 1, true);
-    right_compressed_queue_->addCallback(
-      std::bind(
-        &OakWrapper::publish_compressed_image, this, right_compressed_pub_,
-        "oak_right_camera_optical_frame",
-        std::placeholders::_1));
 
     // Depth
-    depth_queue_ = device_->getOutputQueue("depth", 1, true);
-
     stereo_depth_pub_ = create_publisher<sensor_msgs::msg::Image>("~/stereo/image_raw", 10);
     stereo_cam_info_pub_ =
       create_publisher<sensor_msgs::msg::CameraInfo>("~/stereo/camera_info", 10);
-    depth_queue_->addCallback(
-      std::bind(
-        &OakWrapper::publish_image, this, stereo_depth_pub_, stereo_cam_info_pub_,
-        right_camera_info,
-        std::placeholders::_1));
 
     // Depth Config
     depth_config_queue_ = device_->getInputQueue("depth_config");
@@ -196,9 +178,7 @@ public:
     imu_converter_ = std::make_shared<dai::rosBridge::ImuConverter>(
       "oak_imu_frame",
       dai::ros::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO, 0.001, 0.00001);
-    imu_queue_ = device_->getOutputQueue("imu", 1, true);
     imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("~/imu", 10);
-    imu_queue_->addCallback(std::bind(&OakWrapper::publish_imu, this, std::placeholders::_1));
 
     check_timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check_publishers, this));
   }
@@ -247,7 +227,7 @@ private:
     manip_left->initialConfig.setRotationDegrees(180);
     manip_right->initialConfig.setRotationDegrees(180);
     manip_depth->initialConfig.setRotationDegrees(180);
-    // has to be changed if differetn resolution for mono cameras is chosen
+    // has to be changed if different resolution for mono cameras is chosen
     manip_depth->setMaxOutputFrameSize(1280 * 800 * 2);
 
     left_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
@@ -332,36 +312,75 @@ private:
     return pipeline;
   }
 
-  void check_queue(int subscription_count, const std::shared_ptr<dai::DataOutputQueue> & queue)
+  void manage_callback(
+    int subscription_count,
+    std::shared_ptr<dai::DataOutputQueue> queue,
+    int & callback_id,
+    std::function<void()> callback)
   {
-    if (subscription_count > 0 && queue->getBlocking()) {
-      queue->setMaxSize(1);
-      queue->setBlocking(false);
-      queue->tryGetAll();
-    } else if (subscription_count == 0 && !queue->getBlocking()) {
-      queue->setMaxSize(0);
-      queue->setBlocking(true);
+    bool should_be_active = subscription_count > 0;
+    bool is_active = callback_id >= 0;
+
+    if (should_be_active && !is_active) {
+      RCLCPP_INFO_STREAM(get_logger(),
+          "Activating callback for \"" << queue->getName() << "\" queue");
+      callback_id = queue->addCallback(callback);
+      queue->tryGetAll(); // Clear any existing data in the queue
+    } else if (!should_be_active && is_active) {
+      RCLCPP_INFO_STREAM(get_logger(),
+          "Deactivating callback for \"" << queue->getName() << "\" queue");
+      queue->removeCallback(callback_id);
+      callback_id = -1;
     }
   }
 
   void check_publishers()
   {
-    check_queue(
+    manage_callback(
       rgb_img_pub_->get_subscription_count() + rgb_cam_info_pub_->get_subscription_count(),
-      rgb_queue_);
-    check_queue(rgb_compressed_pub_->get_subscription_count(), rgb_compressed_queue_);
-    check_queue(
+      rgb_queue_, rgb_callback_id_,
+      std::bind(&OakWrapper::publish_image, this, rgb_img_pub_, rgb_cam_info_pub_,
+        rgb_camera_info_, rgb_queue_));
+
+    manage_callback(
+      rgb_compressed_pub_->get_subscription_count(),
+      rgb_compressed_queue_, rgb_compressed_callback_id_,
+      std::bind(&OakWrapper::publish_compressed_image, this, rgb_compressed_pub_,
+        "oak_rgb_camera_optical_frame", rgb_compressed_queue_));
+
+    manage_callback(
       left_img_pub_->get_subscription_count() + left_cam_info_pub_->get_subscription_count(),
-      left_queue_);
-    check_queue(left_compressed_pub_->get_subscription_count(), left_compressed_queue_);
-    check_queue(
+      left_queue_, left_callback_id_,
+      std::bind(&OakWrapper::publish_image, this, left_img_pub_, left_cam_info_pub_,
+        left_camera_info_, left_queue_));
+
+    manage_callback(
+      left_compressed_pub_->get_subscription_count(),
+      left_compressed_queue_, left_compressed_callback_id_,
+      std::bind(&OakWrapper::publish_compressed_image, this, left_compressed_pub_,
+        "oak_left_camera_optical_frame", left_compressed_queue_));
+
+    manage_callback(
       right_img_pub_->get_subscription_count() + right_cam_info_pub_->get_subscription_count(),
-      right_queue_);
-    check_queue(right_compressed_pub_->get_subscription_count(), right_compressed_queue_);
-    check_queue(
+      right_queue_, right_callback_id_,
+      std::bind(&OakWrapper::publish_image, this, right_img_pub_, right_cam_info_pub_,
+        right_camera_info_, right_queue_));
+
+    manage_callback(
+      right_compressed_pub_->get_subscription_count(),
+      right_compressed_queue_, right_compressed_callback_id_,
+      std::bind(&OakWrapper::publish_compressed_image, this, right_compressed_pub_,
+        "oak_right_camera_optical_frame", right_compressed_queue_));
+
+    manage_callback(
       stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count(),
-      depth_queue_);
-    check_queue(imu_pub_->get_subscription_count(), imu_queue_);
+      depth_queue_, depth_callback_id_,
+      std::bind(&OakWrapper::publish_image, this, stereo_depth_pub_, stereo_cam_info_pub_,
+        right_camera_info_, depth_queue_));
+
+    manage_callback(
+      imu_pub_->get_subscription_count(),
+      imu_queue_, imu_callback_id_, std::bind(&OakWrapper::publish_imu, this));
   }
 
   void post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters)
@@ -401,9 +420,14 @@ private:
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> img_pub,
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
     sensor_msgs::msg::CameraInfo cam_info,
-    std::shared_ptr<dai::ADatatype> data)
+    std::shared_ptr<dai::DataOutputQueue> queue)
   {
-    auto in_data = std::dynamic_pointer_cast<dai::ImgFrame>(data);
+    auto in_data = queue->tryGet<dai::ImgFrame>();
+    if (!in_data) {
+      RCLCPP_WARN_STREAM(get_logger(), "Failed to get data from \"" << queue->getName() <<
+        "\" queue");
+      return;
+    }
 
     cam_info.header.stamp = dai::ros::getFrameTime(
       ros_base_time_, steady_base_time_,
@@ -444,9 +468,14 @@ private:
   void publish_compressed_image(
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
     std::string frame_id,
-    std::shared_ptr<dai::ADatatype> data)
+    std::shared_ptr<dai::DataOutputQueue> queue)
   {
-    auto in_data = std::dynamic_pointer_cast<dai::ImgFrame>(data);
+    auto in_data = queue->tryGet<dai::ImgFrame>();
+    if (!in_data) {
+      RCLCPP_WARN_STREAM(get_logger(), "Failed to get data from \"" << queue->getName() <<
+        "\" queue");
+      return;
+    }
 
     auto image = std::make_unique<sensor_msgs::msg::CompressedImage>();
     image->header.stamp = dai::ros::getFrameTime(
@@ -459,9 +488,14 @@ private:
     img_pub->publish(std::move(image));
   }
 
-  void publish_imu(std::shared_ptr<dai::ADatatype> data)
+  void publish_imu()
   {
-    auto in_data = std::dynamic_pointer_cast<dai::IMUData>(data);
+    auto in_data = imu_queue_->tryGet<dai::IMUData>();
+    if (!in_data) {
+      RCLCPP_WARN_STREAM(get_logger(), "Failed to get data from \"" << imu_queue_->getName() <<
+        "\" queue");
+      return;
+    }
 
     std::deque<sensor_msgs::msg::Imu> op_msgs;
     imu_converter_->toRosMsg(in_data, op_msgs);
