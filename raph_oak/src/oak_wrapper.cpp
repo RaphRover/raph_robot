@@ -23,7 +23,7 @@
 #include "depthai/depthai.hpp"
 
 #include "depthai_bridge/ImageConverter.hpp"
-#include <depthai_bridge/ImuConverter.hpp>
+#include "depthai_bridge/ImuConverter.hpp"
 
 #include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/imu.hpp"
