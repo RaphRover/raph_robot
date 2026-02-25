@@ -15,7 +15,10 @@ generate_parameter_library(
 )
 
 add_library(raph_oak SHARED
+  src/camera_info.cpp
   src/oak_wrapper.cpp
+  src/parameters.cpp
+  src/pipeline.cpp
 )
 target_link_libraries(raph_oak
   rclcpp::rclcpp
@@ -23,6 +26,10 @@ target_link_libraries(raph_oak
   depthai::core
   depthai_bridge::depthai_bridge
   oak_wrapper_parameters
+)
+target_include_directories(raph_oak
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 rclcpp_components_register_node(raph_oak
   PLUGIN "raph_oak::OakWrapper"
