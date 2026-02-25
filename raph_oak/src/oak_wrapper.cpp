@@ -41,6 +41,8 @@ using namespace std::chrono_literals;
 namespace raph_oak
 {
 
+std::vector<std::string> usbStrings = {"UNKNOWN", "LOW", "FULL", "HIGH", "SUPER", "SUPER_PLUS"};
+
 OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 : Node("oak_wrapper", options),
   steady_base_time_(std::chrono::steady_clock::now()),
@@ -52,10 +54,187 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
     this->add_post_set_parameters_callback(std::bind(&OakWrapper::post_set_parameters_callback,
         this, std::placeholders::_1));
 
-  auto pipeline = create_dai_pipeline(params_);
-  device_ = std::make_unique<dai::Device>(pipeline, dai::UsbSpeed::FULL);
+  this->create_ros_publishers();
 
-  auto calibration_handler = device_->readCalibration();
+  imu_converter_ = std::make_shared<dai::rosBridge::ImuConverter>(
+      "oak_imu_frame",
+      dai::ros::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO, 0.001, 0.00001);
+
+  check_timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check_timer_callback, this));
+}
+
+void OakWrapper::create_ros_publishers()
+{
+  // RGB
+  rgb_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/rgb/image_raw", 10);
+  rgb_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/rgb/camera_info", 10);
+
+  // RGB Compressed
+  rgb_compressed_pub_ =
+    create_publisher<sensor_msgs::msg::CompressedImage>("~/rgb/image_raw/compressed", 10);
+
+  // Left
+  left_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/left/image_rect", 10);
+  left_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/left/camera_info", 10);
+
+  // Left Compressed
+  left_compressed_pub_ =
+    create_publisher<sensor_msgs::msg::CompressedImage>("~/left/image_rect/compressed", 10);
+
+  // Right
+  right_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/right/image_rect", 10);
+  right_cam_info_pub_ =
+    create_publisher<sensor_msgs::msg::CameraInfo>("~/right/camera_info", 10);
+
+  // Right Compressed
+  right_compressed_pub_ =
+    create_publisher<sensor_msgs::msg::CompressedImage>("~/right/image_rect/compressed", 10);
+
+  // Depth
+  stereo_depth_pub_ = create_publisher<sensor_msgs::msg::Image>("~/stereo/image_raw", 10);
+  stereo_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/stereo/camera_info", 10);
+
+  // IMU
+  imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("~/imu", 10);
+}
+
+void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_handler)
+{
+  // Only used to get camera info matrices
+  auto img_converter = dai::rosBridge::ImageConverter(false);
+
+  // RGB
+  rgb_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
+    calibration_handler, dai::CameraBoardSocket::CAM_A, params_.rgb.width, params_.rgb.height));
+  rgb_camera_info_.header.frame_id = "oak_rgb_camera_optical_frame";
+
+  // Left (physically right camera, but becomes left after 180 degree rotation)
+  left_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
+    calibration_handler, calibration_handler.getStereoRightCameraId(), params_.mono.width,
+    params_.mono.height), true);
+  left_camera_info_.header.frame_id = "oak_left_camera_optical_frame";
+
+  // Right (physically left camera, but becomes right after 180 degree rotation)
+  right_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
+    calibration_handler, calibration_handler.getStereoLeftCameraId(), params_.mono.width,
+    params_.mono.height), true);
+  right_camera_info_.header.frame_id = "oak_right_camera_optical_frame";
+
+  // Depth
+  stereo_camera_info_ = img_converter.calibrationToCameraInfo(calibration_handler,
+    calibration_handler.getStereoRightCameraId(), params_.mono.width, params_.mono.height);
+  stereo_camera_info_.header.frame_id = "oak_stereo_camera_optical_frame";
+}
+
+void OakWrapper::check_timer_callback()
+{
+  if (!device_) {
+    // Connect to device
+    try {
+      device_ = this->connect_to_device();
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(get_logger(), "Failed to connect to device: %s", e.what());
+      rclcpp::sleep_for(5s);
+      return;
+    }
+
+    auto calibration_handler = device_->readCalibration();
+    this->fill_camera_info(calibration_handler);
+
+    // Set all output queues to blocking with size 1
+    rgb_queue_ = device_->getOutputQueue("rgb", 1, true);
+    rgb_compressed_queue_ = device_->getOutputQueue("rgb_compressed", 1, true);
+    left_queue_ = device_->getOutputQueue("left", 1, true);
+    left_compressed_queue_ = device_->getOutputQueue("left_compressed", 1, true);
+    right_queue_ = device_->getOutputQueue("right", 1, true);
+    right_compressed_queue_ = device_->getOutputQueue("right_compressed", 1, true);
+    depth_queue_ = device_->getOutputQueue("depth", 1, true);
+    imu_queue_ = device_->getOutputQueue("imu", 1, true);
+
+    // Depth Config
+    depth_config_queue_ = device_->getInputQueue("depth_config");
+  }
+
+  if (device_->isClosed()) {
+    RCLCPP_ERROR(get_logger(), "Device disconnected. Freeing resources...");
+
+    // Reset all queues and device
+    rgb_queue_.reset();
+    rgb_compressed_queue_.reset();
+    left_queue_.reset();
+    left_compressed_queue_.reset();
+    right_queue_.reset();
+    right_compressed_queue_.reset();
+    depth_queue_.reset();
+    imu_queue_.reset();
+    depth_config_queue_.reset();
+    device_.reset();
+
+    // Reset callback ids
+    rgb_callback_id_ = -1;
+    rgb_compressed_callback_id_ = -1;
+    left_callback_id_ = -1;
+    left_compressed_callback_id_ = -1;
+    right_callback_id_ = -1;
+    right_compressed_callback_id_ = -1;
+    depth_callback_id_ = -1;
+    imu_callback_id_ = -1;
+
+    return;
+  }
+
+  this->check_publishers();
+}
+
+std::unique_ptr<dai::Device> OakWrapper::connect_to_device()
+{
+  std::vector<dai::DeviceInfo> availableDevices = dai::Device::getAllAvailableDevices();
+  if(availableDevices.size() == 0) {
+    throw std::runtime_error("No devices detected!");
+  }
+
+  std::unique_ptr<dai::Device> device;
+
+  if (params_.device.mx_id.empty() && params_.device.usb_port_id.empty()) {
+    RCLCPP_INFO(get_logger(),
+        "No device.mx_id or device.usb_port_id specified, connecting to the next available device.");
+    device = std::make_unique<dai::Device>(availableDevices[0], dai::UsbSpeed::HIGH);
+  } else {
+    for(const auto & info : availableDevices) {
+      if(!params_.device.mx_id.empty() && info.getMxId() == params_.device.mx_id) {
+        RCLCPP_INFO(get_logger(), "Connecting to the camera using mxid: %s",
+            params_.device.mx_id.c_str());
+        if(info.state != X_LINK_BOOTED) {
+          device = std::make_unique<dai::Device>(info, dai::UsbSpeed::HIGH);
+        } else {
+          throw std::runtime_error("Device is already booted in different process.");
+        }
+      } else if(!params_.device.usb_port_id.empty() && info.name == params_.device.usb_port_id) {
+        RCLCPP_INFO(get_logger(), "Connecting to the camera using USB ID: %s",
+            params_.device.usb_port_id.c_str());
+        if(info.state != X_LINK_BOOTED) {
+          device = std::make_unique<dai::Device>(info, dai::UsbSpeed::HIGH);
+        } else {
+          throw std::runtime_error("Device is already booted in different process.");
+        }
+      } else {
+        RCLCPP_INFO(get_logger(), "Ignoring device info: MXID: %s, USB port id: %s",
+          info.getMxId().c_str(), info.name.c_str());
+      }
+    }
+  }
+
+  if (!device) {
+    throw std::runtime_error("Could not connect to any device.");
+  }
+
+  RCLCPP_INFO_STREAM(get_logger(),
+      "Connected to device with MX ID: " << device->getMxId() << ", USB port id: " <<
+      device->getDeviceInfo().name);
+  RCLCPP_INFO_STREAM(
+    get_logger(), "USB Speed: " << usbStrings[static_cast<int32_t>(device->getUsbSpeed())]);
+
+  auto calibration_handler = device->readCalibration();
   auto eeprom = calibration_handler.getEepromData();
 
   RCLCPP_INFO_STREAM(get_logger(), "Product name: " << eeprom.productName);
@@ -64,97 +243,15 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
   RCLCPP_INFO_STREAM(get_logger(), "Board Rev: " << eeprom.boardRev);
   RCLCPP_INFO_STREAM(get_logger(), "Board Conf: " << eeprom.boardConf);
   RCLCPP_INFO_STREAM(get_logger(), "Hardware Conf: " << eeprom.hardwareConf);
-  RCLCPP_INFO_STREAM(get_logger(), "Batch name: " << eeprom.batchName);
 
-  // Set all output queues to non-blocking with size 1
-  rgb_queue_ = device_->getOutputQueue("rgb", 1, true);
-  rgb_compressed_queue_ = device_->getOutputQueue("rgb_compressed", 1, true);
-  left_queue_ = device_->getOutputQueue("left", 1, true);
-  left_compressed_queue_ = device_->getOutputQueue("left_compressed", 1, true);
-  right_queue_ = device_->getOutputQueue("right", 1, true);
-  right_compressed_queue_ = device_->getOutputQueue("right_compressed", 1, true);
-  depth_queue_ = device_->getOutputQueue("depth", 1, true);
-  imu_queue_ = device_->getOutputQueue("imu", 1, true);
+  auto sensor_name = device->getCameraSensorNames()[dai::CameraBoardSocket::CAM_A];
 
-  // Only used to get camera info matrices
-  auto img_converter = dai::rosBridge::ImageConverter(false);
+  RCLCPP_INFO_STREAM(get_logger(), "Camera sensor name: " << sensor_name);
 
-  // RGB
-  rgb_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
-    calibration_handler, dai::CameraBoardSocket::CAM_A, params_.rgb.width, params_.rgb.height));
-  rgb_camera_info_.header.frame_id = "oak_rgb_camera_optical_frame";
-  rgb_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/rgb/image_raw", 10);
-  rgb_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/rgb/camera_info", 10);
+  auto pipeline = create_dai_pipeline(params_);
+  device->startPipeline(pipeline);
 
-  // RGB Compressed
-  rgb_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
-      "~/rgb/image_raw/compressed", 10);
-
-  // Left (physically right camera, but becomes left after 180 degree rotation)
-  left_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
-    calibration_handler, calibration_handler.getStereoRightCameraId(), params_.mono.width,
-    params_.mono.height), true);
-  left_camera_info_.header.frame_id = "oak_left_camera_optical_frame";
-  left_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/left/image_rect", 10);
-  left_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/left/camera_info", 10);
-
-  // Left Compressed
-  left_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
-      "~/left/image_rect/compressed", 10);
-
-  // Right (physically left camera, but becomes right after 180 degree rotation)
-  right_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
-    calibration_handler, calibration_handler.getStereoLeftCameraId(), params_.mono.width,
-    params_.mono.height), true);
-  right_camera_info_.header.frame_id = "oak_right_camera_optical_frame";
-  right_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/right/image_rect", 10);
-  right_cam_info_pub_ =
-    create_publisher<sensor_msgs::msg::CameraInfo>("~/right/camera_info", 10);
-
-  // Right Compressed
-  right_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
-      "~/right/image_rect/compressed", 10);
-
-  // Depth
-  stereo_camera_info_ = img_converter.calibrationToCameraInfo(calibration_handler,
-    calibration_handler.getStereoRightCameraId(), params_.mono.width, params_.mono.height);
-  stereo_camera_info_.header.frame_id = "oak_stereo_camera_optical_frame";
-  stereo_depth_pub_ = create_publisher<sensor_msgs::msg::Image>("~/stereo/image_raw", 10);
-  stereo_cam_info_pub_ =
-    create_publisher<sensor_msgs::msg::CameraInfo>("~/stereo/camera_info", 10);
-
-  // Depth Config
-  depth_config_queue_ = device_->getInputQueue("depth_config");
-
-  // IMU
-  imu_converter_ = std::make_shared<dai::rosBridge::ImuConverter>(
-      "oak_imu_frame",
-      dai::ros::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO, 0.001, 0.00001);
-  imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("~/imu", 10);
-
-  check_timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check_publishers, this));
-}
-
-void OakWrapper::manage_callback(
-  int subscription_count,
-  std::shared_ptr<dai::DataOutputQueue> queue,
-  int & callback_id,
-  std::function<void()> callback)
-{
-  bool should_be_active = subscription_count > 0;
-  bool is_active = callback_id >= 0;
-
-  if (should_be_active && !is_active) {
-    RCLCPP_INFO_STREAM(get_logger(),
-          "Activating callback for \"" << queue->getName() << "\" queue");
-    callback_id = queue->addCallback(callback);
-    queue->tryGetAll();   // Clear any existing data in the queue
-  } else if (!should_be_active && is_active) {
-    RCLCPP_INFO_STREAM(get_logger(),
-          "Deactivating callback for \"" << queue->getName() << "\" queue");
-    queue->removeCallback(callback_id);
-    callback_id = -1;
-  }
+  return std::move(device);
 }
 
 void OakWrapper::check_publishers()
@@ -206,6 +303,28 @@ void OakWrapper::check_publishers()
     imu_queue_, imu_callback_id_, std::bind(&OakWrapper::publish_imu, this));
 }
 
+void OakWrapper::manage_callback(
+  int subscription_count,
+  std::shared_ptr<dai::DataOutputQueue> queue,
+  int & callback_id,
+  std::function<void()> callback)
+{
+  bool should_be_active = subscription_count > 0;
+  bool is_active = callback_id >= 0;
+
+  if (should_be_active && !is_active) {
+    RCLCPP_INFO_STREAM(get_logger(),
+        "Activating callback for \"" << queue->getName() << "\" queue");
+    callback_id = queue->addCallback(callback);
+    queue->tryGetAll();   // Clear any existing data in the queue
+  } else if (!should_be_active && is_active) {
+    RCLCPP_INFO_STREAM(get_logger(),
+        "Deactivating callback for \"" << queue->getName() << "\" queue");
+    queue->removeCallback(callback_id);
+    callback_id = -1;
+  }
+}
+
 void OakWrapper::post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters)
 {
   for (auto & param: parameters) {
@@ -214,7 +333,9 @@ void OakWrapper::post_set_parameters_callback(const std::vector<rclcpp::Paramete
   }
 
   update_parameters();
-  send_parameters();
+  if (device_) {
+    send_parameters();
+  }
 }
 
 void OakWrapper::update_parameters()

@@ -1,4 +1,15 @@
 raph_oak:
+  device:
+    mx_id:
+      type: string
+      default_value: ""
+      description: Device MX ID to connect to.
+      read_only: true
+    usb_port_id:
+      type: string
+      default_value: ""
+      description: USB port ID to connect to (e.g. 1.1.2)
+      read_only: true
   depth:
     confidence_threshold:
       type: int

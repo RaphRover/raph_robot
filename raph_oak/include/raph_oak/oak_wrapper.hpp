@@ -101,10 +101,14 @@ private:
 
   dai::RawStereoDepthConfig depth_config_;
 
+  void create_ros_publishers();
+  void fill_camera_info(const dai::CalibrationHandler & calibration_handler);
+  void check_timer_callback();
+  std::unique_ptr<dai::Device> connect_to_device();
+  void check_publishers();
   void manage_callback(
     int subscription_count, std::shared_ptr<dai::DataOutputQueue> queue,
     int & callback_id, std::function<void()> callback);
-  void check_publishers();
   void post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters);
   void update_parameters();
   void send_parameters();
