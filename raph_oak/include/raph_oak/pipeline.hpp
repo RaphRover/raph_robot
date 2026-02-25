@@ -27,20 +27,6 @@
 namespace raph_oak
 {
 
-constexpr int kMonoWidth = 1280;
-constexpr int kMonoHeight = 800;
-constexpr int kMonoIspScaleNumerator = 1;
-constexpr int kMonoIspScaleDenominator = 1;
-constexpr float kMonoFps = 10.0F;
-constexpr int kMonoCompressedQuality = 80;
-
-constexpr int kRgbWidth = 1344;
-constexpr int kRgbHeight = 1008;
-constexpr int kRgbIspScaleNumerator = 1;
-constexpr int kRgbIspScaleDenominator = 3;
-constexpr float kRgbFps = 15.0F;
-constexpr int kRgbCompressedQuality = 80;
-
 dai::Pipeline create_dai_pipeline(const Params & params);
 
 }   // namespace raph_oak

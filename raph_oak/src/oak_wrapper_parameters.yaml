@@ -38,3 +38,91 @@ raph_oak:
       description: Maximal distance in meters
       validation:
         bounds<>: [0.0, 60.0]
+  mono:
+    width:
+      type: int
+      default_value: 1280
+      description: Mono camera image width
+      validation:
+        bounds<>: [1, 1280]
+      read_only: true
+    height:
+      type: int
+      default_value: 800
+      description: Mono camera image height
+      validation:
+        bounds<>: [1, 800]
+      read_only: true
+    isp_scale_num:
+      type: int
+      default_value: 1
+      description: ISP scale numerator
+      validation:
+        bounds<>: [1, 16]
+      read_only: true
+    isp_scale_den:
+      type: int
+      default_value: 1
+      description: ISP scale denominator
+      validation:
+        bounds<>: [1, 63]
+      read_only: true
+    fps:
+      type: double
+      default_value: 10.0
+      description: Mono camera frames per second
+      validation:
+        bounds<>: [0.1, 60.0]
+      read_only: true
+  mono_compressed:
+    jpeg_quality:
+      type: int
+      default_value: 80
+      description: JPEG quality for mono compressed images (0-100, higher is better quality and bigger size)
+      validation:
+        bounds<>: [0, 100]
+      read_only: true
+  rgb:
+    width:
+      type: int
+      default_value: 1344
+      description: RGB camera image width
+      validation:
+        bounds<>: [1, 3840]
+      read_only: true
+    height:
+      type: int
+      default_value: 1008
+      description: RGB camera image height
+      validation:
+        bounds<>: [1, 2160]
+      read_only: true
+    isp_scale_num:
+      type: int
+      default_value: 1
+      description: ISP scale numerator
+      validation:
+        bounds<>: [1, 16]
+      read_only: true
+    isp_scale_den:
+      type: int
+      default_value: 3
+      description: ISP scale denominator
+      validation:
+        bounds<>: [1, 63]
+      read_only: true
+    fps:
+      type: double
+      default_value: 15.0
+      description: RGB camera frames per second
+      validation:
+        bounds<>: [0.1, 30.0]
+      read_only: true
+  rgb_compressed:
+    jpeg_quality:
+      type: int
+      default_value: 80
+      description: JPEG quality for RGB compressed images (0-100, higher is better quality and bigger size)
+      validation:
+        bounds<>: [0, 100]
+      read_only: true

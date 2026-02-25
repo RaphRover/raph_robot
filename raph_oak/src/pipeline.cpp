@@ -55,11 +55,11 @@ dai::Pipeline create_dai_pipeline(const Params & params)
   // Configure nodes
   mono_left_node->setCamera("left");
   mono_left_node->setResolution(dai::MonoCameraProperties::SensorResolution::THE_800_P);
-  mono_left_node->setFps(kMonoFps);
+  mono_left_node->setFps(params.mono.fps);
 
   mono_right_node->setCamera("right");
   mono_right_node->setResolution(dai::MonoCameraProperties::SensorResolution::THE_800_P);
-  mono_right_node->setFps(kMonoFps);
+  mono_right_node->setFps(params.mono.fps);
 
   stereo_depth_node->setRectifyEdgeFillColor(0);
   stereo_depth_node->setExtendedDisparity(false);
@@ -76,10 +76,10 @@ dai::Pipeline create_dai_pipeline(const Params & params)
   manip_right->initialConfig.setRotationDegrees(180);
 
   left_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
-  left_encoder_node->setQuality(kMonoCompressedQuality);
+  left_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
 
   right_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
-  right_encoder_node->setQuality(kMonoCompressedQuality);
+  right_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
 
   xout_left->setStreamName("left");
   xout_left->input.setQueueSize(1);
@@ -105,14 +105,14 @@ dai::Pipeline create_dai_pipeline(const Params & params)
 
   rgb_node->setBoardSocket(dai::CameraBoardSocket::CAM_A);
   rgb_node->setResolution(dai::ColorCameraProperties::SensorResolution::THE_12_MP);
-  rgb_node->setIspScale(kRgbIspScaleNumerator, kRgbIspScaleDenominator);
-  rgb_node->setVideoSize(kRgbWidth, kRgbHeight);
-  rgb_node->setFps(kRgbFps);
+  rgb_node->setIspScale(params.rgb.isp_scale_num, params.rgb.isp_scale_den);
+  rgb_node->setVideoSize(params.rgb.width, params.rgb.height);
+  rgb_node->setFps(params.rgb.fps);
   rgb_node->setColorOrder(dai::ColorCameraProperties::ColorOrder::BGR);
   rgb_node->setImageOrientation(dai::CameraImageOrientation::ROTATE_180_DEG);
 
   rgb_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
-  rgb_encoder_node->setQuality(kRgbCompressedQuality);
+  rgb_encoder_node->setQuality(params.rgb_compressed.jpeg_quality);
 
   xout_rgb->setStreamName("rgb");
   xout_rgb->input.setQueueSize(1);

@@ -81,7 +81,7 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 
   // RGB
   rgb_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
-      calibration_handler, dai::CameraBoardSocket::CAM_A, kRgbWidth, kRgbHeight));
+    calibration_handler, dai::CameraBoardSocket::CAM_A, params_.rgb.width, params_.rgb.height));
   rgb_camera_info_.header.frame_id = "oak_rgb_camera_optical_frame";
   rgb_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/rgb/image_raw", 10);
   rgb_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/rgb/camera_info", 10);
@@ -92,8 +92,8 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 
   // Left (physically right camera, but becomes left after 180 degree rotation)
   left_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
-      calibration_handler, calibration_handler.getStereoRightCameraId(), kMonoWidth, kMonoHeight),
-        true);
+    calibration_handler, calibration_handler.getStereoRightCameraId(), params_.mono.width,
+    params_.mono.height), true);
   left_camera_info_.header.frame_id = "oak_left_camera_optical_frame";
   left_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/left/image_rect", 10);
   left_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/left/camera_info", 10);
@@ -104,8 +104,8 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 
   // Right (physically left camera, but becomes right after 180 degree rotation)
   right_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
-      calibration_handler, calibration_handler.getStereoLeftCameraId(), kMonoWidth, kMonoHeight),
-        true);
+    calibration_handler, calibration_handler.getStereoLeftCameraId(), params_.mono.width,
+    params_.mono.height), true);
   right_camera_info_.header.frame_id = "oak_right_camera_optical_frame";
   right_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/right/image_rect", 10);
   right_cam_info_pub_ =
@@ -117,7 +117,7 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 
   // Depth
   stereo_camera_info_ = img_converter.calibrationToCameraInfo(calibration_handler,
-        calibration_handler.getStereoRightCameraId(), kMonoWidth, kMonoHeight);
+    calibration_handler.getStereoRightCameraId(), params_.mono.width, params_.mono.height);
   stereo_camera_info_.header.frame_id = "oak_stereo_camera_optical_frame";
   stereo_depth_pub_ = create_publisher<sensor_msgs::msg::Image>("~/stereo/image_raw", 10);
   stereo_cam_info_pub_ =
