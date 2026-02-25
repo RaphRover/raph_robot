@@ -66,7 +66,7 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
   RCLCPP_INFO_STREAM(get_logger(), "Hardware Conf: " << eeprom.hardwareConf);
   RCLCPP_INFO_STREAM(get_logger(), "Batch name: " << eeprom.batchName);
 
-    // Set all output queues to non-blocking with size 1
+  // Set all output queues to non-blocking with size 1
   rgb_queue_ = device_->getOutputQueue("rgb", 1, true);
   rgb_compressed_queue_ = device_->getOutputQueue("rgb_compressed", 1, true);
   left_queue_ = device_->getOutputQueue("left", 1, true);
@@ -76,21 +76,21 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
   depth_queue_ = device_->getOutputQueue("depth", 1, true);
   imu_queue_ = device_->getOutputQueue("imu", 1, true);
 
-    // Only used to get camera info matrices
+  // Only used to get camera info matrices
   auto img_converter = dai::rosBridge::ImageConverter(false);
 
-    // RGB
+  // RGB
   rgb_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
       calibration_handler, dai::CameraBoardSocket::CAM_A, kRgbWidth, kRgbHeight));
   rgb_camera_info_.header.frame_id = "oak_rgb_camera_optical_frame";
   rgb_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/rgb/image_raw", 10);
   rgb_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/rgb/camera_info", 10);
 
-    // RGB Compressed
+  // RGB Compressed
   rgb_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
       "~/rgb/image_raw/compressed", 10);
 
-    // Left (physically right camera, but becomes left after 180 degree rotation)
+  // Left (physically right camera, but becomes left after 180 degree rotation)
   left_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
       calibration_handler, calibration_handler.getStereoRightCameraId(), kMonoWidth, kMonoHeight),
         true);
@@ -98,11 +98,11 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
   left_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/left/image_rect", 10);
   left_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/left/camera_info", 10);
 
-    // Left Compressed
+  // Left Compressed
   left_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
       "~/left/image_rect/compressed", 10);
 
-    // Right (physically left camera, but becomes right after 180 degree rotation)
+  // Right (physically left camera, but becomes right after 180 degree rotation)
   right_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
       calibration_handler, calibration_handler.getStereoLeftCameraId(), kMonoWidth, kMonoHeight),
         true);
@@ -111,11 +111,11 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
   right_cam_info_pub_ =
     create_publisher<sensor_msgs::msg::CameraInfo>("~/right/camera_info", 10);
 
-    // Right Compressed
+  // Right Compressed
   right_compressed_pub_ = create_publisher<sensor_msgs::msg::CompressedImage>(
       "~/right/image_rect/compressed", 10);
 
-    // Depth
+  // Depth
   stereo_camera_info_ = img_converter.calibrationToCameraInfo(calibration_handler,
         calibration_handler.getStereoRightCameraId(), kMonoWidth, kMonoHeight);
   stereo_camera_info_.header.frame_id = "oak_stereo_camera_optical_frame";
@@ -123,10 +123,10 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
   stereo_cam_info_pub_ =
     create_publisher<sensor_msgs::msg::CameraInfo>("~/stereo/camera_info", 10);
 
-    // Depth Config
+  // Depth Config
   depth_config_queue_ = device_->getInputQueue("depth_config");
 
-    // IMU
+  // IMU
   imu_converter_ = std::make_shared<dai::rosBridge::ImuConverter>(
       "oak_imu_frame",
       dai::ros::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO, 0.001, 0.00001);
