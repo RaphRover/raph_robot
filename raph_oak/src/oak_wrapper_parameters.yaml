@@ -10,6 +10,22 @@ raph_oak:
       default_value: ""
       description: USB port ID to connect to (e.g. 1.1.2)
       read_only: true
+    ir_laser_dot_projector_intensity:
+      type: double
+      default_value: 0.3
+      description: IR laser dot projector intensity (0.0-1.0, higher is stronger intensity)
+      validation:
+        bounds<>: [0.0, 1.0]
+    ir_laser_dot_projector_lazy:
+      type: bool
+      default_value: true
+      description: If true, the IR laser dot projector will only be turned on when the depth stream is active. If false, the IR laser dot projector will be always on.
+    ir_flood_light_intensity:
+      type: double
+      default_value: 0.0
+      description: IR flood light intensity (0.0-1.0, higher is stronger intensity)
+      validation:
+        bounds<>: [0.0, 1.0]
   depth:
     confidence_threshold:
       type: int

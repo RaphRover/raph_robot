@@ -153,6 +153,11 @@ void OakWrapper::check_timer_callback()
 
     // Depth Config
     depth_config_queue_ = device_->getInputQueue("depth_config");
+
+    if (!params_.device.ir_laser_dot_projector_lazy) {
+      device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
+    }
+    device_->setIrFloodLightIntensity(params_.device.ir_flood_light_intensity);
   }
 
   if (device_->isClosed()) {
@@ -301,6 +306,16 @@ void OakWrapper::check_publishers()
   manage_callback(
     imu_pub_->get_subscription_count(),
     imu_queue_, imu_callback_id_, std::bind(&OakWrapper::publish_imu, this));
+
+  if (params_.device.ir_laser_dot_projector_lazy) {
+    if (stereo_depth_pub_->get_subscription_count() +
+      stereo_cam_info_pub_->get_subscription_count() > 0)
+    {
+      device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
+    } else {
+      device_->setIrLaserDotProjectorIntensity(0.0);
+    }
+  }
 }
 
 void OakWrapper::manage_callback(
@@ -351,6 +366,11 @@ void OakWrapper::send_parameters()
   dai::StereoDepthConfig config;
   config.set(depth_config_);
   depth_config_queue_->send(config);
+
+  if (!params_.device.ir_laser_dot_projector_lazy) {
+    device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
+  }
+  device_->setIrFloodLightIntensity(params_.device.ir_flood_light_intensity);
 }
 
 void OakWrapper::publish_image(
