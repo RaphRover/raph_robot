@@ -26,11 +26,14 @@
 #include <memory>
 #include <string>
 
+// DepthAI
 #include "depthai-shared/datatype/RawStereoDepthConfig.hpp"
 #include "depthai/device/CalibrationHandler.hpp"
 #include "depthai/device/DataQueue.hpp"
 #include "depthai/device/Device.hpp"
 #include "depthai_bridge/ImuConverter.hpp"
+
+// ROS
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "rclcpp/node.hpp"
 #include "rclcpp/node_options.hpp"

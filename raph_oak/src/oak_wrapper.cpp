@@ -20,22 +20,25 @@
 
 #include "raph_oak/oak_wrapper.hpp"
 
-#include <opencv2/core/hal/interface.h>
-
 #include <chrono>
 #include <cstdint>
 #include <deque>
 #include <exception>
 #include <functional>
 #include <memory>
-#include <opencv2/core/mat.hpp>
-#include <opencv2/core/types.hpp>
-#include <opencv2/imgproc.hpp>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
+// OpenCV
+#include <opencv2/core/hal/interface.h>
+
+#include <opencv2/core/mat.hpp>
+#include <opencv2/core/types.hpp>
+#include <opencv2/imgproc.hpp>
+
+// DepthAI
 #include "XLink/XLinkPublicDefines.h"
 #include "depthai-shared/common/CameraBoardSocket.hpp"
 #include "depthai-shared/common/UsbSpeed.hpp"
@@ -47,6 +50,8 @@
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai/xlink/XLinkConnection.hpp"
+
+// ROS
 #include "depthai_bridge/ImageConverter.hpp"
 #include "depthai_bridge/ImuConverter.hpp"
 #include "depthai_bridge/depthaiUtility.hpp"

@@ -20,6 +20,7 @@
 
 #include "raph_oak/pipeline.hpp"
 
+// DepthAI
 #include "depthai-shared/common/CameraBoardSocket.hpp"
 #include "depthai-shared/common/CameraImageOrientation.hpp"
 #include "depthai-shared/datatype/RawStereoDepthConfig.hpp"
@@ -37,6 +38,8 @@
 #include "depthai/pipeline/node/VideoEncoder.hpp"
 #include "depthai/pipeline/node/XLinkIn.hpp"
 #include "depthai/pipeline/node/XLinkOut.hpp"
+
+// ROS
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/parameters.hpp"
 
