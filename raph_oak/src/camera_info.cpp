@@ -20,6 +20,11 @@
 
 #include "raph_oak/camera_info.hpp"
 
+#include <algorithm>
+
+#include "sensor_msgs/msg/camera_info.hpp"
+
+
 namespace raph_oak
 {
 
@@ -27,18 +32,18 @@ sensor_msgs::msg::CameraInfo get_rotated_camera_info(
   const sensor_msgs::msg::CameraInfo & original_info, bool is_rectified)
 {
   sensor_msgs::msg::CameraInfo rotated_info = original_info;
-  double w = static_cast<double>(original_info.width);
-  double h = static_cast<double>(original_info.height);
+  const double width = static_cast<double>(original_info.width);
+  const double height = static_cast<double>(original_info.height);
 
   // 1. Shift Principal Point in K (Intrinsics)
   // K[2] is cx, K[5] is cy
-  rotated_info.k[2] = w - 1.0 - original_info.k[2];
-  rotated_info.k[5] = h - 1.0 - original_info.k[5];
+  rotated_info.k[2] = width - 1.0 - original_info.k[2];
+  rotated_info.k[5] = height - 1.0 - original_info.k[5];
 
   // 2. Shift Principal Point in P (Projection)
   // P[2] is cx, P[6] is cy
-  rotated_info.p[2] = w - 1.0 - original_info.p[2];
-  rotated_info.p[6] = h - 1.0 - original_info.p[6];
+  rotated_info.p[2] = width - 1.0 - original_info.p[2];
+  rotated_info.p[6] = height - 1.0 - original_info.p[6];
 
   // 3. Handle Distortion (D)
   if (!is_rectified) {

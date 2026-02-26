@@ -20,7 +20,23 @@
 
 #include "raph_oak/pipeline.hpp"
 
-#include "depthai/depthai.hpp"
+#include "depthai/pipeline/Pipeline.hpp"
+#include "depthai/pipeline/node/MonoCamera.hpp"
+#include "depthai/pipeline/node/StereoDepth.hpp"
+#include "depthai/pipeline/node/VideoEncoder.hpp"
+#include "depthai/pipeline/node/XLinkOut.hpp"
+#include "depthai/pipeline/node/XLinkIn.hpp"
+#include "depthai/pipeline/node/ColorCamera.hpp"
+#include "depthai/pipeline/node/IMU.hpp"
+#include "depthai/pipeline/node/ImageManip.hpp"
+#include "depthai-shared/properties/MonoCameraProperties.hpp"
+#include "depthai-shared/properties/StereoDepthProperties.hpp"
+#include "depthai-shared/datatype/RawStereoDepthConfig.hpp"
+#include "depthai-shared/properties/VideoEncoderProperties.hpp"
+#include "depthai-shared/common/CameraBoardSocket.hpp"
+#include "depthai-shared/properties/ColorCameraProperties.hpp"
+#include "depthai-shared/common/CameraImageOrientation.hpp"
+#include "depthai-shared/properties/IMUProperties.hpp"
 
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/parameters.hpp"
@@ -31,7 +47,7 @@ dai::Pipeline create_dai_pipeline(const Params & params)
 {
   dai::Pipeline pipeline;
 
-    // Create nodes
+  // Create nodes
   auto mono_left_node = pipeline.create<dai::node::MonoCamera>();
   auto mono_right_node = pipeline.create<dai::node::MonoCamera>();
   auto stereo_depth_node = pipeline.create<dai::node::StereoDepth>();

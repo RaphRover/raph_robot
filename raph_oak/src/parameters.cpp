@@ -20,6 +20,10 @@
 
 #include "raph_oak/parameters.hpp"
 
+#include "depthai-shared/datatype/RawStereoDepthConfig.hpp"
+
+#include "raph_oak/oak_wrapper_parameters.hpp"
+
 namespace raph_oak
 {
 

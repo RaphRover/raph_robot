@@ -18,29 +18,59 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include "rclcpp/rclcpp.hpp"
+#include <chrono>
+#include <cstdint>
+#include <deque>
+#include <exception>
+#include <functional>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
-#include "depthai/depthai.hpp"
+#include <opencv2/core/mat.hpp>
+#include <opencv2/core/hal/interface.h>
+#include <opencv2/core/types.hpp>
+#include <opencv2/imgproc.hpp>
 
+#include "depthai/device/CalibrationHandler.hpp"
+#include "depthai/device/DataQueue.hpp"
+#include "depthai/device/Device.hpp"
+#include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
+#include "depthai/pipeline/datatype/ImgFrame.hpp"
+#include "depthai/pipeline/datatype/IMUData.hpp"
+#include "depthai/xlink/XLinkConnection.hpp"
+#include "depthai-shared/common/CameraBoardSocket.hpp"
+#include "depthai-shared/common/UsbSpeed.hpp"
+#include "depthai-shared/datatype/RawImgFrame.hpp"
+#include "depthai_bridge/depthaiUtility.hpp"
 #include "depthai_bridge/ImageConverter.hpp"
 #include "depthai_bridge/ImuConverter.hpp"
-
+#include "rclcpp/logging.hpp"
+#include "rclcpp/node_options.hpp"
+#include "rclcpp/node.hpp"
+#include "rclcpp/utilities.hpp"
+#include "rclcpp/parameter.hpp"
+#include "rclcpp/publisher.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
+#include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
+#include "XLink/XLinkPublicDefines.h"
 
 #include "raph_oak/camera_info.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/oak_wrapper.hpp"
-#include "raph_oak/pipeline.hpp"
 #include "raph_oak/parameters.hpp"
+#include "raph_oak/pipeline.hpp"
 
 using namespace std::chrono_literals;
 
 namespace raph_oak
 {
 
-static const std::vector<std::string> usb_strings = {"UNKNOWN", "LOW", "FULL", "HIGH", "SUPER",
+static const std::vector<std::string> UsbStrings = {"UNKNOWN", "LOW", "FULL", "HIGH", "SUPER",
   "SUPER_PLUS"};
 
 OakWrapper::OakWrapper(rclcpp::NodeOptions options)
@@ -193,8 +223,8 @@ void OakWrapper::check_timer_callback()
 
 std::unique_ptr<dai::Device> OakWrapper::connect_to_device()
 {
-  std::vector<dai::DeviceInfo> availableDevices = dai::Device::getAllAvailableDevices();
-  if(availableDevices.empty()) {
+  std::vector<dai::DeviceInfo> available_devices = dai::Device::getAllAvailableDevices();
+  if(available_devices.empty()) {
     throw std::runtime_error("No devices detected!");
   }
 
@@ -203,31 +233,29 @@ std::unique_ptr<dai::Device> OakWrapper::connect_to_device()
   if (params_.device.mx_id.empty() && params_.device.usb_port_id.empty()) {
     RCLCPP_INFO(get_logger(),
         "No device.mx_id or device.usb_port_id specified, connecting to the next available device.");
-    device = std::make_unique<dai::Device>(availableDevices[0], dai::UsbSpeed::HIGH);
+    device = std::make_unique<dai::Device>(available_devices[0], dai::UsbSpeed::HIGH);
   } else {
-    for(const auto & info : availableDevices) {
+    for(const auto & info : available_devices) {
       if(!params_.device.mx_id.empty() && info.getMxId() == params_.device.mx_id) {
         RCLCPP_INFO(get_logger(), "Connecting to the camera using mxid: %s",
             params_.device.mx_id.c_str());
         if(info.state != X_LINK_BOOTED) {
           device = std::make_unique<dai::Device>(info, dai::UsbSpeed::HIGH);
           break;
-        } else {
-          throw std::runtime_error("Device is already booted in different process.");
         }
-      } else if(!params_.device.usb_port_id.empty() && info.name == params_.device.usb_port_id) {
+        throw std::runtime_error("Device is already booted in different process.");
+      }
+      if(!params_.device.usb_port_id.empty() && info.name == params_.device.usb_port_id) {
         RCLCPP_INFO(get_logger(), "Connecting to the camera using USB ID: %s",
             params_.device.usb_port_id.c_str());
         if(info.state != X_LINK_BOOTED) {
           device = std::make_unique<dai::Device>(info, dai::UsbSpeed::HIGH);
           break;
-        } else {
-          throw std::runtime_error("Device is already booted in different process.");
         }
-      } else {
-        RCLCPP_INFO(get_logger(), "Ignoring device info: MXID: %s, USB port id: %s",
-          info.getMxId().c_str(), info.name.c_str());
+        throw std::runtime_error("Device is already booted in different process.");
       }
+      RCLCPP_INFO(get_logger(), "Ignoring device info: MXID: %s, USB port id: %s",
+        info.getMxId().c_str(), info.name.c_str());
     }
   }
 
@@ -239,7 +267,7 @@ std::unique_ptr<dai::Device> OakWrapper::connect_to_device()
       "Connected to device with MX ID: " << device->getMxId() << ", USB port id: " <<
       device->getDeviceInfo().name);
   RCLCPP_INFO_STREAM(
-    get_logger(), "USB Speed: " << usb_strings[static_cast<int32_t>(device->getUsbSpeed())]);
+    get_logger(), "USB Speed: " << UsbStrings[static_cast<int32_t>(device->getUsbSpeed())]);
 
   auto calibration_handler = device->readCalibration();
   auto eeprom = calibration_handler.getEepromData();
@@ -326,8 +354,8 @@ void OakWrapper::manage_callback(
   int & callback_id,
   std::function<void()> callback)
 {
-  bool should_be_active = subscription_count > 0;
-  bool is_active = callback_id >= 0;
+  const bool should_be_active = subscription_count > 0;
+  const bool is_active = callback_id >= 0;
 
   if (should_be_active && !is_active) {
     RCLCPP_INFO_STREAM(get_logger(),
@@ -344,7 +372,7 @@ void OakWrapper::manage_callback(
 
 void OakWrapper::post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters)
 {
-  for (auto & param: parameters) {
+  for (const auto & param: parameters) {
     RCLCPP_INFO_STREAM(this->get_logger(),
           "Parameter " << param.get_name() << " changed to: " << param.value_to_string());
   }
@@ -363,7 +391,7 @@ void OakWrapper::update_parameters()
   update_depth_config_from_params(depth_config_, params_);
 }
 
-void OakWrapper::send_parameters()
+void OakWrapper::send_parameters() const
 {
   dai::StereoDepthConfig config;
   config.set(depth_config_);
@@ -398,14 +426,14 @@ void OakWrapper::publish_image(
   image->header = cam_info.header;
   image->width = in_data->getWidth();
   image->height = in_data->getHeight();
-  image->is_bigendian = true;
+  image->is_bigendian = 1U;
 
   if (in_data->getType() == dai::RawImgFrame::Type::NV12) {
     image->encoding = "bgr8";
     image->step = image->width * 3;
     image->data.resize(image->width * image->height * 3);
 
-    cv::Mat in_mat(cv::Size(in_data->getWidth(), in_data->getHeight() * 3 / 2), CV_8UC1,
+    cv::Mat const in_mat(cv::Size(in_data->getWidth(), in_data->getHeight() * 3 / 2), CV_8UC1,
       in_data->getData().data());
     cv::Mat out_mat(cv::Size(in_data->getWidth(), in_data->getHeight()), CV_8UC3,
       image->data.data());
@@ -416,7 +444,7 @@ void OakWrapper::publish_image(
     image->data = std::move(in_data->getData());
   } else if (in_data->getType() == dai::RawImgFrame::Type::RAW16) {
     image->encoding = "16UC1";
-    image->is_bigendian = false;
+    image->is_bigendian = 0U;
     image->step = image->width * 2;
     image->data = std::move(in_data->getData());
   }
@@ -459,7 +487,7 @@ void OakWrapper::publish_imu()
   imu_converter_->toRosMsg(in_data, op_msgs);
 
   while (!op_msgs.empty()) {
-    sensor_msgs::msg::Imu imu = op_msgs.front();
+    sensor_msgs::msg::Imu const imu = op_msgs.front();
     op_msgs.pop_front();
 
     imu_pub_->publish(imu);

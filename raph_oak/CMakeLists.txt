@@ -44,6 +44,12 @@ install(
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+
+  include(ProcessorCount)
+  processorcount(N)
+  set(ament_cmake_clang_tidy_JOBS ${N})
+  set(ament_cmake_clang_tidy_HEADER_FILTER "^(?oak_wrapper_parameters\.hpp).\*$")
+
   ament_lint_auto_find_test_dependencies()
 endif()
 

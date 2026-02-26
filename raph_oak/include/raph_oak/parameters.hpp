@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "depthai/depthai.hpp"
+#include "depthai-shared/datatype/RawStereoDepthConfig.hpp"
 
 #include "raph_oak/oak_wrapper_parameters.hpp"
 
