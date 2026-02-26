@@ -1,5 +1,11 @@
 /oak:
   ros__parameters:
+    device:
+      mx_id: ""
+      usb_port_id: ""
+      ir_laser_dot_projector_intensity: 0.3
+      ir_laser_dot_projector_lazy: true
+      ir_flood_light_intensity: 0.0
     depth:
       confidence_threshold: 50
       lr_check_enabled: true
@@ -8,3 +14,19 @@
       subpixel_fractional_bits: 3
       min_distance: 0.0
       max_distance: 10.0
+    mono:
+      width: 1280
+      height: 800
+      isp_scale_num: 1
+      isp_scale_den: 1
+      fps: 10.0
+    mono_compressed:
+      jpeg_quality: 80
+    rgb:
+      width: 1344
+      height: 1008
+      isp_scale_num: 1
+      isp_scale_den: 3
+      fps: 15.0
+    rgb_compressed:
+      jpeg_quality: 80
