@@ -18,60 +18,60 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "raph_oak/oak_wrapper.hpp"
+
+#include <opencv2/core/hal/interface.h>
+
 #include <chrono>
 #include <cstdint>
 #include <deque>
 #include <exception>
 #include <functional>
 #include <memory>
+#include <opencv2/core/mat.hpp>
+#include <opencv2/core/types.hpp>
+#include <opencv2/imgproc.hpp>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include <opencv2/core/mat.hpp>
-#include <opencv2/core/hal/interface.h>
-#include <opencv2/core/types.hpp>
-#include <opencv2/imgproc.hpp>
-
-#include "depthai/device/CalibrationHandler.hpp"
-#include "depthai/device/DataQueue.hpp"
-#include "depthai/device/Device.hpp"
-#include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
-#include "depthai/pipeline/datatype/ImgFrame.hpp"
-#include "depthai/pipeline/datatype/IMUData.hpp"
-#include "depthai/xlink/XLinkConnection.hpp"
+#include "XLink/XLinkPublicDefines.h"
 #include "depthai-shared/common/CameraBoardSocket.hpp"
 #include "depthai-shared/common/UsbSpeed.hpp"
 #include "depthai-shared/datatype/RawImgFrame.hpp"
-#include "depthai_bridge/depthaiUtility.hpp"
+#include "depthai/device/CalibrationHandler.hpp"
+#include "depthai/device/DataQueue.hpp"
+#include "depthai/device/Device.hpp"
+#include "depthai/pipeline/datatype/IMUData.hpp"
+#include "depthai/pipeline/datatype/ImgFrame.hpp"
+#include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
+#include "depthai/xlink/XLinkConnection.hpp"
 #include "depthai_bridge/ImageConverter.hpp"
 #include "depthai_bridge/ImuConverter.hpp"
+#include "depthai_bridge/depthaiUtility.hpp"
+#include "raph_oak/camera_info.hpp"
+#include "raph_oak/oak_wrapper_parameters.hpp"
+#include "raph_oak/parameters.hpp"
+#include "raph_oak/pipeline.hpp"
 #include "rclcpp/logging.hpp"
-#include "rclcpp/node_options.hpp"
 #include "rclcpp/node.hpp"
-#include "rclcpp/utilities.hpp"
+#include "rclcpp/node_options.hpp"
 #include "rclcpp/parameter.hpp"
 #include "rclcpp/publisher.hpp"
+#include "rclcpp/utilities.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
-#include "XLink/XLinkPublicDefines.h"
-
-#include "raph_oak/camera_info.hpp"
-#include "raph_oak/oak_wrapper_parameters.hpp"
-#include "raph_oak/oak_wrapper.hpp"
-#include "raph_oak/parameters.hpp"
-#include "raph_oak/pipeline.hpp"
 
 using namespace std::chrono_literals;
 
 namespace raph_oak
 {
 
-static const std::vector<std::string> UsbStrings = {"UNKNOWN", "LOW", "FULL", "HIGH", "SUPER",
-  "SUPER_PLUS"};
+static const std::vector<std::string> UsbStrings = {"UNKNOWN", "LOW",   "FULL",
+                                                    "HIGH",    "SUPER", "SUPER_PLUS"};
 
 OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 : Node("oak_wrapper", options),
@@ -80,15 +80,13 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 {
   ros_base_time_ = rclcpp::Clock().now();
   update_parameters();
-  parameter_callback_handle_ =
-    this->add_post_set_parameters_callback(std::bind(&OakWrapper::post_set_parameters_callback,
-        this, std::placeholders::_1));
+  parameter_callback_handle_ = this->add_post_set_parameters_callback(
+    std::bind(&OakWrapper::post_set_parameters_callback, this, std::placeholders::_1));
 
   this->create_ros_publishers();
 
   imu_converter_ = std::make_shared<dai::rosBridge::ImuConverter>(
-      "oak_imu_frame",
-      dai::ros::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO, 0.001, 0.00001);
+    "oak_imu_frame", dai::ros::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO, 0.001, 0.00001);
 
   check_timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check_timer_callback, this));
 }
@@ -113,8 +111,7 @@ void OakWrapper::create_ros_publishers()
 
   // Right
   right_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/right/image_rect", 10);
-  right_cam_info_pub_ =
-    create_publisher<sensor_msgs::msg::CameraInfo>("~/right/camera_info", 10);
+  right_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/right/camera_info", 10);
 
   // Right Compressed
   right_compressed_pub_ =
@@ -139,20 +136,25 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   rgb_camera_info_.header.frame_id = "oak_rgb_camera_optical_frame";
 
   // Left (physically right camera, but becomes left after 180 degree rotation)
-  left_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
-    calibration_handler, calibration_handler.getStereoRightCameraId(), params_.mono.width,
-    params_.mono.height), true);
+  left_camera_info_ = get_rotated_camera_info(
+    img_converter.calibrationToCameraInfo(
+      calibration_handler, calibration_handler.getStereoRightCameraId(), params_.mono.width,
+      params_.mono.height),
+    true);
   left_camera_info_.header.frame_id = "oak_left_camera_optical_frame";
 
   // Right (physically left camera, but becomes right after 180 degree rotation)
-  right_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
-    calibration_handler, calibration_handler.getStereoLeftCameraId(), params_.mono.width,
-    params_.mono.height), true);
+  right_camera_info_ = get_rotated_camera_info(
+    img_converter.calibrationToCameraInfo(
+      calibration_handler, calibration_handler.getStereoLeftCameraId(), params_.mono.width,
+      params_.mono.height),
+    true);
   right_camera_info_.header.frame_id = "oak_right_camera_optical_frame";
 
   // Depth
-  stereo_camera_info_ = img_converter.calibrationToCameraInfo(calibration_handler,
-    calibration_handler.getStereoRightCameraId(), params_.mono.width, params_.mono.height);
+  stereo_camera_info_ = img_converter.calibrationToCameraInfo(
+    calibration_handler, calibration_handler.getStereoRightCameraId(), params_.mono.width,
+    params_.mono.height);
   stereo_camera_info_.header.frame_id = "oak_stereo_camera_optical_frame";
 }
 
@@ -224,38 +226,42 @@ void OakWrapper::check_timer_callback()
 std::unique_ptr<dai::Device> OakWrapper::connect_to_device()
 {
   std::vector<dai::DeviceInfo> available_devices = dai::Device::getAllAvailableDevices();
-  if(available_devices.empty()) {
+  if (available_devices.empty()) {
     throw std::runtime_error("No devices detected!");
   }
 
   std::unique_ptr<dai::Device> device;
 
   if (params_.device.mx_id.empty() && params_.device.usb_port_id.empty()) {
-    RCLCPP_INFO(get_logger(),
-        "No device.mx_id or device.usb_port_id specified, connecting to the next available device.");
+    RCLCPP_INFO(
+      get_logger(),
+      "No device.mx_id or device.usb_port_id specified, connecting to the next available "
+      "device.");
     device = std::make_unique<dai::Device>(available_devices[0], dai::UsbSpeed::HIGH);
   } else {
-    for(const auto & info : available_devices) {
-      if(!params_.device.mx_id.empty() && info.getMxId() == params_.device.mx_id) {
-        RCLCPP_INFO(get_logger(), "Connecting to the camera using mxid: %s",
-            params_.device.mx_id.c_str());
-        if(info.state != X_LINK_BOOTED) {
+    for (const auto & info : available_devices) {
+      if (!params_.device.mx_id.empty() && info.getMxId() == params_.device.mx_id) {
+        RCLCPP_INFO(
+          get_logger(), "Connecting to the camera using mxid: %s", params_.device.mx_id.c_str());
+        if (info.state != X_LINK_BOOTED) {
           device = std::make_unique<dai::Device>(info, dai::UsbSpeed::HIGH);
           break;
         }
         throw std::runtime_error("Device is already booted in different process.");
       }
-      if(!params_.device.usb_port_id.empty() && info.name == params_.device.usb_port_id) {
-        RCLCPP_INFO(get_logger(), "Connecting to the camera using USB ID: %s",
-            params_.device.usb_port_id.c_str());
-        if(info.state != X_LINK_BOOTED) {
+      if (!params_.device.usb_port_id.empty() && info.name == params_.device.usb_port_id) {
+        RCLCPP_INFO(
+          get_logger(), "Connecting to the camera using USB ID: %s",
+          params_.device.usb_port_id.c_str());
+        if (info.state != X_LINK_BOOTED) {
           device = std::make_unique<dai::Device>(info, dai::UsbSpeed::HIGH);
           break;
         }
         throw std::runtime_error("Device is already booted in different process.");
       }
-      RCLCPP_INFO(get_logger(), "Ignoring device info: MXID: %s, USB port id: %s",
-        info.getMxId().c_str(), info.name.c_str());
+      RCLCPP_INFO(
+        get_logger(), "Ignoring device info: MXID: %s, USB port id: %s", info.getMxId().c_str(),
+        info.name.c_str());
     }
   }
 
@@ -263,9 +269,9 @@ std::unique_ptr<dai::Device> OakWrapper::connect_to_device()
     throw std::runtime_error("Could not connect to any device.");
   }
 
-  RCLCPP_INFO_STREAM(get_logger(),
-      "Connected to device with MX ID: " << device->getMxId() << ", USB port id: " <<
-      device->getDeviceInfo().name);
+  RCLCPP_INFO_STREAM(
+    get_logger(), "Connected to device with MX ID: " << device->getMxId() << ", USB port id: "
+                                                     << device->getDeviceInfo().name);
   RCLCPP_INFO_STREAM(
     get_logger(), "USB Speed: " << UsbStrings[static_cast<int32_t>(device->getUsbSpeed())]);
 
@@ -294,53 +300,60 @@ void OakWrapper::check_publishers()
   manage_callback(
     rgb_img_pub_->get_subscription_count() + rgb_cam_info_pub_->get_subscription_count(),
     rgb_queue_, rgb_callback_id_,
-    std::bind(&OakWrapper::publish_image, this, rgb_img_pub_, rgb_cam_info_pub_,
-      rgb_camera_info_, rgb_queue_));
+    std::bind(
+      &OakWrapper::publish_image, this, rgb_img_pub_, rgb_cam_info_pub_, rgb_camera_info_,
+      rgb_queue_));
 
   manage_callback(
-    rgb_compressed_pub_->get_subscription_count(),
-    rgb_compressed_queue_, rgb_compressed_callback_id_,
-    std::bind(&OakWrapper::publish_compressed_image, this, rgb_compressed_pub_,
+    rgb_compressed_pub_->get_subscription_count(), rgb_compressed_queue_,
+    rgb_compressed_callback_id_,
+    std::bind(
+      &OakWrapper::publish_compressed_image, this, rgb_compressed_pub_,
       "oak_rgb_camera_optical_frame", rgb_compressed_queue_));
 
   manage_callback(
     left_img_pub_->get_subscription_count() + left_cam_info_pub_->get_subscription_count(),
     left_queue_, left_callback_id_,
-    std::bind(&OakWrapper::publish_image, this, left_img_pub_, left_cam_info_pub_,
-      left_camera_info_, left_queue_));
+    std::bind(
+      &OakWrapper::publish_image, this, left_img_pub_, left_cam_info_pub_, left_camera_info_,
+      left_queue_));
 
   manage_callback(
-    left_compressed_pub_->get_subscription_count(),
-    left_compressed_queue_, left_compressed_callback_id_,
-    std::bind(&OakWrapper::publish_compressed_image, this, left_compressed_pub_,
+    left_compressed_pub_->get_subscription_count(), left_compressed_queue_,
+    left_compressed_callback_id_,
+    std::bind(
+      &OakWrapper::publish_compressed_image, this, left_compressed_pub_,
       "oak_left_camera_optical_frame", left_compressed_queue_));
 
   manage_callback(
     right_img_pub_->get_subscription_count() + right_cam_info_pub_->get_subscription_count(),
     right_queue_, right_callback_id_,
-    std::bind(&OakWrapper::publish_image, this, right_img_pub_, right_cam_info_pub_,
-      right_camera_info_, right_queue_));
+    std::bind(
+      &OakWrapper::publish_image, this, right_img_pub_, right_cam_info_pub_, right_camera_info_,
+      right_queue_));
 
   manage_callback(
-    right_compressed_pub_->get_subscription_count(),
-    right_compressed_queue_, right_compressed_callback_id_,
-    std::bind(&OakWrapper::publish_compressed_image, this, right_compressed_pub_,
+    right_compressed_pub_->get_subscription_count(), right_compressed_queue_,
+    right_compressed_callback_id_,
+    std::bind(
+      &OakWrapper::publish_compressed_image, this, right_compressed_pub_,
       "oak_right_camera_optical_frame", right_compressed_queue_));
 
   manage_callback(
     stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count(),
     depth_queue_, depth_callback_id_,
-    std::bind(&OakWrapper::publish_image, this, stereo_depth_pub_, stereo_cam_info_pub_,
+    std::bind(
+      &OakWrapper::publish_image, this, stereo_depth_pub_, stereo_cam_info_pub_,
       stereo_camera_info_, depth_queue_));
 
   manage_callback(
-    imu_pub_->get_subscription_count(),
-    imu_queue_, imu_callback_id_, std::bind(&OakWrapper::publish_imu, this));
+    imu_pub_->get_subscription_count(), imu_queue_, imu_callback_id_,
+    std::bind(&OakWrapper::publish_imu, this));
 
   if (params_.device.ir_laser_dot_projector_lazy) {
-    if (stereo_depth_pub_->get_subscription_count() +
-      stereo_cam_info_pub_->get_subscription_count() > 0)
-    {
+    if (
+      stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count() >
+      0) {
       device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
     } else {
       device_->setIrLaserDotProjectorIntensity(0.0);
@@ -349,22 +362,20 @@ void OakWrapper::check_publishers()
 }
 
 void OakWrapper::manage_callback(
-  int subscription_count,
-  std::shared_ptr<dai::DataOutputQueue> queue,
-  int & callback_id,
+  int subscription_count, std::shared_ptr<dai::DataOutputQueue> queue, int & callback_id,
   std::function<void()> callback)
 {
   const bool should_be_active = subscription_count > 0;
   const bool is_active = callback_id >= 0;
 
   if (should_be_active && !is_active) {
-    RCLCPP_INFO_STREAM(get_logger(),
-        "Activating callback for \"" << queue->getName() << "\" queue");
+    RCLCPP_INFO_STREAM(
+      get_logger(), "Activating callback for \"" << queue->getName() << "\" queue");
     callback_id = queue->addCallback(callback);
-    queue->tryGetAll();   // Clear any existing data in the queue
+    queue->tryGetAll();  // Clear any existing data in the queue
   } else if (!should_be_active && is_active) {
-    RCLCPP_INFO_STREAM(get_logger(),
-        "Deactivating callback for \"" << queue->getName() << "\" queue");
+    RCLCPP_INFO_STREAM(
+      get_logger(), "Deactivating callback for \"" << queue->getName() << "\" queue");
     queue->removeCallback(callback_id);
     callback_id = -1;
   }
@@ -372,9 +383,10 @@ void OakWrapper::manage_callback(
 
 void OakWrapper::post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters)
 {
-  for (const auto & param: parameters) {
-    RCLCPP_INFO_STREAM(this->get_logger(),
-          "Parameter " << param.get_name() << " changed to: " << param.value_to_string());
+  for (const auto & param : parameters) {
+    RCLCPP_INFO_STREAM(
+      this->get_logger(),
+      "Parameter " << param.get_name() << " changed to: " << param.value_to_string());
   }
 
   update_parameters();
@@ -406,19 +418,17 @@ void OakWrapper::send_parameters() const
 void OakWrapper::publish_image(
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> img_pub,
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
-  sensor_msgs::msg::CameraInfo cam_info,
-  std::shared_ptr<dai::DataOutputQueue> queue)
+  sensor_msgs::msg::CameraInfo cam_info, std::shared_ptr<dai::DataOutputQueue> queue)
 {
   auto in_data = queue->tryGet<dai::ImgFrame>();
   if (!in_data) {
-    RCLCPP_WARN_STREAM(get_logger(),
-        "Failed to get data from \"" << queue->getName() << "\" queue");
+    RCLCPP_WARN_STREAM(
+      get_logger(), "Failed to get data from \"" << queue->getName() << "\" queue");
     return;
   }
 
-  cam_info.header.stamp = dai::ros::getFrameTime(
-      ros_base_time_, steady_base_time_,
-      in_data->getTimestamp());
+  cam_info.header.stamp =
+    dai::ros::getFrameTime(ros_base_time_, steady_base_time_, in_data->getTimestamp());
   cam_info_pub->publish(cam_info);
 
   auto image = std::make_unique<sensor_msgs::msg::Image>();
@@ -433,10 +443,11 @@ void OakWrapper::publish_image(
     image->step = image->width * 3;
     image->data.resize(image->width * image->height * 3);
 
-    cv::Mat const in_mat(cv::Size(in_data->getWidth(), in_data->getHeight() * 3 / 2), CV_8UC1,
+    cv::Mat const in_mat(
+      cv::Size(in_data->getWidth(), in_data->getHeight() * 3 / 2), CV_8UC1,
       in_data->getData().data());
-    cv::Mat out_mat(cv::Size(in_data->getWidth(), in_data->getHeight()), CV_8UC3,
-      image->data.data());
+    cv::Mat out_mat(
+      cv::Size(in_data->getWidth(), in_data->getHeight()), CV_8UC3, image->data.data());
     cv::cvtColor(in_mat, out_mat, cv::ColorConversionCodes::COLOR_YUV2BGR_NV12);
   } else if (in_data->getType() == dai::RawImgFrame::Type::RAW8) {
     image->encoding = "mono8";
@@ -454,19 +465,18 @@ void OakWrapper::publish_image(
 
 void OakWrapper::publish_compressed_image(
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
-  const std::string & frame_id,
-  std::shared_ptr<dai::DataOutputQueue> queue)
+  const std::string & frame_id, std::shared_ptr<dai::DataOutputQueue> queue)
 {
   auto in_data = queue->tryGet<dai::ImgFrame>();
   if (!in_data) {
-    RCLCPP_WARN_STREAM(get_logger(),
-        "Failed to get data from \"" << queue->getName() << "\" queue");
+    RCLCPP_WARN_STREAM(
+      get_logger(), "Failed to get data from \"" << queue->getName() << "\" queue");
     return;
   }
 
   auto image = std::make_unique<sensor_msgs::msg::CompressedImage>();
-  image->header.stamp = dai::ros::getFrameTime(
-    ros_base_time_, steady_base_time_, in_data->getTimestamp());
+  image->header.stamp =
+    dai::ros::getFrameTime(ros_base_time_, steady_base_time_, in_data->getTimestamp());
   image->header.frame_id = frame_id;
   image->format = "jpeg";
   image->data = std::move(in_data->getData());
@@ -478,8 +488,8 @@ void OakWrapper::publish_imu()
 {
   auto in_data = imu_queue_->tryGet<dai::IMUData>();
   if (!in_data) {
-    RCLCPP_WARN_STREAM(get_logger(),
-        "Failed to get data from \"" << imu_queue_->getName() << "\" queue");
+    RCLCPP_WARN_STREAM(
+      get_logger(), "Failed to get data from \"" << imu_queue_->getName() << "\" queue");
     return;
   }
 

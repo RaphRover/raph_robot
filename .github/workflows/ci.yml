@@ -27,3 +27,4 @@ jobs:
         uses: "ros-industrial/industrial_ci@master"
         env:
           UPSTREAM_WORKSPACE: "github:RaphRover/raph_common#main"
+          CMAKE_ARGS: "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"

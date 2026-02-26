@@ -21,7 +21,6 @@
 #pragma once
 
 #include "depthai/pipeline/Pipeline.hpp"
-
 #include "raph_oak/oak_wrapper_parameters.hpp"
 
 namespace raph_oak
@@ -29,4 +28,4 @@ namespace raph_oak
 
 dai::Pipeline create_dai_pipeline(const Params & params);
 
-}   // namespace raph_oak
+}  // namespace raph_oak

@@ -26,19 +26,18 @@
 #include <memory>
 #include <string>
 
+#include "depthai-shared/datatype/RawStereoDepthConfig.hpp"
 #include "depthai/device/CalibrationHandler.hpp"
 #include "depthai/device/DataQueue.hpp"
 #include "depthai/device/Device.hpp"
-#include "depthai-shared/datatype/RawStereoDepthConfig.hpp"
 #include "depthai_bridge/ImuConverter.hpp"
-#include "rclcpp/node_options.hpp"
+#include "raph_oak/oak_wrapper_parameters.hpp"
 #include "rclcpp/node.hpp"
+#include "rclcpp/node_options.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
-
-#include "raph_oak/oak_wrapper_parameters.hpp"
 
 namespace raph_oak
 {
@@ -110,21 +109,19 @@ private:
   std::unique_ptr<dai::Device> connect_to_device();
   void check_publishers();
   void manage_callback(
-    int subscription_count, std::shared_ptr<dai::DataOutputQueue> queue,
-    int & callback_id, std::function<void()> callback);
+    int subscription_count, std::shared_ptr<dai::DataOutputQueue> queue, int & callback_id,
+    std::function<void()> callback);
   void post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters);
   void update_parameters();
   void send_parameters() const;
   void publish_image(
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> img_pub,
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
-    sensor_msgs::msg::CameraInfo cam_info,
-    std::shared_ptr<dai::DataOutputQueue> queue);
+    sensor_msgs::msg::CameraInfo cam_info, std::shared_ptr<dai::DataOutputQueue> queue);
   void publish_compressed_image(
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
-    const std::string & frame_id,
-    std::shared_ptr<dai::DataOutputQueue> queue);
+    const std::string & frame_id, std::shared_ptr<dai::DataOutputQueue> queue);
   void publish_imu();
 };
 
-}   // namespace raph_oak
+}  // namespace raph_oak

@@ -21,15 +21,13 @@
 #include "raph_oak/parameters.hpp"
 
 #include "depthai-shared/datatype/RawStereoDepthConfig.hpp"
-
 #include "raph_oak/oak_wrapper_parameters.hpp"
 
 namespace raph_oak
 {
 
 void update_depth_config_from_params(
-  dai::RawStereoDepthConfig & depth_config,
-  const Params & params)
+  dai::RawStereoDepthConfig & depth_config, const Params & params)
 {
   depth_config.costMatching.confidenceThreshold = params.depth.confidence_threshold;
   depth_config.algorithmControl.enableLeftRightCheck = params.depth.lr_check_enabled;
@@ -42,4 +40,4 @@ void update_depth_config_from_params(
     static_cast<int>(params.depth.max_distance * 1000.0);
 }
 
-}   // namespace raph_oak
+}  // namespace raph_oak

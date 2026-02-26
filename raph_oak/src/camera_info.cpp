@@ -24,7 +24,6 @@
 
 #include "sensor_msgs/msg/camera_info.hpp"
 
-
 namespace raph_oak
 {
 
@@ -50,8 +49,8 @@ sensor_msgs::msg::CameraInfo get_rotated_camera_info(
     // If NOT rectified, flip the tangential distortion coefficients (p1, p2) in D,
     // and keep the radial coefficients (k1, k2, k3, k4) the same.
     if (rotated_info.d.size() >= 4) {
-      rotated_info.d[2] = -original_info.d[2]; // p1
-      rotated_info.d[3] = -original_info.d[3]; // p2
+      rotated_info.d[2] = -original_info.d[2];  // p1
+      rotated_info.d[3] = -original_info.d[3];  // p2
     }
   } else {
     // If ALREADY rectified, D should be zeros. Ensure it stays that way.
@@ -61,4 +60,4 @@ sensor_msgs::msg::CameraInfo get_rotated_camera_info(
   return rotated_info;
 }
 
-}   // namespace raph_oak
+}  // namespace raph_oak

@@ -27,7 +27,6 @@ namespace raph_oak
 
 // Calculate the camera info for the images rotated by 180 degrees
 sensor_msgs::msg::CameraInfo get_rotated_camera_info(
-  const sensor_msgs::msg::CameraInfo & original_info,
-  bool is_rectified = false);
+  const sensor_msgs::msg::CameraInfo & original_info, bool is_rectified = false);
 
-}   // namespace raph_oak
+}  // namespace raph_oak
