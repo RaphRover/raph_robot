@@ -12,6 +12,7 @@
   <license>MIT</license>
 
   <author email="aleks@fictionlab.pl">Aleksander Szymański</author>
+  <author email="blazej@fictionlab.pl">Błażej Sowa</author>
   
   <buildtool_depend>ament_cmake</buildtool_depend>
 
