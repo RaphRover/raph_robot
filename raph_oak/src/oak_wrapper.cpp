@@ -26,9 +26,8 @@
 #include "depthai_bridge/ImuConverter.hpp"
 
 #include "sensor_msgs/msg/camera_info.hpp"
+#include "sensor_msgs/msg/compressed_image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
-#include "sensor_msgs/msg/compressed_image.hpp"
-#include "sensor_msgs/msg/compressed_image.hpp"
 
 #include "raph_oak/camera_info.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
@@ -41,7 +40,8 @@ using namespace std::chrono_literals;
 namespace raph_oak
 {
 
-std::vector<std::string> usbStrings = {"UNKNOWN", "LOW", "FULL", "HIGH", "SUPER", "SUPER_PLUS"};
+static const std::vector<std::string> usb_strings = {"UNKNOWN", "LOW", "FULL", "HIGH", "SUPER",
+  "SUPER_PLUS"};
 
 OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 : Node("oak_wrapper", options),
@@ -194,7 +194,7 @@ void OakWrapper::check_timer_callback()
 std::unique_ptr<dai::Device> OakWrapper::connect_to_device()
 {
   std::vector<dai::DeviceInfo> availableDevices = dai::Device::getAllAvailableDevices();
-  if(availableDevices.size() == 0) {
+  if(availableDevices.empty()) {
     throw std::runtime_error("No devices detected!");
   }
 
@@ -211,6 +211,7 @@ std::unique_ptr<dai::Device> OakWrapper::connect_to_device()
             params_.device.mx_id.c_str());
         if(info.state != X_LINK_BOOTED) {
           device = std::make_unique<dai::Device>(info, dai::UsbSpeed::HIGH);
+          break;
         } else {
           throw std::runtime_error("Device is already booted in different process.");
         }
@@ -219,6 +220,7 @@ std::unique_ptr<dai::Device> OakWrapper::connect_to_device()
             params_.device.usb_port_id.c_str());
         if(info.state != X_LINK_BOOTED) {
           device = std::make_unique<dai::Device>(info, dai::UsbSpeed::HIGH);
+          break;
         } else {
           throw std::runtime_error("Device is already booted in different process.");
         }
@@ -237,7 +239,7 @@ std::unique_ptr<dai::Device> OakWrapper::connect_to_device()
       "Connected to device with MX ID: " << device->getMxId() << ", USB port id: " <<
       device->getDeviceInfo().name);
   RCLCPP_INFO_STREAM(
-    get_logger(), "USB Speed: " << usbStrings[static_cast<int32_t>(device->getUsbSpeed())]);
+    get_logger(), "USB Speed: " << usb_strings[static_cast<int32_t>(device->getUsbSpeed())]);
 
   auto calibration_handler = device->readCalibration();
   auto eeprom = calibration_handler.getEepromData();
@@ -256,7 +258,7 @@ std::unique_ptr<dai::Device> OakWrapper::connect_to_device()
   auto pipeline = create_dai_pipeline(params_);
   device->startPipeline(pipeline);
 
-  return std::move(device);
+  return device;
 }
 
 void OakWrapper::check_publishers()
@@ -424,7 +426,7 @@ void OakWrapper::publish_image(
 
 void OakWrapper::publish_compressed_image(
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
-  std::string frame_id,
+  const std::string & frame_id,
   std::shared_ptr<dai::DataOutputQueue> queue)
 {
   auto in_data = queue->tryGet<dai::ImgFrame>();
@@ -456,7 +458,7 @@ void OakWrapper::publish_imu()
   std::deque<sensor_msgs::msg::Imu> op_msgs;
   imu_converter_->toRosMsg(in_data, op_msgs);
 
-  while (op_msgs.size()) {
+  while (!op_msgs.empty()) {
     sensor_msgs::msg::Imu imu = op_msgs.front();
     op_msgs.pop_front();
 

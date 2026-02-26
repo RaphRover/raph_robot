@@ -28,9 +28,8 @@
 #include "depthai_bridge/ImuConverter.hpp"
 
 #include "sensor_msgs/msg/camera_info.hpp"
+#include "sensor_msgs/msg/compressed_image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
-#include "sensor_msgs/msg/compressed_image.hpp"
-#include "sensor_msgs/msg/compressed_image.hpp"
 
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/pipeline.hpp"
@@ -119,7 +118,7 @@ private:
     std::shared_ptr<dai::DataOutputQueue> queue);
   void publish_compressed_image(
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
-    std::string frame_id,
+    const std::string & frame_id,
     std::shared_ptr<dai::DataOutputQueue> queue);
   void publish_imu();
 };
