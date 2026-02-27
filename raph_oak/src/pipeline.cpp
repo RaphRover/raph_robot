@@ -54,11 +54,17 @@ dai::Pipeline create_dai_pipeline(const Params & params)
   auto mono_right_node = pipeline.create<dai::node::MonoCamera>();
   auto stereo_depth_node = pipeline.create<dai::node::StereoDepth>();
   auto left_encoder_node = pipeline.create<dai::node::VideoEncoder>();
+  auto left_rect_encoder_node = pipeline.create<dai::node::VideoEncoder>();
   auto right_encoder_node = pipeline.create<dai::node::VideoEncoder>();
+  auto right_rect_encoder_node = pipeline.create<dai::node::VideoEncoder>();
   auto xout_left = pipeline.create<dai::node::XLinkOut>();
   auto xout_left_compressed = pipeline.create<dai::node::XLinkOut>();
+  auto xout_left_rect = pipeline.create<dai::node::XLinkOut>();
+  auto xout_left_rect_compressed = pipeline.create<dai::node::XLinkOut>();
   auto xout_right = pipeline.create<dai::node::XLinkOut>();
   auto xout_right_compressed = pipeline.create<dai::node::XLinkOut>();
+  auto xout_right_rect = pipeline.create<dai::node::XLinkOut>();
+  auto xout_right_rect_compressed = pipeline.create<dai::node::XLinkOut>();
   auto xout_depth = pipeline.create<dai::node::XLinkOut>();
   auto xin_depth_config = pipeline.create<dai::node::XLinkIn>();
   auto rgb_node = pipeline.create<dai::node::ColorCamera>();
@@ -69,6 +75,8 @@ dai::Pipeline create_dai_pipeline(const Params & params)
   auto xout_imu = pipeline.create<dai::node::XLinkOut>();
   auto manip_left = pipeline.create<dai::node::ImageManip>();
   auto manip_right = pipeline.create<dai::node::ImageManip>();
+  auto manip_left_rect = pipeline.create<dai::node::ImageManip>();
+  auto manip_right_rect = pipeline.create<dai::node::ImageManip>();
 
   // Configure nodes
   mono_left_node->setCamera("left");
@@ -93,11 +101,20 @@ dai::Pipeline create_dai_pipeline(const Params & params)
   manip_left->initialConfig.setRotationDegrees(180);
   manip_right->initialConfig.setRotationDegrees(180);
 
+  manip_left_rect->initialConfig.setRotationDegrees(180);
+  manip_right_rect->initialConfig.setRotationDegrees(180);
+
   left_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
   left_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
 
   right_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
   right_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+
+  left_rect_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
+  left_rect_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+
+  right_rect_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
+  right_rect_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
 
   xout_left->setStreamName("left");
   xout_left->input.setQueueSize(1);
@@ -107,6 +124,14 @@ dai::Pipeline create_dai_pipeline(const Params & params)
   xout_left_compressed->input.setQueueSize(1);
   xout_left_compressed->input.setBlocking(false);
 
+  xout_left_rect->setStreamName("left_rect");
+  xout_left_rect->input.setQueueSize(1);
+  xout_left_rect->input.setBlocking(false);
+
+  xout_left_rect_compressed->setStreamName("left_rect_compressed");
+  xout_left_rect_compressed->input.setQueueSize(1);
+  xout_left_rect_compressed->input.setBlocking(false);
+
   xout_right->setStreamName("right");
   xout_right->input.setQueueSize(1);
   xout_right->input.setBlocking(false);
@@ -114,6 +139,14 @@ dai::Pipeline create_dai_pipeline(const Params & params)
   xout_right_compressed->setStreamName("right_compressed");
   xout_right_compressed->input.setQueueSize(1);
   xout_right_compressed->input.setBlocking(false);
+
+  xout_right_rect->setStreamName("right_rect");
+  xout_right_rect->input.setQueueSize(1);
+  xout_right_rect->input.setBlocking(false);
+
+  xout_right_rect_compressed->setStreamName("right_rect_compressed");
+  xout_right_rect_compressed->input.setQueueSize(1);
+  xout_right_rect_compressed->input.setBlocking(false);
 
   xout_depth->setStreamName("depth");
   xout_depth->input.setQueueSize(1);
@@ -149,15 +182,22 @@ dai::Pipeline create_dai_pipeline(const Params & params)
 
   // Link nodes
   mono_left_node->out.link(stereo_depth_node->left);
+  mono_left_node->out.link(manip_right->inputImage);
   mono_right_node->out.link(stereo_depth_node->right);
+  mono_right_node->out.link(manip_left->inputImage);
 
-  stereo_depth_node->rectifiedLeft.link(manip_right->inputImage);
-  stereo_depth_node->rectifiedRight.link(manip_left->inputImage);
+  stereo_depth_node->rectifiedLeft.link(manip_right_rect->inputImage);
+  stereo_depth_node->rectifiedRight.link(manip_left_rect->inputImage);
 
   manip_left->out.link(xout_left->input);
   manip_left->out.link(left_encoder_node->input);
   manip_right->out.link(xout_right->input);
   manip_right->out.link(right_encoder_node->input);
+
+  manip_left_rect->out.link(xout_left_rect->input);
+  manip_left_rect->out.link(left_rect_encoder_node->input);
+  manip_right_rect->out.link(xout_right_rect->input);
+  manip_right_rect->out.link(right_rect_encoder_node->input);
 
   stereo_depth_node->depth.link(xout_depth->input);
 
@@ -165,6 +205,8 @@ dai::Pipeline create_dai_pipeline(const Params & params)
 
   left_encoder_node->bitstream.link(xout_left_compressed->input);
   right_encoder_node->bitstream.link(xout_right_compressed->input);
+  left_rect_encoder_node->bitstream.link(xout_left_rect_compressed->input);
+  right_rect_encoder_node->bitstream.link(xout_right_rect_compressed->input);
 
   rgb_node->video.link(xout_rgb->input);
   rgb_node->video.link(rgb_encoder_node->input);

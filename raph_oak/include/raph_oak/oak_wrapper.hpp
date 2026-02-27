@@ -58,8 +58,12 @@ private:
   std::shared_ptr<dai::DataOutputQueue> rgb_compressed_queue_;
   std::shared_ptr<dai::DataOutputQueue> left_queue_;
   std::shared_ptr<dai::DataOutputQueue> left_compressed_queue_;
+  std::shared_ptr<dai::DataOutputQueue> left_rect_queue_;
+  std::shared_ptr<dai::DataOutputQueue> left_rect_compressed_queue_;
   std::shared_ptr<dai::DataOutputQueue> right_queue_;
   std::shared_ptr<dai::DataOutputQueue> right_compressed_queue_;
+  std::shared_ptr<dai::DataOutputQueue> right_rect_queue_;
+  std::shared_ptr<dai::DataOutputQueue> right_rect_compressed_queue_;
   std::shared_ptr<dai::DataOutputQueue> depth_queue_;
   std::shared_ptr<dai::DataOutputQueue> imu_queue_;
   std::shared_ptr<dai::DataInputQueue> depth_config_queue_;
@@ -71,9 +75,15 @@ private:
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> left_img_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> left_cam_info_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> left_compressed_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> left_rect_img_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> left_rect_cam_info_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> left_rect_compressed_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> right_img_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> right_cam_info_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> right_compressed_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> right_rect_img_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> right_rect_cam_info_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> right_rect_compressed_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> stereo_depth_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> stereo_cam_info_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Imu>> imu_pub_;
@@ -85,15 +95,21 @@ private:
   int rgb_compressed_callback_id_{-1};
   int left_callback_id_{-1};
   int left_compressed_callback_id_{-1};
+  int left_rect_callback_id_{-1};
+  int left_rect_compressed_callback_id_{-1};
   int right_callback_id_{-1};
   int right_compressed_callback_id_{-1};
+  int right_rect_callback_id_{-1};
+  int right_rect_compressed_callback_id_{-1};
   int depth_callback_id_{-1};
   int imu_callback_id_{-1};
 
   // Camera info for callbacks
   sensor_msgs::msg::CameraInfo rgb_camera_info_;
   sensor_msgs::msg::CameraInfo left_camera_info_;
+  sensor_msgs::msg::CameraInfo left_rect_camera_info_;
   sensor_msgs::msg::CameraInfo right_camera_info_;
+  sensor_msgs::msg::CameraInfo right_rect_camera_info_;
   sensor_msgs::msg::CameraInfo stereo_camera_info_;
 
   std::chrono::time_point<std::chrono::steady_clock> steady_base_time_;
