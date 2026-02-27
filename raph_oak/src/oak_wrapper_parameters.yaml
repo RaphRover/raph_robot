@@ -29,7 +29,7 @@ raph_oak:
   depth:
     confidence_threshold:
       type: int
-      default_value: 50
+      default_value: 110
       description: Depth images will only contain pixels where depth confidence is below the confidence threshold (lower the confidence value means better depth accuracy)
       validation:
         bounds<>: [0, 255]

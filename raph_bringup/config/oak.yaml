@@ -7,7 +7,7 @@
       ir_laser_dot_projector_lazy: true
       ir_flood_light_intensity: 0.0
     depth:
-      confidence_threshold: 50
+      confidence_threshold: 110
       lr_check_enabled: true
       lr_check_threshold: 5
       subpixel_enabled: true
