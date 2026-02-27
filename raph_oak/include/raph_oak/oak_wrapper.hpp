@@ -122,6 +122,8 @@ private:
 
   dai::RawStereoDepthConfig depth_config_;
 
+  bool laser_dot_projector_active_ = false;
+
   void create_ros_publishers();
   void fill_camera_info(const dai::CalibrationHandler & calibration_handler);
   void check_timer_callback();

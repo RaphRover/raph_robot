@@ -428,12 +428,15 @@ void OakWrapper::check_publishers()
     std::bind(&OakWrapper::publish_imu, this));
 
   if (params_.device.ir_laser_dot_projector_lazy) {
-    if (
+    const bool should_be_active =
       stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count() >
-      0) {
+      0;
+    if (should_be_active && !laser_dot_projector_active_) {
       device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
-    } else {
+      laser_dot_projector_active_ = true;
+    } else if (!should_be_active && laser_dot_projector_active_) {
       device_->setIrLaserDotProjectorIntensity(0.0);
+      laser_dot_projector_active_ = false;
     }
   }
 }
