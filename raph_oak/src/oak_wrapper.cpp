@@ -145,7 +145,7 @@ void OakWrapper::create_ros_publishers()
   stereo_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/stereo/camera_info", 10);
 
   // IMU
-  imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("~/imu", 10);
+  imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("~/imu/data_raw", 10);
 }
 
 void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_handler)
