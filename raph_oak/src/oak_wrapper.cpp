@@ -577,8 +577,11 @@ void OakWrapper::publish_imu()
   imu_converter_->toRosMsg(in_data, op_msgs);
 
   while (!op_msgs.empty()) {
-    sensor_msgs::msg::Imu const imu = op_msgs.front();
+    sensor_msgs::msg::Imu imu = op_msgs.front();
     op_msgs.pop_front();
+
+    // Mark the orientation as unknown
+    imu.orientation_covariance[0] = -1.0;
 
     imu_pub_->publish(imu);
   }
