@@ -29,6 +29,17 @@
       <remap from="in" to="image_raw" />
       <remap from="out/compressedDepth" to="image_raw/compressedDepth" />
     </composable_node>
+    <composable_node namespace="oak"
+      name="rectify_rgb"
+      pkg="image_proc"
+      plugin="image_proc::RectifyNode">
+      <extra_arg name="use_intra_process_comms" value="true" />
+      <remap from="image" to="rgb/image_raw" />
+      <remap from="image_rect" to="rgb_rect/image_rect" />
+      <remap from="image_rect/compressed" to="rgb_rect/image_rect/compressed" />
+      <param name="image_rect.enable_pub_plugins"
+        value="['image_transport/raw','image_transport/compressed']" />
+    </composable_node>
   </node_container>
 
 </launch>
