@@ -1,0 +1,155 @@
+raph_oak:
+  device:
+    mx_id:
+      type: string
+      default_value: ""
+      description: Device MX ID to connect to.
+      read_only: true
+    usb_port_id:
+      type: string
+      default_value: ""
+      description: USB port ID to connect to (e.g. 1.1.2)
+      read_only: true
+    ir_laser_dot_projector_intensity:
+      type: double
+      default_value: 0.3
+      description: IR laser dot projector intensity (0.0-1.0, higher is stronger intensity)
+      validation:
+        bounds<>: [0.0, 1.0]
+    ir_laser_dot_projector_lazy:
+      type: bool
+      default_value: true
+      description: If true, the IR laser dot projector will only be turned on when the depth stream is active. If false, the IR laser dot projector will be always on.
+    ir_flood_light_intensity:
+      type: double
+      default_value: 0.0
+      description: IR flood light intensity (0.0-1.0, higher is stronger intensity)
+      validation:
+        bounds<>: [0.0, 1.0]
+  depth:
+    confidence_threshold:
+      type: int
+      default_value: 110
+      description: Depth images will only contain pixels where depth confidence is below the confidence threshold (lower the confidence value means better depth accuracy)
+      validation:
+        bounds<>: [0, 255]
+    lr_check_enabled:
+      type: bool
+      default_value: true
+      description: Computes and combines disparities in both L-R and R-L directions, and combine them
+    lr_check_threshold:
+      type: int
+      default_value: 5
+      description: Disparity is considered for the output when the difference between LR and RL disparities is smaller than the LR check threshold
+      validation:
+        bounds<>: [0, 255]
+    subpixel_enabled:
+      type: bool
+      default_value: true
+      description: Computes disparity with sub-pixel interpolation
+    subpixel_fractional_bits:
+      type: int
+      default_value: 3
+      description: Number of fractional bits for subpixel mode
+      validation:
+        bounds<>: [3, 5]
+    min_distance:
+      type: double
+      default_value: 0.0
+      description: Minimal distance in meters
+      validation:
+        bounds<>: [0.0, 60.0]
+    max_distance:
+      type: double
+      default_value: 10.0
+      description: Maximal distance in meters
+      validation:
+        bounds<>: [0.0, 60.0]
+  mono:
+    width:
+      type: int
+      default_value: 1280
+      description: Mono camera image width
+      validation:
+        bounds<>: [1, 1280]
+      read_only: true
+    height:
+      type: int
+      default_value: 800
+      description: Mono camera image height
+      validation:
+        bounds<>: [1, 800]
+      read_only: true
+    isp_scale_num:
+      type: int
+      default_value: 1
+      description: ISP scale numerator
+      validation:
+        bounds<>: [1, 16]
+      read_only: true
+    isp_scale_den:
+      type: int
+      default_value: 1
+      description: ISP scale denominator
+      validation:
+        bounds<>: [1, 63]
+      read_only: true
+    fps:
+      type: double
+      default_value: 10.0
+      description: Mono camera frames per second
+      validation:
+        bounds<>: [0.1, 60.0]
+      read_only: true
+  mono_compressed:
+    jpeg_quality:
+      type: int
+      default_value: 80
+      description: JPEG quality for mono compressed images (0-100, higher is better quality and bigger size)
+      validation:
+        bounds<>: [0, 100]
+      read_only: true
+  rgb:
+    width:
+      type: int
+      default_value: 1344
+      description: RGB camera image width
+      validation:
+        bounds<>: [1, 3840]
+      read_only: true
+    height:
+      type: int
+      default_value: 1008
+      description: RGB camera image height
+      validation:
+        bounds<>: [1, 2160]
+      read_only: true
+    isp_scale_num:
+      type: int
+      default_value: 1
+      description: ISP scale numerator
+      validation:
+        bounds<>: [1, 16]
+      read_only: true
+    isp_scale_den:
+      type: int
+      default_value: 3
+      description: ISP scale denominator
+      validation:
+        bounds<>: [1, 63]
+      read_only: true
+    fps:
+      type: double
+      default_value: 15.0
+      description: RGB camera frames per second
+      validation:
+        bounds<>: [0.1, 30.0]
+      read_only: true
+  rgb_compressed:
+    jpeg_quality:
+      type: int
+      default_value: 80
+      description: JPEG quality for RGB compressed images (0-100, higher is better quality and bigger size)
+      validation:
+        bounds<>: [0, 100]
+      read_only: true
