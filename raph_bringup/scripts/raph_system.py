@@ -85,9 +85,14 @@ class RaphSystem(Node):
     def _get_os_version_callback(
         self,
         _request: GetOsVersion.Request,
-        _response: GetOsVersion.Response,
+        response: GetOsVersion.Response,
     ) -> GetOsVersion.Response:
-        return self.os_version
+        response.version = self.os_version.version
+        response.variant = self.os_version.variant
+        response.major = self.os_version.major
+        response.minor = self.os_version.minor
+        response.patch = self.os_version.patch
+        return response
 
     def reboot_system(self) -> None:
         """Reboot the system."""
