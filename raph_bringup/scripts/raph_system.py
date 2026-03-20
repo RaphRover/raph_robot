@@ -1,20 +1,29 @@
 #!/usr/bin/env python3
 
-import os
+"""A module containing the RaphSystem node implementation."""
+
+import subprocess
 from pathlib import Path
 
 import rclpy
+from raph_interfaces.srv import GetOsVersion
 from rclpy.node import Node
 from std_srvs.srv import Trigger
 
-from raph_interfaces.srv import GetOsVersion
-
 
 class RaphSystem(Node):
+    """
+    Raph Rover system node.
+
+    Node responsible for system-level operations like rebooting, shutting down, and providing OS
+    version information.
+    """
+
     shutdown_scheduled: bool
     os_version: GetOsVersion.Response
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Create a RaphSystem node."""
         super().__init__("raph_system", start_parameter_services=False)
 
         self.shutdown_scheduled = False
@@ -22,16 +31,20 @@ class RaphSystem(Node):
 
         self._read_os_version()
 
-        self.reboot_srv = self.create_service(Trigger, "~/reboot", self.reboot_callback)
-        self.shutdown_srv = self.create_service(
-            Trigger, "~/shutdown", self.shutdown_callback
-        )
+        self.reboot_srv = self.create_service(Trigger, "~/reboot", self._reboot_callback)
+        self.shutdown_srv = self.create_service(Trigger, "~/shutdown", self._shutdown_callback)
         self.get_os_version_srv = self.create_service(
-            GetOsVersion, "~/get_os_version", self.get_os_version_callback
+            GetOsVersion,
+            "~/get_os_version",
+            self._get_os_version_callback,
         )
         self.get_logger().info("Raph system node started!")
 
-    def reboot_callback(self, request, response):
+    def _reboot_callback(
+        self,
+        _request: Trigger.Request,
+        response: Trigger.Response,
+    ) -> Trigger.Response:
         if self.shutdown_scheduled:
             response.success = False
             response.message = "System is already scheduled to shutdown"
@@ -48,7 +61,11 @@ class RaphSystem(Node):
 
         return response
 
-    def shutdown_callback(self, request, response):
+    def _shutdown_callback(
+        self,
+        _request: Trigger.Request,
+        response: Trigger.Response,
+    ) -> Trigger.Response:
         if self.shutdown_scheduled:
             response.success = False
             response.message = "System is already scheduled to shutdown"
@@ -65,18 +82,29 @@ class RaphSystem(Node):
 
         return response
 
-    def get_os_version_callback(self, request, response):
-        return self.os_version
+    def _get_os_version_callback(
+        self,
+        _request: GetOsVersion.Request,
+        response: GetOsVersion.Response,
+    ) -> GetOsVersion.Response:
+        response.version = self.os_version.version
+        response.variant = self.os_version.variant
+        response.major = self.os_version.major
+        response.minor = self.os_version.minor
+        response.patch = self.os_version.patch
+        return response
 
-    def reboot_system(self):
+    def reboot_system(self) -> None:
+        """Reboot the system."""
         self.get_logger().info("Performing system reboot...")
-        os.system("systemctl reboot")
+        subprocess.run(["/usr/bin/systemctl", "reboot"], check=False)
         self.get_logger().info("Shutting down node...")
         rclpy.shutdown()
 
-    def shutdown_system(self):
+    def shutdown_system(self) -> None:
+        """Shut down the system."""
         self.get_logger().info("Performing system shutdown...")
-        os.system("systemctl poweroff")
+        subprocess.run(["/usr/bin/systemctl", "poweroff"], check=False)
         self.get_logger().info("Shutting down node...")
         rclpy.shutdown()
 
@@ -96,7 +124,7 @@ class RaphSystem(Node):
             version_found = False
 
             for line in content.splitlines():
-                if line.startswith("OS_VERSION=") or line.startswith("OS_VARIANT="):
+                if line.startswith(("OS_VERSION=", "OS_VARIANT=")):
                     key, raw_value = line.split("=", 1)
                     value = raw_value.strip().strip('"')
 
@@ -110,9 +138,7 @@ class RaphSystem(Node):
                     self.get_logger().info(f"Detected {key}: {value}")
 
             if not version_found:
-                self.get_logger().warning(
-                    "OS_VERSION not found in /etc/custom-os-release"
-                )
+                self.get_logger().warning("OS_VERSION not found in /etc/custom-os-release")
         except (OSError, UnicodeDecodeError) as exc:
             self.get_logger().error(f"Failed to read /etc/custom-os-release: {exc}")
 
@@ -122,7 +148,7 @@ class RaphSystem(Node):
             version_parts = self.os_version.version.split(".")
             if len(version_parts) < 3:
                 self.get_logger().warning(
-                    "OS_VERSION does not contain enough parts to parse major, minor, and patch"
+                    "OS_VERSION does not contain enough parts to parse major, minor, and patch",
                 )
                 return
 
@@ -131,13 +157,14 @@ class RaphSystem(Node):
             self.os_version.patch = int(version_parts[2])
 
             self.get_logger().info(
-                f"Parsed OS_VERSION: {self.os_version.major}.{self.os_version.minor}.{self.os_version.patch}"
+                "Parsed OS_VERSION: "
+                f"{self.os_version.major}.{self.os_version.minor}.{self.os_version.patch}",
             )
         except (AttributeError, ValueError) as exc:
             self.get_logger().error(f"Failed to parse OS_VERSION: {exc}")
 
 
-def main() -> None:
+def _main() -> None:
     rclpy.init()
     raph_system = RaphSystem()
 
@@ -149,4 +176,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    _main()
