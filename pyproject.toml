@@ -90,8 +90,6 @@ ignore = [
     "PLR0917",
 
     "PLR2004", # magic-value-comparison
-
-    "TRY400",
 ]
 
 mccabe.max-complexity = 10
