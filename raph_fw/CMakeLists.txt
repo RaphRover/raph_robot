@@ -6,12 +6,12 @@ find_package(ament_cmake_python REQUIRED)
 
 ament_python_install_package(${PROJECT_NAME})
 
-# install(
-#   PROGRAMS
-#     scripts/flash.py
-#     scripts/flash
-#   DESTINATION lib/${PROJECT_NAME}
-# )
+install(
+  PROGRAMS
+    scripts/flash.py
+    scripts/flash
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 install(
   DIRECTORY data
