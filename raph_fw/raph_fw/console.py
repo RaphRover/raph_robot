@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -147,7 +148,6 @@ def run_step[**P, R](
 
 if __name__ == "__main__":
     import contextlib
-    import time
 
     log = get_logger()
     log.info("Starting console helper demo")
