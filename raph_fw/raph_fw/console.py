@@ -19,19 +19,41 @@
 # THE SOFTWARE.
 
 
+import contextlib
 import logging
+import time
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
+from datetime import UTC, datetime
 
 from rich.console import Console
+from rich.live import Live
 from rich.logging import RichHandler
-from rich.progress import Progress
+from rich.progress import (
+    BarColumn,
+    Progress,
+    ProgressColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeRemainingColumn,
+)
+from rich.text import Text
 
-console = Console(log_path=False)
+console = Console(log_path=False, log_time=True)
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(message)s",
     datefmt="[%X]",
-    handlers=[RichHandler(console=console, show_path=False)],
+    handlers=[
+        RichHandler(
+            console=console,
+            show_path=False,
+            show_time=True,
+            show_level=True,
+            markup=True,
+        ),
+    ],
 )
 
 
@@ -40,23 +62,112 @@ def get_logger(name: str = "raph_fw") -> logging.Logger:
     return logging.getLogger(name)
 
 
+_log = get_logger()
+
+
+class _LogTimeColumn(ProgressColumn):
+    """Render current time in the same style as RichHandler."""
+
+    def render(self, _task: object) -> Text:
+        return Text(datetime.now(tz=UTC).astimezone().strftime("[%X]"), style="log.time")
+
+
+class _LogLevelColumn(ProgressColumn):
+    """Render a fixed level label in the same style as RichHandler."""
+
+    def render(self, _task: object) -> Text:
+        return Text("INFO".ljust(8), style="logging.level.info")
+
+
 def get_progress(**kwargs: dict) -> Progress:
     """Create a Rich Progress instance with the shared console."""
-    return Progress(console=console, **kwargs)
+    return Progress(
+        _LogTimeColumn(),
+        _LogLevelColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeRemainingColumn(),
+        console=console,
+        **kwargs,
+    )
+
+
+@contextmanager
+def log_step(
+    label: str,
+    success_text: str = "OK",
+    failure_text: str = "FAILED",
+) -> Generator[None, None, None]:
+    """Render a CMake-style step line and emit a log record once finished."""
+    start = time.perf_counter()
+
+    pending = Text.assemble(
+        (datetime.now(tz=UTC).astimezone().strftime("[%X]"), "log.time"),
+        " ",
+        ("INFO    ", "logging.level.info"),
+        " ",
+        f"{label}...",
+    )
+    live = Live(pending, console=console, transient=True)
+    live.start()
+
+    try:
+        yield
+    except Exception:
+        live.stop()
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        _log.info(f"{label}... [red]{failure_text}[/red] ({elapsed_ms:.0f} ms)")
+        raise
+    else:
+        live.stop()
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        _log.info(f"{label}... [green]{success_text}[/green] ({elapsed_ms:.0f} ms)")
+
+
+def run_step[**P, R](
+    label: str,
+    fn: Callable[P, R],
+    *args: P.args,
+    success_text: str = "OK",
+    failure_text: str = "FAILED",
+    **kwargs: P.kwargs,
+) -> R:
+    """Run a callable within log_step and return its result."""
+    with log_step(
+        label,
+        success_text=success_text,
+        failure_text=failure_text,
+    ):
+        return fn(*args, **kwargs)
 
 
 if __name__ == "__main__":
     log = get_logger()
-    # Logging works normally
-    log.info("Starting work...")
+    log.info("Starting console helper demo")
 
-    import time
+    with log_step("Checking firmware version"):
+        time.sleep(1.0)
 
-    # Progress bar — pass the same console so logs render above the bar
+    def _connect_to_device(port: str) -> str:
+        time.sleep(1.0)
+        return f"Connected on {port}"
+
+    connection = run_step("Connecting to device", _connect_to_device, "/dev/ttyACM0")
+    log.info(connection)
+
+    with (
+        contextlib.suppress(RuntimeError),
+        log_step("Running self-test", failure_text="Self-test failed"),
+    ):
+        time.sleep(1.0)
+        raise RuntimeError
+
+    # Progress bar - pass the same console so logs render above the bar.
     with get_progress() as progress:
         task = progress.add_task("Processing...", total=100)
-        for i in range(100):
-            time.sleep(0.1)
-            progress.update(task, advance=1)
+        for _ in range(100):
+            time.sleep(0.01)
+            progress.update(task, advance=1, refresh=True)
 
-    log.info("Done!")
+    log.info("Demo complete")
