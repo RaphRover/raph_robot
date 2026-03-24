@@ -79,7 +79,7 @@ ignore = [
 
     # Allow missing docstrings in public modules or packages
     "D100",
-    "D104", 
+    "D104",
 
     # Pylint "too-many" errors
     "PLR0911",
