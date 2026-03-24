@@ -30,12 +30,16 @@ from raph_fw.resolve import resolve_raphcore_name
 class FlashCommand:
     """Command to flash firmware onto the RaphCore device."""
 
-    class FlashCommandArgs(Protocol):
+    class CommonArgs(Protocol):
+        """Protocol for the common arguments expected by FlashCommand and UpdateCommand."""
+
+        bootloader: bool
+        address: str | None
+
+    class FlashCommandArgs(CommonArgs):
         """Protocol for the arguments expected by FlashCommand."""
 
         binary_path: str
-        bootloader: bool
-        address: str | None
 
     def __init__(self) -> None:
         """Initialize the FlashCommand."""
@@ -52,6 +56,10 @@ class FlashCommand:
             type=str,
             help="Path to the binary file to be flashed.",
         )
+        self.add_common_arguments(parser)
+
+    def add_common_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Add common command-line arguments for both flash and update commands."""
         parser.add_argument(
             "--bootloader",
             action="store_true",
@@ -76,11 +84,18 @@ class FlashCommand:
         """
         self.args = args
 
+        self.logger.info(
+            f"Will attempt to flash {'bootloader' if args.bootloader else 'firmware'} binary at: "
+            f"{args.binary_path}"
+        )
+
+        # Validate the binary path
         binary_path = Path(args.binary_path)
         if not binary_path.is_file():
             self.logger.error(f"Binary file not found: {binary_path.absolute()}")
             sys.exit(1)
 
+        # Resolve the target device's IP address
         if self.args.address is None:
             try:
                 with log_step(

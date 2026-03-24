@@ -10,6 +10,8 @@ install(
   PROGRAMS
     scripts/flash.py
     scripts/flash
+    scripts/update.py
+    scripts/update
   DESTINATION lib/${PROJECT_NAME}
 )
 
