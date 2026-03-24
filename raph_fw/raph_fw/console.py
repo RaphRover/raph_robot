@@ -37,6 +37,7 @@ from rich.progress import (
     TextColumn,
     TimeRemainingColumn,
 )
+from rich.prompt import Confirm
 from rich.text import Text
 
 if TYPE_CHECKING:
@@ -145,6 +146,18 @@ def run_step(
         return fn(*args, **kwargs)
 
 
+def get_confirmation_prompt(prompt: str, *, default: bool = False) -> bool:
+    """Display a confirmation prompt styled consistently with logging output."""
+    log_prompt = Text.assemble(
+        (datetime.now(tz=UTC).astimezone().strftime("[%X]"), "log.time"),
+        " ",
+        ("INFO    ", "logging.level.info"),
+        " ",
+        prompt,
+    )
+    return Confirm.ask(log_prompt, default=default, console=console)
+
+
 if __name__ == "__main__":
     import contextlib
 
@@ -174,5 +187,10 @@ if __name__ == "__main__":
         for _ in range(100):
             time.sleep(0.01)
             progress.update(task, advance=1, refresh=True)
+
+    if get_confirmation_prompt("Continue with demo?", default=True):
+        log.info("User confirmed")
+    else:
+        log.info("User declined")
 
     log.info("Demo complete")
