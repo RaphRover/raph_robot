@@ -41,7 +41,10 @@ from rich.text import Text
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
+    from typing import ParamSpec, TypeVar
 
+    P = ParamSpec("P")
+    R = TypeVar("R")
 
 console = Console(log_path=False, log_time=True)
 
@@ -83,7 +86,7 @@ class _LogLevelColumn(ProgressColumn):
         return Text("INFO".ljust(8), style="logging.level.info")
 
 
-def get_progress(**kwargs: dict) -> Progress:
+def get_progress() -> Progress:
     """Create a Rich Progress instance with the shared console."""
     return Progress(
         _LogTimeColumn(),
@@ -93,7 +96,6 @@ def get_progress(**kwargs: dict) -> Progress:
         TaskProgressColumn(),
         TimeRemainingColumn(),
         console=console,
-        **kwargs,
     )
 
 
@@ -129,20 +131,17 @@ def log_step(
         _log.info(f"{label}... [green]{success_text}[/green] ({elapsed_ms:.0f} ms)")
 
 
-def run_step[**P, R](
+def run_step(
     label: str,
     fn: Callable[P, R],
+    /,
     *args: P.args,
-    success_text: str = "OK",
-    failure_text: str = "FAILED",
     **kwargs: P.kwargs,
 ) -> R:
     """Run a callable within log_step and return its result."""
-    with log_step(
-        label,
-        success_text=success_text,
-        failure_text=failure_text,
-    ):
+    success_text = str(kwargs.pop("success_text", "OK"))
+    failure_text = str(kwargs.pop("failure_text", "FAILED"))
+    with log_step(label, success_text=success_text, failure_text=failure_text):
         return fn(*args, **kwargs)
 
 
