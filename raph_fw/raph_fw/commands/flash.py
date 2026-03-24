@@ -25,6 +25,7 @@ from typing import Protocol
 
 from raph_fw.console import get_choice_prompt, get_logger, log_step
 from raph_fw.resolve import resolve_raphcore_name
+from raph_fw.versions import get_bootloader_version, get_firmware_version
 
 
 class FlashCommand:
@@ -86,16 +87,40 @@ class FlashCommand:
 
         self.logger.info(
             f"Will attempt to flash {'bootloader' if args.bootloader else 'firmware'} binary at: "
-            f"{args.binary_path}"
+            f"{args.binary_path}",
         )
 
-        # Validate the binary path
-        binary_path = Path(args.binary_path)
-        if not binary_path.is_file():
-            self.logger.error(f"Binary file not found: {binary_path.absolute()}")
+        self._validate_binary_path()
+        self._check_binary_version()
+        self._resolve_device_address()
+
+    def _validate_binary_path(self) -> None:
+        """Validate that the binary path exists and is a file."""
+        self.binary_path = Path(self.args.binary_path)
+        if not self.binary_path.is_file():
+            self.logger.error(f"Binary file not found: {self.binary_path.absolute()}")
             sys.exit(1)
 
-        # Resolve the target device's IP address
+    def _check_binary_version(self) -> None:
+        """Check and log the version of the binary being flashed."""
+        try:
+            if self.args.bootloader:
+                with log_step("Checking version of the bootloader binary"):
+                    version = get_bootloader_version(self.binary_path)
+            else:
+                with log_step("Checking version of the firmware binary"):
+                    version = get_firmware_version(self.binary_path)
+        except ValueError:
+            self.logger.exception("Failed to read version from the binary")
+            sys.exit(1)
+        else:
+            self.logger.info(
+                f"{'Bootloader' if self.args.bootloader else 'Firmware'} version to flash: "
+                f"{version}",
+            )
+
+    def _resolve_device_address(self) -> None:
+        """Resolve the target device's IP address."""
         if self.args.address is None:
             try:
                 with log_step(
@@ -110,13 +135,13 @@ class FlashCommand:
                 sys.exit(1)
 
             if len(addresses) > 1:
-                address = get_choice_prompt(
+                self.address = get_choice_prompt(
                     "Multiple RaphCore devices found. Please select the target device:",
                     choices=addresses,
                 )
             else:
-                address = addresses[0]
-                self.logger.info(f"Resolved RaphCore device at {address}")
+                self.address = addresses[0]
+                self.logger.info(f"Resolved RaphCore device at {self.address}")
         else:
-            address = self.args.address
-            self.logger.info(f"Using provided address: {address}")
+            self.address = self.args.address
+            self.logger.info(f"Using provided address: {self.address}")
