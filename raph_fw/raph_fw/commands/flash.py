@@ -23,8 +23,9 @@ import sys
 from pathlib import Path
 from typing import Protocol
 
-from raph_fw.console import get_choice_prompt, get_logger, log_step
+from raph_fw.console import get_choice_prompt, get_confirmation_prompt, get_logger, log_step
 from raph_fw.resolve import resolve_raphcore_name
+from raph_fw.tftp import check_server_alive
 from raph_fw.versions import get_bootloader_version, get_firmware_version
 
 
@@ -95,6 +96,8 @@ class FlashCommand:
         self._resolve_device_address()
         # TODO: Check the version of the currently running firmware/bootloader on the device when
         # this feature is implemented
+        self._discover_flashing_server()
+        self._perform_flash()
 
     def _validate_binary_path(self) -> None:
         """Validate that the binary path exists and is a file."""
@@ -108,10 +111,10 @@ class FlashCommand:
         try:
             if self.args.bootloader:
                 with log_step("Checking version of the bootloader binary"):
-                    version = get_bootloader_version(self.binary_path)
+                    self.version = get_bootloader_version(self.binary_path)
             else:
                 with log_step("Checking version of the firmware binary"):
-                    version = get_firmware_version(self.binary_path)
+                    self.version = get_firmware_version(self.binary_path)
         except ValueError:
             self.logger.exception(
                 "Failed to read version from the binary. Please ensure it's a valid RaphCore "
@@ -121,7 +124,7 @@ class FlashCommand:
         else:
             self.logger.info(
                 f"{'Bootloader' if self.args.bootloader else 'Firmware'} version to flash: "
-                f"{version}",
+                f"{self.version}",
             )
 
         max_size = 224 * 1024 if self.args.bootloader else 800 * 1024
@@ -160,3 +163,31 @@ class FlashCommand:
         else:
             self.address = self.args.address
             self.logger.info(f"Using provided address: {self.address}")
+
+    def _discover_flashing_server(self) -> None:
+        """Check whether the flashing server is reachable on the target device."""
+        try:
+            with log_step("Checking flashing server availability"):
+                check_server_alive(self.address)
+        except TimeoutError:
+            self.logger.warning(
+                "Failed to discover flashing server on the device. "
+                "The robot is either not in recovery mode or the bootloader is too old to support "
+                "flashing protocol discovery. ",
+            )
+            if not get_confirmation_prompt(
+                "Do you want to proceed with flashing anyway? "
+                "This may fail if the server is indeed unreachable.",
+                default=False,
+            ):
+                self.logger.info("Aborting flash command.")
+                sys.exit(0)
+
+    def _perform_flash(self) -> None:
+        """Perform the actual flashing process."""
+        if get_confirmation_prompt(
+            f"Ready to flash {'bootloader' if self.args.bootloader else 'firmware'} version "
+            f"{self.version} to device at {self.address}. Do you want to proceed?",
+            default=True,
+        ):
+            self.logger.info("Starting flashing process...")
