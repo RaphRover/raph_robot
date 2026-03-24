@@ -91,8 +91,10 @@ class FlashCommand:
         )
 
         self._validate_binary_path()
-        self._check_binary_version()
+        self._check_binary_version_and_size()
         self._resolve_device_address()
+        # TODO: Check the version of the currently running firmware/bootloader on the device when
+        # this feature is implemented
 
     def _validate_binary_path(self) -> None:
         """Validate that the binary path exists and is a file."""
@@ -101,7 +103,7 @@ class FlashCommand:
             self.logger.error(f"Binary file not found: {self.binary_path.absolute()}")
             sys.exit(1)
 
-    def _check_binary_version(self) -> None:
+    def _check_binary_version_and_size(self) -> None:
         """Check and log the version of the binary being flashed."""
         try:
             if self.args.bootloader:
@@ -111,13 +113,26 @@ class FlashCommand:
                 with log_step("Checking version of the firmware binary"):
                     version = get_firmware_version(self.binary_path)
         except ValueError:
-            self.logger.exception("Failed to read version from the binary")
+            self.logger.exception(
+                "Failed to read version from the binary. Please ensure it's a valid RaphCore "
+                f"{'bootloader' if self.args.bootloader else 'firmware'} binary.",
+            )
             sys.exit(1)
         else:
             self.logger.info(
                 f"{'Bootloader' if self.args.bootloader else 'Firmware'} version to flash: "
                 f"{version}",
             )
+
+        max_size = 224 * 1024 if self.args.bootloader else 800 * 1024
+        actual_size = self.binary_path.stat().st_size
+        if actual_size > max_size:
+            self.logger.error(
+                f"Binary size {actual_size} bytes exceeds the maximum allowed size of "
+                f"{max_size} bytes for a {'bootloader' if self.args.bootloader else 'firmware'} "
+                "image.",
+            )
+            sys.exit(1)
 
     def _resolve_device_address(self) -> None:
         """Resolve the target device's IP address."""
