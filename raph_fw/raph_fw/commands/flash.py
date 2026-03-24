@@ -19,19 +19,34 @@
 # THE SOFTWARE.
 
 import argparse
+import sys
+from pathlib import Path
+from typing import Protocol
 
-from raph_fw.console import get_logger
+from raph_fw.console import get_choice_prompt, get_logger, log_step
+from raph_fw.resolve import resolve_raphcore_name
 
 
 class FlashCommand:
     """Command to flash firmware onto the RaphCore device."""
+
+    class FlashCommandArgs(Protocol):
+        """Protocol for the arguments expected by FlashCommand."""
+
+        binary_path: str
+        bootloader: bool
+        address: str | None
 
     def __init__(self) -> None:
         """Initialize the FlashCommand."""
         self.logger = get_logger("FlashCommand")
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
-        """Add command-line arguments for the flash command."""
+        """
+        Add command-line arguments for the flash command.
+
+        :param parser: The argument parser to add arguments to.
+        """
         parser.add_argument(
             "binary_path",
             type=str,
@@ -43,12 +58,50 @@ class FlashCommand:
             help="Indicates that the binary is a bootloader image.",
             default=False,
         )
+        parser.add_argument(
+            "--address",
+            action="store",
+            type=str,
+            help=(
+                "The IP address of the RaphCore device to flash. "
+                "If not provided, the command will attempt to auto-detect the device."
+            ),
+        )
 
-    def main(self, args: argparse.Namespace) -> None:
-        """Execute the flashing process."""
-        binary_path = args.binary_path
-        is_bootloader = args.bootloader
+    def main(self, args: FlashCommandArgs) -> None:
+        """
+        Execute the flashing process.
 
-        self.logger.info("Flashing binary: %s", binary_path)
-        if is_bootloader:
-            self.logger.info("Flashing bootloader image.")
+        :param args: Parsed command-line arguments.
+        """
+        self.args = args
+
+        binary_path = Path(args.binary_path)
+        if not binary_path.is_file():
+            self.logger.error(f"Binary file not found: {binary_path.absolute()}")
+            sys.exit(1)
+
+        if self.args.address is None:
+            try:
+                with log_step(
+                    "No address provided, attempting to resolve RaphCore device on the network",
+                ):
+                    addresses = resolve_raphcore_name()
+            except TimeoutError:
+                self.logger.exception(
+                    "Failed to resolve RaphCore device on the network. "
+                    "Please ensure the device is powered on and connected to the same network.",
+                )
+                sys.exit(1)
+
+            if len(addresses) > 1:
+                address = get_choice_prompt(
+                    "Multiple RaphCore devices found. Please select the target device:",
+                    choices=addresses,
+                )
+            else:
+                address = addresses[0]
+                self.logger.info(f"Resolved RaphCore device at {address}")
+        else:
+            address = self.args.address
+            self.logger.info(f"Using provided address: {address}")
