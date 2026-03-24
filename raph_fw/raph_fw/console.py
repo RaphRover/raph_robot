@@ -37,7 +37,7 @@ from rich.progress import (
     TextColumn,
     TimeRemainingColumn,
 )
-from rich.prompt import Confirm
+from rich.prompt import Confirm, IntPrompt
 from rich.text import Text
 
 if TYPE_CHECKING:
@@ -91,6 +91,16 @@ class _LogLevelColumn(ProgressColumn):
         return Text("INFO".ljust(8), style="logging.level.info")
 
 
+def _get_log_prefix() -> Text:
+    """Get the standard log message prefix (timestamp and level) as Text."""
+    return Text.assemble(
+        (datetime.now(tz=UTC).astimezone().strftime("[%X]"), "log.time"),
+        " ",
+        ("INFO    ", "logging.level.info"),
+        " ",
+    )
+
+
 def get_progress() -> Progress:
     """Create a Rich Progress instance with the shared console."""
     return Progress(
@@ -119,14 +129,7 @@ def log_step(
     """
     start = time.perf_counter()
 
-    pending = Text.assemble(
-        (datetime.now(tz=UTC).astimezone().strftime("[%X]"), "log.time"),
-        " ",
-        ("INFO    ", "logging.level.info"),
-        " ",
-        f"{label}...",
-    )
-    live = Live(pending, console=console, transient=True)
+    live = Live(Text.assemble(_get_log_prefix(), f"{label}..."), console=console, transient=True)
     live.start()
 
     try:
@@ -172,14 +175,37 @@ def get_confirmation_prompt(prompt: str, *, default: bool = False) -> bool:
     :param prompt: The question to display.
     :param default: The default answer when the user presses Enter.
     """
-    log_prompt = Text.assemble(
-        (datetime.now(tz=UTC).astimezone().strftime("[%X]"), "log.time"),
-        " ",
-        ("INFO    ", "logging.level.info"),
-        " ",
-        prompt,
+    return Confirm.ask(Text.assemble(_get_log_prefix(), prompt), default=default, console=console)
+
+
+def get_choice_prompt(prompt: str, choices: list[str], *, default: str | None = None) -> str:
+    """
+    Display a numbered multiple-choice prompt styled consistently with logging output.
+
+    :param prompt: The question to display above the choices.
+    :param choices: The list of options the user can pick from.
+    :param default: The default choice if the user presses Enter, or ``None``
+        for no default.
+    :returns: The selected choice string.
+    """
+    prefix = _get_log_prefix()
+    console.print(Text.assemble(prefix, prompt), end="\n")
+    default_idx: int | None = None
+    for i, choice in enumerate(choices, 1):
+        console.print(" " * len(prefix), f"  {i}. {choice}", end="\n")
+        if choice == default:
+            default_idx = i
+    index = IntPrompt.ask(
+        Text.assemble(" " * len(prefix), "Choice"),
+        default=default_idx,
+        console=console,
     )
-    return Confirm.ask(log_prompt, default=default, console=console)
+    while index is None or index < 1 or index > len(choices):
+        index = IntPrompt.ask(
+            Text.assemble(_get_log_prefix(), f"Please enter 1-{len(choices)}"),
+            console=console,
+        )
+    return choices[index - 1]
 
 
 if __name__ == "__main__":
@@ -216,5 +242,12 @@ if __name__ == "__main__":
         log.info("User confirmed")
     else:
         log.info("User declined")
+
+    selected = get_choice_prompt(
+        "Select a device:",
+        ["RaphCore v1", "RaphCore v2", "RaphCore v3"],
+        default="RaphCore v2",
+    )
+    log.info(f"Selected: {selected}")
 
     log.info("Demo complete")
