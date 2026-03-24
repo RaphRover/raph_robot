@@ -36,12 +36,10 @@ def get_bootloader_version(path: Path) -> str:
     Reads the BootloaderInfoHeader at offset 0x400, validates the magic
     value and CRC32, then returns the human-readable version string.
 
-    Raises
-    ------
-    ValueError
-        If the file is too small, the magic is invalid,
+    :param path: Path to the bootloader binary file.
+    :returns: The human-readable version string.
+    :raises ValueError: If the file is too small, the magic is invalid,
         or the CRC32 check fails.
-
     """
     data = path.read_bytes()
 
@@ -96,11 +94,9 @@ def get_firmware_version(path: Path) -> str:
     Scans the binary for the ``__FW_VER__:`` marker and returns the
     null-terminated version string that follows it.
 
-    Raises
-    ------
-    ValueError
-        If the version marker is not found in the file.
-
+    :param path: Path to the firmware binary file.
+    :returns: The human-readable version string.
+    :raises ValueError: If the version marker is not found in the file.
     """
     data = path.read_bytes()
     idx = data.find(_FW_VERSION_PREFIX)

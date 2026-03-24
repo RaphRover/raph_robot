@@ -66,7 +66,11 @@ logging.basicConfig(
 
 
 def get_logger(name: str = "raph_fw") -> logging.Logger:
-    """Get a logger that uses the shared Rich console."""
+    """
+    Get a logger that uses the shared Rich console.
+
+    :param name: The logger name.
+    """
     return logging.getLogger(name)
 
 
@@ -106,7 +110,13 @@ def log_step(
     success_text: str = "OK",
     failure_text: str = "FAILED",
 ) -> Generator[None, None, None]:
-    """Render a CMake-style step line and emit a log record once finished."""
+    """
+    Render a CMake-style step line and emit a log record once finished.
+
+    :param label: The description text shown while the step is in progress.
+    :param success_text: Text shown when the step completes successfully.
+    :param failure_text: Text shown when the step raises an exception.
+    """
     start = time.perf_counter()
 
     pending = Text.assemble(
@@ -139,7 +149,16 @@ def run_step(
     *args: P.args,
     **kwargs: P.kwargs,
 ) -> R:
-    """Run a callable within log_step and return its result."""
+    """
+    Run a callable within log_step and return its result.
+
+    :param label: The description text shown while the step is in progress.
+    :param fn: The callable to execute.
+    :param args: Positional arguments forwarded to *fn*.
+    :param kwargs: Keyword arguments forwarded to *fn*. The special keys
+        ``success_text`` and ``failure_text`` are extracted and passed
+        to :func:`log_step` instead.
+    """
     success_text = str(kwargs.pop("success_text", "OK"))
     failure_text = str(kwargs.pop("failure_text", "FAILED"))
     with log_step(label, success_text=success_text, failure_text=failure_text):
@@ -147,7 +166,12 @@ def run_step(
 
 
 def get_confirmation_prompt(prompt: str, *, default: bool = False) -> bool:
-    """Display a confirmation prompt styled consistently with logging output."""
+    """
+    Display a confirmation prompt styled consistently with logging output.
+
+    :param prompt: The question to display.
+    :param default: The default answer when the user presses Enter.
+    """
     log_prompt = Text.assemble(
         (datetime.now(tz=UTC).astimezone().strftime("[%X]"), "log.time"),
         " ",
