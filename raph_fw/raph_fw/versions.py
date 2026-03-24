@@ -25,11 +25,8 @@ import zlib
 from pathlib import Path
 
 _BOOTLOADER_INFO_OFFSET = 0x400
-_BOOTLOADER_INFO_HEADER_SIZE = 68
 _BOOTLOADER_MAGIC = 0x424F4F54  # 'BOOT'
 _MAX_VERSION_STRING_SIZE = 51  # 50 chars + null terminator
-
-_HEADER_FMT = "<IBH I 51s 2s I"
 
 
 def get_bootloader_version(path: Path) -> str:
@@ -48,22 +45,17 @@ def get_bootloader_version(path: Path) -> str:
     """
     data = path.read_bytes()
 
-    header_end = _BOOTLOADER_INFO_OFFSET + _BOOTLOADER_INFO_HEADER_SIZE
-    if len(data) < header_end:
-        msg = f"File too small: expected at least {header_end} bytes, got {len(data)}"
+    # Read the fixed-position fields: magic (4) + header_version (1) + header_size (2)
+    min_end = _BOOTLOADER_INFO_OFFSET + 7
+    if len(data) < min_end:
+        msg = f"File too small: expected at least {min_end} bytes, got {len(data)}"
         raise ValueError(msg)
 
-    header_bytes = data[_BOOTLOADER_INFO_OFFSET:header_end]
-
-    (
-        magic,
-        _header_version,
-        _header_size,
-        _version_id,
-        version_string_raw,
-        _padding,
-        crc32_stored,
-    ) = struct.unpack(_HEADER_FMT, header_bytes)
+    magic, _header_version, header_size = struct.unpack_from(
+        "<IBH",
+        data,
+        _BOOTLOADER_INFO_OFFSET,
+    )
 
     if magic != _BOOTLOADER_MAGIC:
         msg = (
@@ -71,6 +63,15 @@ def get_bootloader_version(path: Path) -> str:
         )
         raise ValueError(msg)
 
+    header_end = _BOOTLOADER_INFO_OFFSET + header_size
+    if len(data) < header_end:
+        msg = f"File too small: expected at least {header_end} bytes, got {len(data)}"
+        raise ValueError(msg)
+
+    header_bytes = data[_BOOTLOADER_INFO_OFFSET:header_end]
+
+    # CRC32 is stored in the last 4 bytes of the header
+    crc32_stored = struct.unpack_from("<I", header_bytes, len(header_bytes) - 4)[0]
     crc32_computed = zlib.crc32(header_bytes[:-4]) & 0xFFFFFFFF
     if crc32_computed != crc32_stored:
         msg = (
@@ -79,6 +80,9 @@ def get_bootloader_version(path: Path) -> str:
         )
         raise ValueError(msg)
 
+    # version_string starts at offset 11 within the header (after magic+version+size+version_id)
+    version_offset = 4 + 1 + 2 + 4  # 11
+    version_string_raw = header_bytes[version_offset : version_offset + _MAX_VERSION_STRING_SIZE]
     return version_string_raw.split(b"\x00", 1)[0].decode("ascii")
 
 
