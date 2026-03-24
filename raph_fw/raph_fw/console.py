@@ -18,13 +18,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+from __future__ import annotations
 
-import contextlib
 import logging
-import time
-from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.live import Live
@@ -38,6 +37,10 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 from rich.text import Text
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Generator
+
 
 console = Console(log_path=False, log_time=True)
 
@@ -143,6 +146,9 @@ def run_step[**P, R](
 
 
 if __name__ == "__main__":
+    import contextlib
+    import time
+
     log = get_logger()
     log.info("Starting console helper demo")
 
