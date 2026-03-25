@@ -220,6 +220,13 @@ class FlashCommand:
                     exc_info=True,
                 )
                 sys.exit(1)
+            except OSError:
+                self.logger.critical(
+                    "Flashing failed due to an OS error. "
+                    "This may indicate a network issue or a problem with the TFTP client.",
+                    exc_info=True,
+                )
+                sys.exit(1)
             else:
                 self.logger.info(
                     "Flashing completed successfully. "
