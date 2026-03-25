@@ -2,6 +2,11 @@
 Changelog for package raph_robot
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* feat: Add ruff and pre-commit config (`#9 <https://github.com/Rapha-Rover/rapha_robot/issues/9>`_)
+* Contributors: Błażej Sowa
+
 1.0.0 (2025-12-08)
 ------------------
 * Change all names to Raph (`#4 <https://github.com/Rapha-Rover/rapha_robot/issues/4>`_)
