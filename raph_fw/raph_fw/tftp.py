@@ -110,7 +110,11 @@ def _send_packet_and_wait_for_ack(
             if opcode == OpCode.ERROR.value:
                 error_code = struct.unpack("!H", data[2:4])[0]
                 error_message = data[4:-1].decode("ascii")
-                raise TFTPError(ErrorCode(error_code), error_message)
+                try:
+                    tftp_error = ErrorCode(error_code)
+                except ValueError:
+                    tftp_error = ErrorCode.NOT_DEFINED
+                raise TFTPError(tftp_error, error_message)
             # Ignore packets with unexpected opcodes and keep waiting
             continue
         except TimeoutError:
