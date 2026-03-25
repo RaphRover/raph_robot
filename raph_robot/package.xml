@@ -15,6 +15,8 @@
 
   <exec_depend>raph</exec_depend>
   <exec_depend>raph_bringup</exec_depend>
+  <exec_depend>raph_fw</exec_depend>
+  <exec_depend>raph_oak</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_cmake_lint_cmake</test_depend>
