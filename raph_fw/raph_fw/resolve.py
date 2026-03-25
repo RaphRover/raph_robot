@@ -27,7 +27,7 @@ from raph_fw.console import get_logger, log_step
 
 # ruff: noqa: SLF001
 
-_RAPHCORE_MDSN_NAME = "raphcore.local."
+_RAPHCORE_MDNS_NAME = "raphcore.local."
 
 
 def resolve_raphcore_name(timeout: float = 2.0) -> list[str]:
@@ -44,7 +44,7 @@ def resolve_raphcore_name(timeout: float = 2.0) -> list[str]:
         out = DNSOutgoing(const._FLAGS_QR_QUERY)
 
         # 2. Add ONLY the A-record question
-        question = DNSQuestion(_RAPHCORE_MDSN_NAME, const._TYPE_A, const._CLASS_IN)
+        question = DNSQuestion(_RAPHCORE_MDNS_NAME, const._TYPE_A, const._CLASS_IN)
         out.add_question(question)
 
         # 3. Send the packet
@@ -55,7 +55,7 @@ def resolve_raphcore_name(timeout: float = 2.0) -> list[str]:
 
         # 5. Collect all cached A-record answers
         cached_entries = zc.cache.get_all_by_details(
-            _RAPHCORE_MDSN_NAME,
+            _RAPHCORE_MDNS_NAME,
             const._TYPE_A,
             const._CLASS_IN,
         )
@@ -71,9 +71,9 @@ if __name__ == "__main__":
     logger = get_logger("resolve_raphcore_name")
 
     try:
-        with log_step(f"Resolving {_RAPHCORE_MDSN_NAME} to IP address"):
+        with log_step(f"Resolving {_RAPHCORE_MDNS_NAME} to IP address"):
             result = resolve_raphcore_name()
     except TimeoutError:
-        logger.warning(f"Failed to resolve {_RAPHCORE_MDSN_NAME} within timeout")
+        logger.warning(f"Failed to resolve {_RAPHCORE_MDNS_NAME} within timeout")
     else:
-        logger.info(f"Resolved {_RAPHCORE_MDSN_NAME} to: {result}")
+        logger.info(f"Resolved {_RAPHCORE_MDNS_NAME} to: {result}")
