@@ -77,6 +77,10 @@ ignore = [
     "D203", # incorrect-blank-line-before-class
     "D212", # multi-line-summary-first-line
 
+    # Allow missing docstrings in public modules or packages
+    "D100",
+    "D104",
+
     # Pylint "too-many" errors
     "PLR0911",
     "PLR0912",
@@ -87,6 +91,8 @@ ignore = [
     "PLR0917",
 
     "PLR2004", # magic-value-comparison
+
+    "UP047", # non-pep695-generic-function, mypy doesn't support this yet
 ]
 
 mccabe.max-complexity = 10
