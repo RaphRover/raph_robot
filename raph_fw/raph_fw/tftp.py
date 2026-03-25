@@ -26,6 +26,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 BOOTLOADER_FILE = "bootloader"
@@ -136,15 +137,22 @@ def write_binary(
     timeout: float = 3.0,
     retries: int = 3,
     port: int = 69,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> None:
     """
     Write a binary file to the target device using TFTP.
 
+    :param progress_callback: Optional callback invoked after each block is acknowledged.
+        Called with (bytes_sent, total_bytes).
     :raises TimeoutError: If the server does not respond within the timeout period.
     :raises TFTPError: If a TFTP error is received during the transfer.
     """
     filename = BOOTLOADER_FILE if is_bootloader else FIRMWARE_FILE
     file_data = path.read_bytes()
+    total_bytes = len(file_data)
+
+    if progress_callback is not None:
+        progress_callback(0, total_bytes)
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(timeout)
@@ -163,9 +171,10 @@ def write_binary(
                 f"Expected ACK for block 0, got ACK for block {block_number}",
             )
 
-        for file_index in range(0, len(file_data) + 1, 512):
+        bytes_sent = 0
+        for file_index in range(0, total_bytes + 1, 512):
             block_number = block_number + 1
-            chunk_size = min(512, len(file_data) - file_index)
+            chunk_size = min(512, total_bytes - file_index)
             data_chunk = file_data[file_index : file_index + chunk_size]
 
             ack_block_number = _send_packet_and_wait_for_ack(
@@ -180,5 +189,9 @@ def write_binary(
                     ErrorCode.ILLEGAL_OPERATION,
                     f"Expected ACK for block {block_number}, got ACK for block {ack_block_number}",
                 )
+
+            bytes_sent += chunk_size
+            if progress_callback is not None:
+                progress_callback(bytes_sent, total_bytes)
     finally:
         s.close()

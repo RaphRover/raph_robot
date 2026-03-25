@@ -23,7 +23,13 @@ import sys
 from pathlib import Path
 from typing import Protocol
 
-from raph_fw.console import get_choice_prompt, get_confirmation_prompt, get_logger, log_step
+from raph_fw.console import (
+    get_choice_prompt,
+    get_confirmation_prompt,
+    get_logger,
+    get_progress,
+    log_step,
+)
 from raph_fw.resolve import resolve_raphcore_name
 from raph_fw.tftp import TFTPError, check_server_alive, write_binary
 from raph_fw.versions import get_bootloader_version, get_firmware_version
@@ -192,11 +198,18 @@ class FlashCommand:
         ):
             self.logger.info("Starting flashing process...")
             try:
-                write_binary(
-                    self.address,
-                    self.binary_path,
-                    is_bootloader=self.args.bootloader,
-                )
+                with get_progress() as progress:
+                    task = progress.add_task("Flashing", total=None)
+
+                    def _on_progress(bytes_sent: int, total_bytes: int) -> None:
+                        progress.update(task, total=total_bytes, completed=bytes_sent, refresh=True)
+
+                    write_binary(
+                        self.address,
+                        self.binary_path,
+                        is_bootloader=self.args.bootloader,
+                        progress_callback=_on_progress,
+                    )
             except TFTPError:
                 self.logger.critical("Flashing failed with a TFTP error.", exc_info=True)
                 sys.exit(1)
