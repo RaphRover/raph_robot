@@ -111,6 +111,8 @@ def _send_packet_and_wait_for_ack(
                 error_code = struct.unpack("!H", data[2:4])[0]
                 error_message = data[4:-1].decode("ascii")
                 raise TFTPError(ErrorCode(error_code), error_message)
+            # Ignore packets with unexpected opcodes and keep waiting
+            continue
         except TimeoutError:
             if attempt < retries - 1:
                 continue
