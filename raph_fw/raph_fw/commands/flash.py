@@ -25,7 +25,7 @@ from typing import Protocol
 
 from raph_fw.console import get_choice_prompt, get_confirmation_prompt, get_logger, log_step
 from raph_fw.resolve import resolve_raphcore_name
-from raph_fw.tftp import check_server_alive
+from raph_fw.tftp import TFTPError, check_server_alive, write_binary
 from raph_fw.versions import get_bootloader_version, get_firmware_version
 
 
@@ -147,7 +147,7 @@ class FlashCommand:
                     addresses = resolve_raphcore_name()
             except TimeoutError:
                 self.logger.exception(
-                    "Failed to resolve RaphCore device on the network. "
+                    "Failed to resolve address of a RaphCore device on the network. "
                     "Please ensure the device is powered on and connected to the same network.",
                 )
                 sys.exit(1)
@@ -191,3 +191,24 @@ class FlashCommand:
             default=True,
         ):
             self.logger.info("Starting flashing process...")
+            try:
+                write_binary(
+                    self.address,
+                    self.binary_path,
+                    is_bootloader=self.args.bootloader,
+                )
+            except TFTPError:
+                self.logger.critical("Flashing failed with a TFTP error.", exc_info=True)
+                sys.exit(1)
+            except TimeoutError:
+                self.logger.critical(
+                    "Flashing failed due to a timeout. "
+                    "The device may have become unresponsive during the flashing process.",
+                    exc_info=True,
+                )
+                sys.exit(1)
+            else:
+                self.logger.info(
+                    "Flashing completed successfully. "
+                    "Please power cycle the device to apply the update.",
+                )
