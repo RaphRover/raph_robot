@@ -27,4 +27,6 @@
 
   <include file="$(find-pkg-share raph_bringup)/launch/ui.launch.xml" />
 
+  <node pkg="raph_bringup" exec="pds_pipe_guide" />
+
 </launch>

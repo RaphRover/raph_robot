@@ -12,6 +12,8 @@ install(
 
 install(
   PROGRAMS
+    scripts/pds_pipe_guide.py
+    scripts/pds_pipe_guide
     scripts/raph_system.py
     scripts/raph_system
   DESTINATION lib/${PROJECT_NAME}
