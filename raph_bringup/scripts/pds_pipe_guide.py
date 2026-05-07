@@ -8,6 +8,7 @@ import rclpy
 from ackermann_msgs.msg import AckermannDrive
 from rcl_interfaces.msg import FloatingPointRange, ParameterDescriptor
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Imu
 
 
@@ -64,7 +65,7 @@ class PDSPipeGuide(Node):
             Imu,
             "controller/imu/data",
             self._imu_callback,
-            10,
+            qos_profile=qos_profile_sensor_data,
         )
         self.cmd_sub = self.create_subscription(
             AckermannDrive,
