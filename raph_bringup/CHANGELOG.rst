@@ -2,8 +2,8 @@
 Changelog for package raph_bringup
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.1.2 (2026-06-12)
+------------------
 * fix: Remove rosbridge parameters that will break (`#12 <https://github.com/Rapha-Rover/rapha_robot/issues/12>`_)
 * Contributors: Błażej Sowa
 
