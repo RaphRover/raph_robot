@@ -22,6 +22,18 @@ install(
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+
+  option(ENABLE_CLANG_TIDY "Enable ament_clang_tidy test" OFF)
+  if(ENABLE_CLANG_TIDY)
+    include(ProcessorCount)
+    processorcount(N)
+    set(ament_cmake_clang_tidy_JOBS ${N})
+  else()
+    list(APPEND AMENT_LINT_AUTO_EXCLUDE
+      ament_cmake_clang_tidy
+    )
+  endif()
+
   ament_lint_auto_find_test_dependencies()
 endif()
 
