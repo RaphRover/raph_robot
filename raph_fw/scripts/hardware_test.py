@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # Copyright 2026 Fictionlab sp. z o.o.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,12 +20,24 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from .flash import FlashCommand
-from .hardware_test import HardwareTestCommand
-from .update import UpdateCommand
+"""A script for testing Raph robot hardware."""
 
-__all__ = [
-    "FlashCommand",
-    "HardwareTestCommand",
-    "UpdateCommand",
-]
+import argparse
+
+from raph_fw.commands import HardwareTestCommand
+
+
+def main() -> None:
+    """Execute the hardware test process."""
+    parser = argparse.ArgumentParser(
+        description="Test Raph robot hardware.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    hardware_test_command = HardwareTestCommand()
+    hardware_test_command.add_arguments(parser)
+    args = parser.parse_args()
+    hardware_test_command.main(args)
+
+
+if __name__ == "__main__":
+    main()
