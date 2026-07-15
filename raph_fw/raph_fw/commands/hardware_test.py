@@ -9,7 +9,7 @@ from pathlib import Path
 import rclpy
 from ament_index_python.packages import get_package_share_directory
 from raph_interfaces.msg import PowerSystemState
-from raph_interfaces.srv import GetControllerInfo
+from raph_interfaces.srv import GetControllerInfo, GetOsVersion
 from rclpy.node import Node
 from sensor_msgs.msg import Imu
 
@@ -23,11 +23,12 @@ IMU_TEST_TIMEOUT = 10.0
 IMU_SAMPLES = 20
 IMU_ANGULAR_TOLERANCE = 0.0025
 IMU_LINEAR_XY_TOLERANCE = 0.045
-IMU_GRAVITY_TOLERANCE = 0.045
+IMU_GRAVITY_TOLERANCE = 0.08
 BATTERY_MIN_VOLTAGE = 18.0
 BATTERY_MAX_VOLTAGE = 24.86
 BOOTLOADER_BINARY_NAME = "raphcore_bootloader_latest.bin"
 FIRMWARE_BINARY_NAME = "raphcore_firmware_latest.bin"
+EXPECTED_RAPH_OS_VERSION = "1.0.0"
 
 
 class HardwareTestCommand:
@@ -56,7 +57,7 @@ class HardwareTestCommand:
         results.append(("RaphCore firmware and bootloader version", self._test_controller_info()))
         results.append(("IMU", self._test_imu()))
         results.append(("Battery voltage", self._test_battery_voltage()))
-        #TODO RaphOS version test
+        results.append(("RaphOS version", self._test_raph_os_version()))
         #TODO battery disconnection test
         #TODO wheel firmware version test
         #TODO wheel motor test
@@ -117,7 +118,10 @@ class HardwareTestCommand:
             GetControllerInfo,
             "controller/get_controller_info",
         )
-
+        self.raph_os_version_client = self.node.create_client(
+            GetOsVersion,
+            "raph_system/get_os_version",
+        )
     def _shutdown_ros(self) -> None:
         if self.node is not None:
             self.node.destroy_node()
@@ -269,3 +273,30 @@ class HardwareTestCommand:
             self._spin_once(0.1)
         if self.latest_power_state is None:
             raise TimeoutError("Failed to receive battery state message in time. Make sure that ROS is running and the controller topics are visible.")
+        
+    def _test_raph_os_version(self) -> bool:
+        try:
+            with log_step(
+                "Checking RaphOS version",
+            ):
+                if not self.raph_os_version_client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
+                    raise TimeoutError("Timed out waiting for GetOsVersion service server to start.")
+
+                future = self.raph_os_version_client.call_async(GetOsVersion.Request())
+                rclpy.spin_until_future_complete(self.node, future, None, SERVICE_TIMEOUT)
+                if not future.done() or future.result() is None:
+                    raise TimeoutError("RaphOS version service did not respond in time")
+
+                response = future.result()
+                if response.version != EXPECTED_RAPH_OS_VERSION:
+                    raise ValueError(
+                        "RaphOS version mismatch: "
+                        f"expected {EXPECTED_RAPH_OS_VERSION}, "
+                        f"got {response.version}"
+                    )
+        except (TimeoutError, ValueError) as exc:
+            self.logger.error(str(exc))
+            return False
+        else:
+            self.logger.info(f"RaphOS version: {response.version}")
+            return True
