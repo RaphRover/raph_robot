@@ -2,16 +2,15 @@ import argparse
 import math
 import time
 import sys
-from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 
 import rclpy
 from ament_index_python.packages import get_package_share_directory
-from raph_interfaces.msg import PowerSystemState
+from raph_interfaces.msg import MotorDiagnostics, PowerSystemState
 from raph_interfaces.srv import GetControllerInfo, GetOsVersion
 from rclpy.node import Node
 from sensor_msgs.msg import Imu
+from std_srvs.srv import Trigger
 
 from raph_fw.console import get_logger, log_step
 from raph_fw.resolve import resolve_raphcore_name
@@ -26,10 +25,21 @@ IMU_LINEAR_XY_TOLERANCE = 0.05
 IMU_GRAVITY_TOLERANCE = 0.08
 BATTERY_MIN_VOLTAGE = 18.0
 BATTERY_MAX_VOLTAGE = 24.86
+MOTOR_DIAGNOSTIC_SAMPLES = 10
+MOTOR_DIAGNOSTIC_TIMEOUT = 10.0
 BOOTLOADER_BINARY_NAME = "raphcore_bootloader_latest.bin"
 FIRMWARE_BINARY_NAME = "raphcore_firmware_latest.bin"
 EXPECTED_RAPH_OS_VERSION = "1.0.0"
 EXPECTED_MOTOR_FIRMWARE = "hw34 sw3.3 24.06.03"
+#TODO: currently this is the wrong order but it needs to be fixed in the msg or the firmware
+MOTOR_NAMES = (
+    "rear left wheel",
+    "rear right wheel",
+    "right servo",
+    "left servo",
+    "front left wheel",
+    "front right wheel",
+)
 MOTOR_FIRMWARE_KEYS = (
     "wheel_rl_firmware",
     "wheel_rr_firmware",
@@ -49,6 +59,8 @@ class HardwareTestCommand:
         self.latest_imu: Imu | None = None
         self.new_imu_received: bool = False
         self.latest_power_state: PowerSystemState | None = None
+        self.latest_motor_diagnostics: MotorDiagnostics | None = None
+        self.new_motor_diagnostics_received: bool = False
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
         """Add command-line arguments for the hardware test command."""
@@ -67,7 +79,7 @@ class HardwareTestCommand:
         results.append(("IMU", self._test_imu()))
         results.append(("Battery voltage", self._test_battery_voltage()))
         results.append(("RaphOS version", self._test_raph_os_version()))
-        #TODO wheel motor test
+        results.append(("Motor diagnostics and servo calibration", self._test_motors()))
 
         self._shutdown_ros()
         self._parse_results(results)
@@ -121,9 +133,19 @@ class HardwareTestCommand:
             self._power_system_state_callback,
             qos_profile,
         )
+        self.motor_diagnostics_sub = self.node.create_subscription(
+            MotorDiagnostics,
+            "controller/diagnostics/motors",
+            self._motor_diagnostics_callback,
+            qos_profile,
+        )
         self.controller_info_client = self.node.create_client(
             GetControllerInfo,
             "controller/get_controller_info",
+        )
+        self.calibrate_servos_client = self.node.create_client(
+            Trigger,
+            "controller/calibrate_servos",
         )
         self.raph_os_version_client = self.node.create_client(
             GetOsVersion,
@@ -142,6 +164,10 @@ class HardwareTestCommand:
 
     def _power_system_state_callback(self, msg: PowerSystemState) -> None:
         self.latest_power_state = msg
+
+    def _motor_diagnostics_callback(self, msg: MotorDiagnostics) -> None:
+        self.latest_motor_diagnostics = msg
+        self.new_motor_diagnostics_received = True
 
     def _spin_once(self, timeout_sec: float) -> None:
         if self.node and rclpy.ok():
@@ -326,3 +352,96 @@ class HardwareTestCommand:
         else:
             self.logger.info(f"RaphOS version: {response.version}")
             return True
+
+    def _test_motors(self) -> bool:
+        try:
+            with log_step("Checking motor diagnostics and calibrating servos"):
+                pre_calibration_samples = self._collect_motor_diagnostics_samples(
+                    MOTOR_DIAGNOSTIC_SAMPLES,
+                    MOTOR_DIAGNOSTIC_TIMEOUT,
+                )
+                self._validate_motor_diagnostics_samples(
+                    pre_calibration_samples,
+                    "before servo calibration",
+                )
+
+                if not self.calibrate_servos_client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
+                    raise TimeoutError("Timed out waiting for calibrate_servos service server to start.")
+
+                calibration_future = self.calibrate_servos_client.call_async(Trigger.Request())
+                rclpy.spin_until_future_complete(self.node, calibration_future, None, SERVICE_TIMEOUT)
+                if not calibration_future.done() or calibration_future.result() is None:
+                    raise TimeoutError("Servo calibration service did not respond in time")
+
+                calibration_response = calibration_future.result()
+                if not calibration_response.success:
+                    raise ValueError(f"Servo calibration failed: {calibration_response.message}")
+
+                post_calibration_samples = self._collect_motor_diagnostics_samples(
+                    MOTOR_DIAGNOSTIC_SAMPLES,
+                    MOTOR_DIAGNOSTIC_TIMEOUT,
+                )
+                self._validate_motor_diagnostics_samples(
+                    post_calibration_samples,
+                    "after servo calibration",
+                )
+        except (TimeoutError, ValueError) as exc:
+            self.logger.error(str(exc))
+            return False
+        return True
+
+    def _collect_motor_diagnostics_samples(
+        self,
+        sample_count: int,
+        timeout_sec: float,
+    ) -> list[MotorDiagnostics]:
+        deadline = time.monotonic() + timeout_sec
+        samples: list[MotorDiagnostics] = []
+
+        while len(samples) < sample_count and time.monotonic() < deadline:
+            self._spin_once(0.1)
+            if self.latest_motor_diagnostics is None or not self.new_motor_diagnostics_received:
+                continue
+            samples.append(self.latest_motor_diagnostics)
+            self.new_motor_diagnostics_received = False
+
+        if len(samples) < sample_count:
+            raise TimeoutError(
+                "Timed out waiting for motor diagnostics messages: "
+                f"received {len(samples)}/{sample_count} different messages"
+            )
+        return samples
+
+    def _validate_motor_diagnostics_samples(
+        self,
+        samples: list[MotorDiagnostics],
+        stage: str,
+    ) -> None:
+
+        active_fault_mask_by_motor: dict[str, int] = {}
+        communication_fault_active_by_motor: set[str] = set()
+
+        for sample in samples:
+            for motor_index, motor_name in enumerate(MOTOR_NAMES):
+                active_mask = sample.fault_mask_active[motor_index]
+                comm_active = sample.communication_fault_active[motor_index]
+
+                if active_mask != 0:
+                    active_fault_mask_by_motor[motor_name] = (
+                        active_fault_mask_by_motor.get(motor_name, 0) | active_mask
+                    )
+                if comm_active:
+                    communication_fault_active_by_motor.add(motor_name)
+
+        faults: list[str] = []
+        for motor_name in MOTOR_NAMES:
+            active_mask = active_fault_mask_by_motor.get(motor_name, 0)
+            comm_active = motor_name in communication_fault_active_by_motor
+
+            if active_mask != 0:
+                faults.append(f"{motor_name} has active motor fault mask {active_mask}")
+            if comm_active:
+                faults.append(f"{motor_name} has active communication fault")
+
+        if faults:
+            raise ValueError(f"Motor diagnostics check failed {stage}: " + "; ".join(faults))
