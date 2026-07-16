@@ -89,7 +89,6 @@ class MotorCheckCommand:
             self._calibrate_servos()
             self._run_interactive_loop()
         finally:
-            self._stop_all_motors()
             self._shutdown_ros()
 
     def _setup_ros(self) -> None:
@@ -141,17 +140,10 @@ class MotorCheckCommand:
                 self.logger.error(f"Servo calibration failed: {result.message}")
                 sys.exit(1)
 
-    def _stop_all_motors(self) -> None:
-        """Publish disabled commands to all motors."""
-        for pub in self._wheel_pubs.values():
-            pub.publish(WheelCommand(enabled=False))
-        for pub in self._servo_pubs.values():
-            pub.publish(ServoCommand(enabled=False))
-
-    def _publish_for_duration(self, pub: rclpy.publisher.Publisher, msg: object) -> None:
-        """Publish *msg* on *pub* at PUBLISH_RATE Hz for MOVE_DURATION seconds."""
+    def _publish_for_duration(self, pub: rclpy.publisher.Publisher, msg: object, duration: float) -> None:
+        """Publish *msg* on *pub* at PUBLISH_RATE Hz for *duration* seconds."""
         interval = 1.0 / PUBLISH_RATE
-        deadline = time.monotonic() + MOVE_DURATION
+        deadline = time.monotonic() + duration
         while time.monotonic() < deadline:
             pub.publish(msg)
             time.sleep(interval)
@@ -159,25 +151,23 @@ class MotorCheckCommand:
     def _move_all_motors(self) -> None:
         """Move each motor one by one in sequence."""
         for name, _ in _WHEEL_MOTORS:
-            self._stop_all_motors()
             msg = WheelCommand(
                 enabled=True,
                 target_velocity=WHEEL_TARGET_VELOCITY,
                 acceleration_divider=WHEEL_ACCELERATION_DIVIDER,
             )
             self.logger.info(f"Moving {name} at {WHEEL_TARGET_VELOCITY} rad/s.")
-            self._publish_for_duration(self._wheel_pubs[name], msg)
+            self._publish_for_duration(self._wheel_pubs[name], msg, MOVE_DURATION)
             self._wheel_pubs[name].publish(
                 WheelCommand(
-                    enabled=True,
+                    enabled=False,
                     target_velocity=0.0,
                     acceleration_divider=WHEEL_ACCELERATION_DIVIDER,
                 )
             )
-            self.logger.info(f"Stopping {name}.")
+            self.logger.info(f"Disabling {name}.")
 
         for name, _, target in _SERVO_MOTORS:
-            self._stop_all_motors()
             msg = ServoCommand(
                 enabled=True,
                 target_position=target,
@@ -185,16 +175,13 @@ class MotorCheckCommand:
                 acceleration_divider=SERVO_ACCELERATION_DIVIDER,
             )
             self.logger.info(f"Moving {name} to {target} rad at {SERVO_TARGET_VELOCITY} rad/s.")
-            self._publish_for_duration(self._servo_pubs[name], msg)
-            self._servo_pubs[name].publish(
-                ServoCommand(
-                    enabled=True,
-                    target_position=0.0,
-                    target_velocity=SERVO_TARGET_VELOCITY,
-                    acceleration_divider=SERVO_ACCELERATION_DIVIDER,
-                )
-            )
-            self.logger.info(f"Returning {name} to 0 rad.")
+            self._publish_for_duration(self._servo_pubs[name], msg, MOVE_DURATION / 2)
+            msg.target_position = 0.0
+            self.logger.info(f"Moving {name} to 0 rad at {SERVO_TARGET_VELOCITY} rad/s.")
+            self._publish_for_duration(self._servo_pubs[name], msg, MOVE_DURATION / 2)
+            msg.enabled = False
+            self.logger.info(f"Disabling {name}.")
+            self._servo_pubs[name].publish(msg)
 
     def _run_interactive_loop(self) -> None:
         """Present the motor selection menu and dispatch commands until Exit is chosen."""
@@ -205,9 +192,6 @@ class MotorCheckCommand:
             if choice == _CHOICE_EXIT:
                 break
 
-            # Stop all motors before activating the selected one.
-            self._stop_all_motors()
-
             if choice == _CHOICE_ALL:
                 self._move_all_motors()
             elif choice in self._wheel_pubs:
@@ -217,14 +201,14 @@ class MotorCheckCommand:
                     acceleration_divider=WHEEL_ACCELERATION_DIVIDER,
                 )
                 self.logger.info(f"Moving {choice} at {WHEEL_TARGET_VELOCITY} rad/s.")
-                self._publish_for_duration(self._wheel_pubs[choice], msg)
+                self._publish_for_duration(self._wheel_pubs[choice], msg, MOVE_DURATION)
                 stop_msg = WheelCommand(
-                    enabled=True,
+                    enabled=False,
                     target_velocity=0.0,
                     acceleration_divider=WHEEL_ACCELERATION_DIVIDER,
                 )
                 self._wheel_pubs[choice].publish(stop_msg)
-                self.logger.info(f"Stopping {choice}.")
+                self.logger.info(f"Disabling {choice}.")
             elif choice in self._servo_pubs:
                 target = self._servo_targets[choice]
                 msg = ServoCommand(
@@ -237,12 +221,13 @@ class MotorCheckCommand:
                     f"Moving {choice} to {target} rad "
                     f"at {SERVO_TARGET_VELOCITY} rad/s."
                 )
-                self._publish_for_duration(self._servo_pubs[choice], msg)
-                return_msg = ServoCommand(
-                    enabled=True,
-                    target_position=0.0,
-                    target_velocity=SERVO_TARGET_VELOCITY,
-                    acceleration_divider=SERVO_ACCELERATION_DIVIDER,
+                self._publish_for_duration(self._servo_pubs[choice], msg, MOVE_DURATION / 2)
+                msg.target_position = 0.0
+                self.logger.info(
+                    f"Moving {choice} to 0 rad "
+                    f"at {SERVO_TARGET_VELOCITY} rad/s."
                 )
-                self._servo_pubs[choice].publish(return_msg)
-                self.logger.info(f"Returning {choice} to 0 rad.")
+                self._publish_for_duration(self._servo_pubs[choice], msg, MOVE_DURATION / 2)
+                msg.enabled = False
+                self.logger.info(f"Disabling {choice}.")
+                self._servo_pubs[choice].publish(msg)
