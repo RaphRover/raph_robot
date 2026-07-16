@@ -89,6 +89,7 @@ class HardwareTestCommand:
         :param parser: The argument parser to add arguments to.
         """
         # parser.add_argument("--config", type=str, help="Path to the hardware test config file.")
+        # TODO: figure out what needs to be parametrized for hardware test
         pass
 
     def main(self, args: argparse.Namespace) -> None:

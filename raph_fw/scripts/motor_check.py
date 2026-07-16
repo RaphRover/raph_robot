@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # Copyright 2026 Fictionlab sp. z o.o.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,14 +20,24 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from .flash import FlashCommand
-from .hardware_test import HardwareTestCommand
-from .motor_check import MotorCheckCommand
-from .update import UpdateCommand
+"""A script for interactively checking Raph robot motors."""
 
-__all__ = [
-    "FlashCommand",
-    "HardwareTestCommand",
-    "MotorCheckCommand",
-    "UpdateCommand",
-]
+import argparse
+
+from raph_fw.commands import MotorCheckCommand
+
+
+def main() -> None:
+    """Execute the motor check process."""
+    parser = argparse.ArgumentParser(
+        description="Interactively check Raph robot motors.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    motor_check_command = MotorCheckCommand()
+    motor_check_command.add_arguments(parser)
+    args = parser.parse_args()
+    motor_check_command.main(args)
+
+
+if __name__ == "__main__":
+    main()
