@@ -73,6 +73,7 @@ class HardwareTestCommand:
     """Command to validate basic Raph robot hardware behavior."""
 
     def __init__(self) -> None:
+        """Initialize the HardwareTestCommand."""
         self.logger = get_logger("HardwareTestCommand")
         self.node: Node | None = None
         self.latest_imu: Imu | None = None
@@ -82,12 +83,20 @@ class HardwareTestCommand:
         self.new_motor_diagnostics_received: bool = False
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
-        """Add command-line arguments for the hardware test command."""
+        """
+        Add command-line arguments for the hardware test command.
+
+        :param parser: The argument parser to add arguments to.
+        """
         # parser.add_argument("--config", type=str, help="Path to the hardware test config file.")
         pass
 
     def main(self, args: argparse.Namespace) -> None:
-        """Execute the hardware tests."""
+        """
+        Execute the hardware tests.
+
+        :param args: Parsed command-line arguments.
+        """
         self.logger.info("Starting hardware tests.")
         self._check_raphcore_network()
         self.exit_code = 0
@@ -106,6 +115,11 @@ class HardwareTestCommand:
         sys.exit(self.exit_code)
     
     def _parse_results(self, results: list[tuple[str, bool]]) -> None:
+        """
+        Parse and report the final hardware test results.
+
+        :param results: A list of tuples containing test names and pass/fail status.
+        """
         failed = [result for result in results if not result[1]]
 
         if failed:
@@ -118,6 +132,7 @@ class HardwareTestCommand:
             self.logger.info(f"Hardware test finished successfully. {len(results)} check(s) passed.")
 
     def _check_raphcore_network(self) -> None:
+        """Resolve the RaphCore device on the network and abort on failure."""
         try:
             with log_step(
                 "Attempting to resolve RaphCore on the network",
@@ -134,6 +149,7 @@ class HardwareTestCommand:
             
 
     def _setup_ros(self) -> None:
+        """Initialize ROS, create the node, and register subscriptions and service clients."""
         rclpy.init(args=None)
         self.node = Node("raph_hardware_tester")
 
@@ -171,6 +187,7 @@ class HardwareTestCommand:
             "raph_system/get_os_version",
         )
     def _shutdown_ros(self) -> None:
+        """Destroy the ROS node and shut down rclpy if it is still running."""
         if self.node is not None:
             self.node.destroy_node()
             self.node = None
@@ -189,10 +206,20 @@ class HardwareTestCommand:
         self.new_motor_diagnostics_received = True
 
     def _spin_once(self, timeout_sec: float) -> None:
+        """
+        Spin the ROS node once to process callbacks.
+
+        :param timeout_sec: Maximum time in seconds to wait for one spin iteration.
+        """
         if self.node and rclpy.ok():
             rclpy.spin_once(self.node, timeout_sec=timeout_sec)
 
     def _test_controller_info(self) -> bool:
+        """
+        Validate controller, bootloader, and motor firmware versions.
+
+        :returns: True if all version checks pass, otherwise False.
+        """
         try:
             with log_step("Checking motor firmware, controller firmware and bootloader versions"):
                 if not self.controller_info_client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
@@ -246,6 +273,11 @@ class HardwareTestCommand:
             return True
 
     def _get_expected_controller_versions(self) -> tuple[str, str]:
+        """
+        Read expected bootloader and firmware versions from packaged binaries.
+
+        :returns: A tuple of (bootloader_version, firmware_version).
+        """
         share_dir = Path(get_package_share_directory("raph_fw"))
         bootloader_bin = share_dir / "data" / "bootloader" / BOOTLOADER_BINARY_NAME
         firmware_bin = share_dir / "data" / "firmware" / FIRMWARE_BINARY_NAME
@@ -255,6 +287,11 @@ class HardwareTestCommand:
         )
 
     def _test_imu(self) -> bool:
+        """
+        Validate IMU readings while the robot is stationary.
+
+        :returns: True if all IMU checks pass, otherwise False.
+        """
         try:
             with log_step(f"Validating IMU data"):
                 samples = 0
@@ -301,6 +338,11 @@ class HardwareTestCommand:
         return True
 
     def _test_battery_voltage(self) -> bool:
+        """
+        Validate battery connectivity and voltage ranges.
+
+        :returns: True if battery checks pass, otherwise False.
+        """
         try:
             with log_step(
                 "Checking battery connection and voltage levels",
@@ -339,6 +381,7 @@ class HardwareTestCommand:
         return True
 
     def _wait_for_power_state_message(self) -> None:
+        """Wait for a power system state message until timeout."""
         deadline = time.monotonic() + MESSAGE_TIMEOUT
         while self.latest_power_state is None and time.monotonic() < deadline:
             self._spin_once(0.1)
@@ -346,6 +389,11 @@ class HardwareTestCommand:
             raise TimeoutError("Failed to receive battery state message in time. Make sure that ROS is running and the controller topics are visible.")
         
     def _test_raph_os_version(self) -> bool:
+        """
+        Validate the reported RaphOS version.
+
+        :returns: True if the OS version matches the expected value, otherwise False.
+        """
         try:
             with log_step(
                 "Checking RaphOS version",
@@ -373,6 +421,11 @@ class HardwareTestCommand:
             return True
 
     def _test_motors(self) -> bool:
+        """
+        Validate motor diagnostics before and after servo calibration.
+
+        :returns: True if diagnostics and calibration checks pass, otherwise False.
+        """
         try:
             with log_step("Checking motor diagnostics and calibrating servos"):
                 pre_calibration_samples = self._collect_motor_diagnostics_samples(
@@ -414,6 +467,13 @@ class HardwareTestCommand:
         sample_count: int,
         timeout_sec: float,
     ) -> list[MotorDiagnostics]:
+        """
+        Collect a fixed number of fresh motor diagnostics messages.
+
+        :param sample_count: Number of diagnostics messages to collect.
+        :param timeout_sec: Maximum time in seconds allowed for collection.
+        :returns: A list of collected motor diagnostics messages.
+        """
         deadline = time.monotonic() + timeout_sec
         samples: list[MotorDiagnostics] = []
 
@@ -436,6 +496,12 @@ class HardwareTestCommand:
         samples: list[MotorDiagnostics],
         stage: str,
     ) -> None:
+        """
+        Validate motor diagnostics samples for active motor and communication faults.
+
+        :param samples: Motor diagnostics messages to validate.
+        :param stage: A label describing validation stage used in error messages.
+        """
 
         active_fault_mask_by_motor: dict[str, int] = {}
         communication_fault_active_by_motor: set[str] = set()
