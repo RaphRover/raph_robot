@@ -29,6 +29,15 @@ BATTERY_MAX_VOLTAGE = 24.86
 BOOTLOADER_BINARY_NAME = "raphcore_bootloader_latest.bin"
 FIRMWARE_BINARY_NAME = "raphcore_firmware_latest.bin"
 EXPECTED_RAPH_OS_VERSION = "1.0.0"
+EXPECTED_MOTOR_FIRMWARE = "hw34 sw3.3 24.06.03"
+MOTOR_FIRMWARE_KEYS = (
+    "wheel_rl_firmware",
+    "wheel_rr_firmware",
+    "wheel_fl_firmware",
+    "wheel_fr_firmware",
+    "servo_l_firmware",
+    "servo_r_firmware",
+)
 
 
 class HardwareTestCommand:
@@ -54,12 +63,10 @@ class HardwareTestCommand:
         results: list[tuple[str, bool]] = []
 
         self._setup_ros()
-        results.append(("RaphCore firmware and bootloader version", self._test_controller_info()))
+        results.append(("Motor firmware, RaphCore firmware and bootloader version", self._test_controller_info()))
         results.append(("IMU", self._test_imu()))
         results.append(("Battery voltage", self._test_battery_voltage()))
         results.append(("RaphOS version", self._test_raph_os_version()))
-        #TODO battery disconnection test
-        #TODO wheel firmware version test
         #TODO wheel motor test
 
         self._shutdown_ros()
@@ -72,7 +79,7 @@ class HardwareTestCommand:
 
         if failed:
             self.exit_code = 1
-            failed_names = ", ".join(result[0] for result in failed)
+            failed_names = "; ".join(result[0] for result in failed)
             self.logger.error(
                 f"Hardware test finished with {len(failed)} failing check(s): {failed_names}."
             )
@@ -142,7 +149,7 @@ class HardwareTestCommand:
 
     def _test_controller_info(self) -> bool:
         try:
-            with log_step("Checking controller firmware and bootloader versions"):
+            with log_step("Checking motor firmware, controller firmware and bootloader versions"):
                 if not self.controller_info_client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
                     raise TimeoutError("Timed out waiting for GetControllerInfo service server to start.")
                 expected_bootloader_version, expected_firmware_version = (
@@ -167,11 +174,30 @@ class HardwareTestCommand:
                         f"expected {expected_firmware_version}, "
                         f"got {response.firmware_version}"
                     )
+                extra_info = {kv.key: kv.value for kv in response.extra_information}
+                motor_mismatches: list[str] = []
+                for key in MOTOR_FIRMWARE_KEYS:
+                    actual = extra_info.get(key)
+                    if actual is None:
+                        motor_mismatches.append(f"{key}: missing from response")
+                    elif actual != EXPECTED_MOTOR_FIRMWARE:
+                        motor_mismatches.append(
+                            f"{key}: expected '{EXPECTED_MOTOR_FIRMWARE}', got '{actual}'"
+                        )
+                if motor_mismatches:
+                    raise ValueError(
+                        "Motor firmware version mismatch(es): " + "; ".join(motor_mismatches)
+                    )
+
         except (TimeoutError, ValueError) as exc:
             self.logger.error(str(exc))
             return False
         else:
-            self.logger.info(f"Bootloader version: {response.bootloader_version}, Firmware version: {response.firmware_version}")
+            self.logger.info(
+                f"Bootloader version: {response.bootloader_version}, "
+                f"Firmware version: {response.firmware_version}, "
+                f"Motor firmware (all motors): {EXPECTED_MOTOR_FIRMWARE}"
+            )
             return True
 
     def _get_expected_controller_versions(self) -> tuple[str, str]:
