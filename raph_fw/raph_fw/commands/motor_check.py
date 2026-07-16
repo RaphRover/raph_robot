@@ -68,20 +68,11 @@ class MotorCheckCommand:
         self.logger = get_logger("MotorCheckCommand")
         self.node: Node | None = None
 
-    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
-        """
-        Add command-line arguments for the motor check command.
-
-        :param parser: The argument parser to add arguments to.
-        """
-        #TODO: figure out what needs to be parametrized for motor check
-        pass
-
-    def main(self, args: argparse.Namespace) -> None:
+    def main(self, _: argparse.Namespace) -> None:
         """
         Execute the interactive motor check.
 
-        :param args: Parsed command-line arguments.
+        :param _: Parsed command-line arguments.
         """
         self._setup_ros()
 

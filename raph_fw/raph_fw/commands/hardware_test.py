@@ -19,8 +19,8 @@
 # THE SOFTWARE.
 
 import argparse
-import time
 import sys
+import time
 from pathlib import Path
 
 import rclpy
@@ -82,17 +82,7 @@ class HardwareTestCommand:
         self.latest_motor_diagnostics: MotorDiagnostics | None = None
         self.new_motor_diagnostics_received: bool = False
 
-    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
-        """
-        Add command-line arguments for the hardware test command.
-
-        :param parser: The argument parser to add arguments to.
-        """
-        # parser.add_argument("--config", type=str, help="Path to the hardware test config file.")
-        # TODO: figure out what needs to be parametrized for hardware test
-        pass
-
-    def main(self, args: argparse.Namespace) -> None:
+    def main(self, _: argparse.Namespace) -> None:
         """
         Execute the hardware tests.
 
@@ -104,7 +94,8 @@ class HardwareTestCommand:
         results: list[tuple[str, bool]] = []
 
         self._setup_ros()
-        results.append(("Motor firmware, RaphCore firmware and bootloader version", self._test_controller_info()))
+        results.append(("Motor firmware, RaphCore firmware and bootloader version",
+                        self._test_controller_info()))
         results.append(("IMU", self._test_imu()))
         results.append(("Battery voltage", self._test_battery_voltage()))
         results.append(("RaphOS version", self._test_raph_os_version()))
@@ -114,7 +105,7 @@ class HardwareTestCommand:
         self._parse_results(results)
 
         sys.exit(self.exit_code)
-    
+
     def _parse_results(self, results: list[tuple[str, bool]]) -> None:
         """
         Parse and report the final hardware test results.
@@ -147,7 +138,6 @@ class HardwareTestCommand:
             sys.exit(1)
         if len(addresses) >= 1:
             self.logger.info(f"Resolved RaphCore device at {addresses[0]}")
-            
 
     def _setup_ros(self) -> None:
         """Initialize ROS, create the node, and register subscriptions and service clients."""

@@ -34,7 +34,6 @@ def main() -> None:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     motor_check_command = MotorCheckCommand()
-    motor_check_command.add_arguments(parser)
     args = parser.parse_args()
     motor_check_command.main(args)
 

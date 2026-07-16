@@ -34,7 +34,6 @@ def main() -> None:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     hardware_test_command = HardwareTestCommand()
-    hardware_test_command.add_arguments(parser)
     args = parser.parse_args()
     hardware_test_command.main(args)
 
