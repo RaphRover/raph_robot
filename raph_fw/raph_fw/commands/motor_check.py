@@ -139,7 +139,10 @@ class MotorCheckCommand:
                 sys.exit(1)
 
     def _publish_for_duration(
-        self, pub: rclpy.publisher.Publisher, msg: object, duration: float,
+        self,
+        pub: rclpy.publisher.Publisher,
+        msg: object,
+        duration: float,
     ) -> None:
         """Publish *msg* on *pub* at PUBLISH_RATE Hz for *duration* seconds."""
         interval = 1.0 / PUBLISH_RATE
@@ -218,7 +221,7 @@ class MotorCheckCommand:
                     acceleration_divider=SERVO_ACCELERATION_DIVIDER,
                 )
                 self.logger.info(
-                    f"Moving {choice} to {target} rad at {SERVO_TARGET_VELOCITY} rad/s.",1
+                    f"Moving {choice} to {target} rad at {SERVO_TARGET_VELOCITY} rad/s.",
                 )
                 self._publish_for_duration(self._servo_pubs[choice], msg, MOVE_DURATION / 2)
                 msg.target_position = 0.0

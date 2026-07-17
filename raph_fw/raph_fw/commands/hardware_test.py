@@ -235,10 +235,18 @@ class HardwareTestCommand:
 
                 response = future.result()
                 if response.bootloader_version != expected_bootloader_version:
-                    msg = f"Controller bootloader version mismatch: expected {expected_bootloader_version}, got {response.bootloader_version}"
+                    msg = (
+                        f"Controller bootloader version mismatch: "
+                        f"expected {expected_bootloader_version}, "
+                        f"got {response.bootloader_version}"
+                    )
                     raise ValueError(msg)
                 if response.firmware_version != expected_firmware_version:
-                    msg = f"Controller firmware version mismatch: expected {expected_firmware_version}, got {response.firmware_version}"
+                    msg = (
+                        f"Controller firmware version mismatch: "
+                        f"expected {expected_firmware_version}, "
+                        f"got {response.firmware_version}"
+                    )
                     raise ValueError(msg)
                 extra_info = {kv.key: kv.value for kv in response.extra_information}
                 self._verify_motor_firmware_versions(extra_info)
@@ -255,8 +263,8 @@ class HardwareTestCommand:
                     msg = "Motor firmware version mismatch(es): " + "; ".join(motor_mismatches)
                     raise ValueError(msg)
 
-        except (TimeoutError, ValueError) as exc:
-            self.logger.exception(str(exc))
+        except (TimeoutError, ValueError):
+            self.logger.exception("Controller info test failed")
             return False
         else:
             self.logger.info(
@@ -265,7 +273,7 @@ class HardwareTestCommand:
                 f"Motor firmware (all motors): {EXPECTED_MOTOR_FIRMWARE}",
             )
             return True
-        
+
     def _verify_motor_firmware_versions(self, extra_info: dict[str, str]) -> None:
         """
         Verify that the motor firmware versions match the expected value.
@@ -324,32 +332,51 @@ class HardwareTestCommand:
                         raise TimeoutError(
                             "IMU test timed out before receiving enough valid samples."
                         )
-        except (TimeoutError, ValueError) as exc:
-            self.logger.exception(str(exc))
+        except (TimeoutError, ValueError):
+            self.logger.exception("IMU test failed")
             self.logger.error(
-                "IMU test failed. Ensure that the robot is stationary and IMU data is being published."
+                "Ensure that the robot is stationary and IMU data is being published.",
             )
             return False
         return True
-    
+
     def _verify_imu_sample(self, sample: Imu) -> None:
         if abs(sample.angular_velocity.x) > IMU_ANGULAR_TOLERANCE:
-            msg = f"IMU angular_velocity.x={sample.angular_velocity.x:.3f} rad/s exceeds tolerance of {IMU_ANGULAR_TOLERANCE:.3f} rad/s"
+            msg = (
+                f"IMU angular_velocity.x={sample.angular_velocity.x:.3f} rad/s "
+                f"exceeds tolerance of {IMU_ANGULAR_TOLERANCE:.3f} rad/s"
+            )
             raise ValueError(msg)
         if abs(sample.angular_velocity.y) > IMU_ANGULAR_TOLERANCE:
-            msg = f"IMU angular_velocity.y={sample.angular_velocity.y:.3f} rad/s exceeds tolerance of {IMU_ANGULAR_TOLERANCE:.3f} rad/s"
+            msg = (
+                f"IMU angular_velocity.y={sample.angular_velocity.y:.3f} rad/s "
+                f"exceeds tolerance of {IMU_ANGULAR_TOLERANCE:.3f} rad/s"
+            )
             raise ValueError(msg)
         if abs(sample.angular_velocity.z) > IMU_ANGULAR_TOLERANCE:
-            msg = f"IMU angular_velocity.z={sample.angular_velocity.z:.3f} rad/s exceeds tolerance of {IMU_ANGULAR_TOLERANCE:.3f} rad/s"
+            msg = (
+                f"IMU angular_velocity.z={sample.angular_velocity.z:.3f} rad/s "
+                f"exceeds tolerance of {IMU_ANGULAR_TOLERANCE:.3f} rad/s"
+            )
             raise ValueError(msg)
         if abs(sample.linear_acceleration.x) > IMU_LINEAR_XY_TOLERANCE:
-            msg = f"IMU linear_acceleration.x={sample.linear_acceleration.x:.3f} m/s^2 exceeds tolerance of {IMU_LINEAR_XY_TOLERANCE:.3f} m/s^2"
+            msg = (
+                f"IMU linear_acceleration.x={sample.linear_acceleration.x:.3f} m/s^2 "
+                f"exceeds tolerance of {IMU_LINEAR_XY_TOLERANCE:.3f} m/s^2"
+            )
             raise ValueError(msg)
         if abs(sample.linear_acceleration.y) > IMU_LINEAR_XY_TOLERANCE:
-            msg = f"IMU linear_acceleration.y={sample.linear_acceleration.y:.3f} m/s^2 exceeds tolerance of {IMU_LINEAR_XY_TOLERANCE:.3f} m/s^2"
+            msg = (
+                f"IMU linear_acceleration.y={sample.linear_acceleration.y:.3f} m/s^2 "
+                f"exceeds tolerance of {IMU_LINEAR_XY_TOLERANCE:.3f} m/s^2"
+            )
             raise ValueError(msg)
         if abs(sample.linear_acceleration.z - 9.81) > IMU_GRAVITY_TOLERANCE:
-            msg = f"IMU linear_acceleration.z={sample.linear_acceleration.z:.3f} m/s^2 deviates from expected gravity 9.81 m/s^2 by more than {IMU_GRAVITY_TOLERANCE:.3f} m/s^2"
+            msg = (
+                f"IMU linear_acceleration.z={sample.linear_acceleration.z:.3f} m/s^2 "
+                f"deviates from expected gravity 9.81 m/s^2 by more than "
+                f"{IMU_GRAVITY_TOLERANCE:.3f} m/s^2"
+            )
             raise ValueError(msg)
 
     def _test_battery_voltage(self) -> bool:
@@ -381,17 +408,19 @@ class HardwareTestCommand:
                         continue
                     if voltage < BATTERY_MIN_VOLTAGE:
                         failures.append(
-                            f"{battery_name} voltage {voltage:.2f} V is below {BATTERY_MIN_VOLTAGE:.2f} V",
+                            f"{battery_name} voltage {voltage:.2f} V is below "
+                            f"{BATTERY_MIN_VOLTAGE:.2f} V",
                         )
                     if voltage > BATTERY_MAX_VOLTAGE:
                         failures.append(
-                            f"{battery_name} voltage {voltage:.2f} V is above {BATTERY_MAX_VOLTAGE:.2f} V",
+                            f"{battery_name} voltage {voltage:.2f} V is above "
+                            f"{BATTERY_MAX_VOLTAGE:.2f} V",
                         )
 
                 if failures:
                     raise ValueError("; ".join(failures))
-        except (TimeoutError, ValueError) as exc:
-            self.logger.exception(str(exc))
+        except (TimeoutError, ValueError):
+            self.logger.exception("Battery voltage test failed")
             return False
         return True
 
@@ -401,8 +430,10 @@ class HardwareTestCommand:
         while self.latest_power_state is None and time.monotonic() < deadline:
             self._spin_once(0.1)
         if self.latest_power_state is None:
-            msg = "Failed to receive power system state message in time. Make sure that ROS is " \
-                  "running and the controller topics are visible."
+            msg = (
+                "Failed to receive power system state message in time. Make sure that ROS is "
+                "running and the controller topics are visible."
+            )
             raise TimeoutError(msg)
 
     def _test_raph_os_version(self) -> bool:
@@ -427,10 +458,14 @@ class HardwareTestCommand:
 
                 response = future.result()
                 if response.version != EXPECTED_RAPH_OS_VERSION:
-                    msg = f"RaphOS version mismatch: expected {EXPECTED_RAPH_OS_VERSION}, got {response.version}"
+                    msg = (
+                        f"RaphOS version mismatch: "
+                        f"expected {EXPECTED_RAPH_OS_VERSION}, "
+                        f"got {response.version}"
+                    )
                     raise ValueError(msg)
-        except (TimeoutError, ValueError) as exc:
-            self.logger.error(str(exc))
+        except (TimeoutError, ValueError):
+            self.logger.exception("RaphOS version test failed")
             return False
         else:
             self.logger.info(f"RaphOS version: {response.version}")
@@ -459,7 +494,10 @@ class HardwareTestCommand:
 
                 calibration_future = self.calibrate_servos_client.call_async(Trigger.Request())
                 rclpy.spin_until_future_complete(
-                    self.node, calibration_future, None, SERVICE_TIMEOUT,
+                    self.node,
+                    calibration_future,
+                    None,
+                    SERVICE_TIMEOUT,
                 )
                 if not calibration_future.done() or calibration_future.result() is None:
                     msg = "Timed out waiting for calibrate_servos service response."
@@ -478,8 +516,8 @@ class HardwareTestCommand:
                     post_calibration_samples,
                     "after servo calibration",
                 )
-        except (TimeoutError, ValueError) as exc:
-            self.logger.exception(str(exc))
+        except (TimeoutError, ValueError):
+            self.logger.exception("Motor test failed")
             return False
         return True
 
