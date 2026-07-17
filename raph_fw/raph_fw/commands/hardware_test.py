@@ -35,6 +35,7 @@ from raph_fw.console import get_logger, log_step
 from raph_fw.resolve import resolve_raphcore_name
 from raph_fw.versions import get_bootloader_version, get_firmware_version
 
+# TODO: figure out parametrization
 MESSAGE_TIMEOUT = 5.0
 SERVICE_TIMEOUT = 5.0
 IMU_TEST_TIMEOUT = 10.0
@@ -136,11 +137,12 @@ class HardwareTestCommand:
                 "Attempting to resolve RaphCore on the network",
             ):
                 addresses = resolve_raphcore_name()
-        except TimeoutError:
-            self.logger.exception(
+        except TimeoutError as exc:
+            self.logger.error(
                 "Failed to resolve address of the RaphCore on the network. "
-                "Ensure that RaphCore is powered and connected to the router properly.",
-            )
+                "Ensure that RaphCore is powered and connected to the router properly: %s",
+                exc,
+            )  # noqa: TRY400
             sys.exit(1)
         if len(addresses) >= 1:
             self.logger.info(f"Resolved RaphCore device at {addresses[0]}")
@@ -427,7 +429,7 @@ class HardwareTestCommand:
                 self._check_motor_firmware_mismatches(motor_mismatches)
 
         except (TimeoutError, ValueError) as exc:
-            self.logger.error("Controller info test failed: %s", exc)
+            self.logger.error("Controller info test failed: %s", exc) # noqa: TRY400
             return False
         else:
             self.logger.info(
@@ -493,11 +495,12 @@ class HardwareTestCommand:
                         deadline,
                         "IMU test",
                     )
-        except (TimeoutError, ValueError):
-            self.logger.exception(
+        except (TimeoutError, ValueError) as exc:
+            self.logger.error(
                 "IMU test failed. "
-                "Ensure that the robot is stationary and IMU data is being published.",
-            )
+                "Ensure that the robot is stationary and IMU data is being published: %s",
+                exc,
+            )  # noqa: TRY400
             return False
         return True
 
@@ -573,8 +576,8 @@ class HardwareTestCommand:
                         failures.append(str(e))
 
                 self._check_battery_failures(failures)
-        except (TimeoutError, ValueError):
-            self.logger.exception("Battery voltage test failed")
+        except (TimeoutError, ValueError) as exc:
+            self.logger.error("Battery voltage test failed: %s", exc)  # noqa: TRY400
             return False
         return True
 
@@ -610,8 +613,8 @@ class HardwareTestCommand:
                     EXPECTED_RAPH_OS_VERSION,
                     "RaphOS version",
                 )
-        except (TimeoutError, ValueError):
-            self.logger.exception("RaphOS version test failed")
+        except (TimeoutError, ValueError) as exc:
+            self.logger.error("RaphOS version test failed: %s", exc)  # noqa: TRY400
             return False
         else:
             self.logger.info(f"RaphOS version: {response.version}")
@@ -662,8 +665,8 @@ class HardwareTestCommand:
                     post_calibration_samples,
                     "after servo calibration",
                 )
-        except (TimeoutError, ValueError):
-            self.logger.exception("Motor test failed")
+        except (TimeoutError, ValueError) as exc:
+            self.logger.error("Motor test failed: %s", exc)  # noqa: TRY400
             return False
         return True
 
