@@ -20,9 +20,12 @@
 
 from __future__ import annotations
 
-import argparse
 import sys
 import time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import argparse
 
 import rclpy
 from raph_interfaces.msg import ServoCommand, WheelCommand
@@ -136,7 +139,7 @@ class MotorCheckCommand:
                 sys.exit(1)
 
     def _publish_for_duration(
-        self, pub: rclpy.publisher.Publisher, msg: object, duration: float
+        self, pub: rclpy.publisher.Publisher, msg: object, duration: float,
     ) -> None:
         """Publish *msg* on *pub* at PUBLISH_RATE Hz for *duration* seconds."""
         interval = 1.0 / PUBLISH_RATE
@@ -160,7 +163,7 @@ class MotorCheckCommand:
                     enabled=False,
                     target_velocity=0.0,
                     acceleration_divider=WHEEL_ACCELERATION_DIVIDER,
-                )
+                ),
             )
             self.logger.info(f"Disabling {name}.")
 
@@ -215,11 +218,11 @@ class MotorCheckCommand:
                     acceleration_divider=SERVO_ACCELERATION_DIVIDER,
                 )
                 self.logger.info(
-                    f"Moving {choice} to {target} rad " f"at {SERVO_TARGET_VELOCITY} rad/s."
+                    f"Moving {choice} to {target} rad at {SERVO_TARGET_VELOCITY} rad/s.",1
                 )
                 self._publish_for_duration(self._servo_pubs[choice], msg, MOVE_DURATION / 2)
                 msg.target_position = 0.0
-                self.logger.info(f"Moving {choice} to 0 rad " f"at {SERVO_TARGET_VELOCITY} rad/s.")
+                self.logger.info(f"Moving {choice} to 0 rad at {SERVO_TARGET_VELOCITY} rad/s.")
                 self._publish_for_duration(self._servo_pubs[choice], msg, MOVE_DURATION / 2)
                 msg.enabled = False
                 self.logger.info(f"Disabling {choice}.")
