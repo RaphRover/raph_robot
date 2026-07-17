@@ -138,11 +138,11 @@ class HardwareTestCommand:
             ):
                 addresses = resolve_raphcore_name()
         except TimeoutError as exc:
-            self.logger.error(
+            self.logger.error(  # noqa: TRY400
                 "Failed to resolve address of the RaphCore on the network. "
                 "Ensure that RaphCore is powered and connected to the router properly: %s",
                 exc,
-            )  # noqa: TRY400
+            )
             sys.exit(1)
         if len(addresses) >= 1:
             self.logger.info(f"Resolved RaphCore device at {addresses[0]}")
@@ -429,7 +429,7 @@ class HardwareTestCommand:
                 self._check_motor_firmware_mismatches(motor_mismatches)
 
         except (TimeoutError, ValueError) as exc:
-            self.logger.error("Controller info test failed: %s", exc) # noqa: TRY400
+            self.logger.error("Controller info test failed: %s", exc)  # noqa: TRY400
             return False
         else:
             self.logger.info(
@@ -496,11 +496,11 @@ class HardwareTestCommand:
                         "IMU test",
                     )
         except (TimeoutError, ValueError) as exc:
-            self.logger.error(
+            self.logger.error(  # noqa: TRY400
                 "IMU test failed. "
                 "Ensure that the robot is stationary and IMU data is being published: %s",
                 exc,
-            )  # noqa: TRY400
+            )
             return False
         return True
 
