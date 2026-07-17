@@ -227,7 +227,7 @@ class HardwareTestCommand:
         :raises TimeoutError: If service is not available.
         """
         if not client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
-            msg = f"Timed out waiting for {service_name} service server to start."
+            msg = f"{service_name} server not available. Check ROS and controller node visibility."
             raise TimeoutError(msg)
 
     def _ensure_future_done(self, future: object, operation: str) -> None:
@@ -239,7 +239,10 @@ class HardwareTestCommand:
         :raises TimeoutError: If future did not complete or returned None.
         """
         if not future.done() or future.result() is None:
-            msg = f"{operation} service did not respond in time"
+            msg = (
+                f"{operation} service did not respond in time. "
+                "Check ROS and controller node visibility."
+            )
             raise TimeoutError(msg)
 
     def _ensure_versions_match(
@@ -352,6 +355,7 @@ class HardwareTestCommand:
             msg = (
                 "Timed out waiting for motor diagnostics messages: "
                 f"received {received}/{expected} different messages"
+                " Check ROS and controller node visibility."
             )
             raise TimeoutError(msg)
 
