@@ -329,6 +329,7 @@ class HardwareTestCommand:
 
     def _ensure_calibration_success(
         self,
+        *,
         success: bool,
         message: str,
     ) -> None:
@@ -460,7 +461,7 @@ class HardwareTestCommand:
                 motor_mismatches.append(f"{key}: missing from response")
             elif actual != EXPECTED_MOTOR_FIRMWARE:
                 motor_mismatches.append(
-                    f"{key}: expected '{EXPECTED_MOTOR_FIRMWARE}', got '{actual}'"
+                    f"{key}: expected '{EXPECTED_MOTOR_FIRMWARE}', got '{actual}'",
                 )
         self._check_motor_firmware_mismatches(motor_mismatches)
 
@@ -505,7 +506,7 @@ class HardwareTestCommand:
         except (TimeoutError, ValueError):
             self.logger.exception(
                 "IMU test failed. "
-                "Ensure that the robot is stationary and IMU data is being published."
+                "Ensure that the robot is stationary and IMU data is being published.",
             )
             return False
         return True
@@ -659,8 +660,8 @@ class HardwareTestCommand:
 
                 calibration_response = calibration_future.result()
                 self._ensure_calibration_success(
-                    calibration_response.success,
-                    calibration_response.message,
+                    success=calibration_response.success,
+                    message=calibration_response.message,
                 )
 
                 post_calibration_samples = self._collect_motor_diagnostics_samples(
