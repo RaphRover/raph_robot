@@ -50,7 +50,7 @@ BOOTLOADER_BINARY_NAME = "raphcore_bootloader_latest.bin"
 FIRMWARE_BINARY_NAME = "raphcore_firmware_latest.bin"
 EXPECTED_RAPH_OS_VERSION = "1.0.0"
 EXPECTED_MOTOR_FIRMWARE = "hw34 sw3.3 24.06.03"
-#TODO: currently this is the wrong order but it needs to be fixed in the msg or the firmware
+# TODO: currently this is the wrong order but it needs to be fixed in the msg or the firmware
 MOTOR_NAMES = (
     "rear left wheel",
     "rear right wheel",
@@ -94,8 +94,12 @@ class HardwareTestCommand:
         results: list[tuple[str, bool]] = []
 
         self._setup_ros()
-        results.append(("Motor firmware, RaphCore firmware and bootloader version",
-                        self._test_controller_info()))
+        results.append(
+            (
+                "Motor firmware, RaphCore firmware and bootloader version",
+                self._test_controller_info(),
+            )
+        )
         results.append(("IMU", self._test_imu()))
         results.append(("Battery voltage", self._test_battery_voltage()))
         results.append(("RaphOS version", self._test_raph_os_version()))
@@ -121,7 +125,9 @@ class HardwareTestCommand:
                 f"Hardware test finished with {len(failed)} failing check(s): {failed_names}."
             )
         else:
-            self.logger.info(f"Hardware test finished successfully. {len(results)} check(s) passed.")
+            self.logger.info(
+                f"Hardware test finished successfully. {len(results)} check(s) passed."
+            )
 
     def _check_raphcore_network(self) -> None:
         """Resolve the RaphCore device on the network and abort on failure."""
@@ -177,6 +183,7 @@ class HardwareTestCommand:
             GetOsVersion,
             "raph_system/get_os_version",
         )
+
     def _shutdown_ros(self) -> None:
         """Destroy the ROS node and shut down rclpy if it is still running."""
         if self.node is not None:
@@ -214,7 +221,9 @@ class HardwareTestCommand:
         try:
             with log_step("Checking motor firmware, controller firmware and bootloader versions"):
                 if not self.controller_info_client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
-                    raise TimeoutError("Timed out waiting for GetControllerInfo service server to start.")
+                    raise TimeoutError(
+                        "Timed out waiting for GetControllerInfo service server to start."
+                    )
                 expected_bootloader_version, expected_firmware_version = (
                     self._get_expected_controller_versions()
                 )
@@ -321,10 +330,14 @@ class HardwareTestCommand:
                     samples += 1
                     self.new_imu_received = False
                     if time.monotonic() > deadline:
-                        raise TimeoutError("IMU test timed out before receiving enough valid samples.")
+                        raise TimeoutError(
+                            "IMU test timed out before receiving enough valid samples."
+                        )
         except (TimeoutError, ValueError) as exc:
             self.logger.error(str(exc))
-            self.logger.error("IMU test failed. Ensure that the robot is stationary and IMU data is being published.")
+            self.logger.error(
+                "IMU test failed. Ensure that the robot is stationary and IMU data is being published."
+            )
             return False
         return True
 
@@ -340,7 +353,7 @@ class HardwareTestCommand:
             ):
                 if self.latest_power_state is None:
                     self._wait_for_power_state_message()
-                
+
                 power_state = self.latest_power_state
                 failures: list[str] = []
 
@@ -377,8 +390,10 @@ class HardwareTestCommand:
         while self.latest_power_state is None and time.monotonic() < deadline:
             self._spin_once(0.1)
         if self.latest_power_state is None:
-            raise TimeoutError("Failed to receive battery state message in time. Make sure that ROS is running and the controller topics are visible.")
-        
+            raise TimeoutError(
+                "Failed to receive battery state message in time. Make sure that ROS is running and the controller topics are visible."
+            )
+
     def _test_raph_os_version(self) -> bool:
         """
         Validate the reported RaphOS version.
@@ -390,7 +405,9 @@ class HardwareTestCommand:
                 "Checking RaphOS version",
             ):
                 if not self.raph_os_version_client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
-                    raise TimeoutError("Timed out waiting for GetOsVersion service server to start.")
+                    raise TimeoutError(
+                        "Timed out waiting for GetOsVersion service server to start."
+                    )
 
                 future = self.raph_os_version_client.call_async(GetOsVersion.Request())
                 rclpy.spin_until_future_complete(self.node, future, None, SERVICE_TIMEOUT)
@@ -429,10 +446,14 @@ class HardwareTestCommand:
                 )
 
                 if not self.calibrate_servos_client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
-                    raise TimeoutError("Timed out waiting for calibrate_servos service server to start.")
+                    raise TimeoutError(
+                        "Timed out waiting for calibrate_servos service server to start."
+                    )
 
                 calibration_future = self.calibrate_servos_client.call_async(Trigger.Request())
-                rclpy.spin_until_future_complete(self.node, calibration_future, None, SERVICE_TIMEOUT)
+                rclpy.spin_until_future_complete(
+                    self.node, calibration_future, None, SERVICE_TIMEOUT
+                )
                 if not calibration_future.done() or calibration_future.result() is None:
                     raise TimeoutError("Servo calibration service did not respond in time")
 

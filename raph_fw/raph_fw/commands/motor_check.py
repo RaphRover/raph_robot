@@ -57,7 +57,11 @@ _SERVO_MOTORS = [
 _CHOICE_ALL = "All motors (sequential)"
 _CHOICE_EXIT = "Exit"
 
-_CHOICES = [name for name, _ in _WHEEL_MOTORS] + [name for name, _, _t in _SERVO_MOTORS] + [_CHOICE_ALL, _CHOICE_EXIT]
+_CHOICES = (
+    [name for name, _ in _WHEEL_MOTORS]
+    + [name for name, _, _t in _SERVO_MOTORS]
+    + [_CHOICE_ALL, _CHOICE_EXIT]
+)
 
 
 class MotorCheckCommand:
@@ -131,7 +135,9 @@ class MotorCheckCommand:
                 self.logger.error(f"Servo calibration failed: {result.message}")
                 sys.exit(1)
 
-    def _publish_for_duration(self, pub: rclpy.publisher.Publisher, msg: object, duration: float) -> None:
+    def _publish_for_duration(
+        self, pub: rclpy.publisher.Publisher, msg: object, duration: float
+    ) -> None:
         """Publish *msg* on *pub* at PUBLISH_RATE Hz for *duration* seconds."""
         interval = 1.0 / PUBLISH_RATE
         deadline = time.monotonic() + duration
@@ -209,15 +215,11 @@ class MotorCheckCommand:
                     acceleration_divider=SERVO_ACCELERATION_DIVIDER,
                 )
                 self.logger.info(
-                    f"Moving {choice} to {target} rad "
-                    f"at {SERVO_TARGET_VELOCITY} rad/s."
+                    f"Moving {choice} to {target} rad " f"at {SERVO_TARGET_VELOCITY} rad/s."
                 )
                 self._publish_for_duration(self._servo_pubs[choice], msg, MOVE_DURATION / 2)
                 msg.target_position = 0.0
-                self.logger.info(
-                    f"Moving {choice} to 0 rad "
-                    f"at {SERVO_TARGET_VELOCITY} rad/s."
-                )
+                self.logger.info(f"Moving {choice} to 0 rad " f"at {SERVO_TARGET_VELOCITY} rad/s.")
                 self._publish_for_duration(self._servo_pubs[choice], msg, MOVE_DURATION / 2)
                 msg.enabled = False
                 self.logger.info(f"Disabling {choice}.")
