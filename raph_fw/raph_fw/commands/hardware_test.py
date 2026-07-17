@@ -426,8 +426,8 @@ class HardwareTestCommand:
                         )
                 self._check_motor_firmware_mismatches(motor_mismatches)
 
-        except (TimeoutError, ValueError):
-            self.logger.exception("Controller info test failed")
+        except (TimeoutError, ValueError) as exc:
+            self.logger.exception(f"Controller info test failed: {str(exc)}", exc_info=False)
             return False
         else:
             self.logger.info(
