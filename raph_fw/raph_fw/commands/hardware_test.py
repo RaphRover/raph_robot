@@ -212,6 +212,185 @@ class HardwareTestCommand:
         if self.node and rclpy.ok():
             rclpy.spin_once(self.node, timeout_sec=timeout_sec)
 
+    def _ensure_service_ready(
+        self,
+        client: object,
+        service_name: str,
+    ) -> None:
+        """
+        Ensure a service client is ready or raise TimeoutError.
+
+        :param client: The service client to check.
+        :param service_name: Name of the service for error messages.
+        :raises TimeoutError: If service is not available.
+        """
+        if not client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
+            msg = f"Timed out waiting for {service_name} service server to start."
+            raise TimeoutError(msg)
+
+    def _ensure_future_done(self, future: object, operation: str) -> None:
+        """
+        Ensure a future completed successfully or raise TimeoutError.
+
+        :param future: The ROS future to check.
+        :param operation: Description of the operation for error messages.
+        :raises TimeoutError: If future did not complete or returned None.
+        """
+        if not future.done() or future.result() is None:
+            msg = f"{operation} service did not respond in time"
+            raise TimeoutError(msg)
+
+    def _ensure_versions_match(
+        self,
+        actual: str,
+        expected: str,
+        version_type: str,
+    ) -> None:
+        """
+        Ensure versions match or raise ValueError.
+
+        :param actual: The actual version string.
+        :param expected: The expected version string.
+        :param version_type: Description of version type for error messages.
+        :raises ValueError: If versions don't match.
+        """
+        if actual != expected:
+            msg = (
+                f"{version_type} mismatch: "
+                f"expected {expected}, "
+                f"got {actual}"
+            )
+            raise ValueError(msg)
+
+    def _ensure_battery_in_range(
+        self,
+        battery_name: str,
+        voltage: float,
+    ) -> None:
+        """
+        Ensure battery voltage is in valid range or raise ValueError.
+
+        :param battery_name: Name of the battery.
+        :param voltage: Battery voltage to validate.
+        :raises ValueError: If voltage is out of range.
+        """
+        if voltage < BATTERY_MIN_VOLTAGE:
+            msg = (
+                f"{battery_name} voltage {voltage:.2f} V is below "
+                f"{BATTERY_MIN_VOLTAGE:.2f} V"
+            )
+            raise ValueError(msg)
+        if voltage > BATTERY_MAX_VOLTAGE:
+            msg = (
+                f"{battery_name} voltage {voltage:.2f} V is above "
+                f"{BATTERY_MAX_VOLTAGE:.2f} V"
+            )
+            raise ValueError(msg)
+
+    def _check_motor_firmware_mismatches(
+        self,
+        mismatches: list[str],
+    ) -> None:
+        """
+        Check for motor firmware mismatches and raise ValueError if any exist.
+
+        :param mismatches: List of mismatch strings.
+        :raises ValueError: If any mismatches exist.
+        """
+        if mismatches:
+            msg = "Motor firmware version mismatch(es): " + "; ".join(mismatches)
+            raise ValueError(msg)
+
+    def _ensure_deadline_not_exceeded(
+        self,
+        deadline: float,
+        operation: str,
+    ) -> None:
+        """
+        Ensure current time has not exceeded deadline or raise TimeoutError.
+
+        :param deadline: The deadline timestamp.
+        :param operation: Description of operation for error messages.
+        :raises TimeoutError: If deadline has been exceeded.
+        """
+        if time.monotonic() > deadline:
+            msg = f"{operation} timed out before completing."
+            raise TimeoutError(msg)
+
+    def _check_battery_failures(self, failures: list[str]) -> None:
+        """
+        Check for battery test failures and raise ValueError if any exist.
+
+        :param failures: List of failure strings.
+        :raises ValueError: If any failures exist.
+        """
+        if failures:
+            raise ValueError("; ".join(failures))
+
+    def _ensure_calibration_success(
+        self,
+        success: bool,
+        message: str,
+    ) -> None:
+        """
+        Ensure calibration was successful or raise ValueError.
+
+        :param success: Whether calibration succeeded.
+        :param message: The calibration response message.
+        :raises ValueError: If calibration failed.
+        """
+        if not success:
+            msg = f"Servo calibration failed: {message}"
+            raise ValueError(msg)
+
+    def _ensure_diagnostics_sample_count(
+        self,
+        received: int,
+        expected: int,
+    ) -> None:
+        """
+        Ensure enough diagnostics samples were received or raise TimeoutError.
+
+        :param received: Number of samples received.
+        :param expected: Number of samples expected.
+        :raises TimeoutError: If not enough samples received.
+        """
+        if received < expected:
+            msg = (
+                "Timed out waiting for motor diagnostics messages: "
+                f"received {received}/{expected} different messages"
+            )
+            raise TimeoutError(msg)
+
+    def _ensure_power_state_received(self) -> None:
+        """
+        Ensure power state message was received or raise TimeoutError.
+
+        :raises TimeoutError: If power state message was not received.
+        """
+        if self.latest_power_state is None:
+            msg = (
+                "Failed to receive power system state message in time. Make sure that ROS is "
+                "running and the controller topics are visible."
+            )
+            raise TimeoutError(msg)
+
+    def _check_motor_diagnostics_faults(
+        self,
+        faults: list[str],
+        stage: str,
+    ) -> None:
+        """
+        Check for motor diagnostics faults and raise ValueError if any exist.
+
+        :param faults: List of fault strings.
+        :param stage: Description of validation stage for error messages.
+        :raises ValueError: If any faults exist.
+        """
+        if faults:
+            msg = f"Motor diagnostics check failed {stage}: " + "; ".join(faults)
+            raise ValueError(msg)
+
     def _test_controller_info(self) -> bool:
         """
         Validate controller, bootloader, and motor firmware versions.
@@ -220,34 +399,29 @@ class HardwareTestCommand:
         """
         try:
             with log_step("Checking motor firmware, controller firmware and bootloader versions"):
-                if not self.controller_info_client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
-                    msg = "Timed out waiting for GetControllerInfo service server to start."
-                    raise TimeoutError(msg)
+                self._ensure_service_ready(
+                    self.controller_info_client,
+                    "GetControllerInfo",
+                )
                 expected_bootloader_version, expected_firmware_version = (
                     self._get_expected_controller_versions()
                 )
 
                 future = self.controller_info_client.call_async(GetControllerInfo.Request())
                 rclpy.spin_until_future_complete(self.node, future, None, SERVICE_TIMEOUT)
-                if not future.done() or future.result() is None:
-                    msg = "Controller info service did not respond in time"
-                    raise TimeoutError(msg)
+                self._ensure_future_done(future, "Controller info")
 
                 response = future.result()
-                if response.bootloader_version != expected_bootloader_version:
-                    msg = (
-                        f"Controller bootloader version mismatch: "
-                        f"expected {expected_bootloader_version}, "
-                        f"got {response.bootloader_version}"
-                    )
-                    raise ValueError(msg)
-                if response.firmware_version != expected_firmware_version:
-                    msg = (
-                        f"Controller firmware version mismatch: "
-                        f"expected {expected_firmware_version}, "
-                        f"got {response.firmware_version}"
-                    )
-                    raise ValueError(msg)
+                self._ensure_versions_match(
+                    response.bootloader_version,
+                    expected_bootloader_version,
+                    "Controller bootloader version",
+                )
+                self._ensure_versions_match(
+                    response.firmware_version,
+                    expected_firmware_version,
+                    "Controller firmware version",
+                )
                 extra_info = {kv.key: kv.value for kv in response.extra_information}
                 self._verify_motor_firmware_versions(extra_info)
                 motor_mismatches: list[str] = []
@@ -257,11 +431,9 @@ class HardwareTestCommand:
                         motor_mismatches.append(f"{key}: missing from response")
                     elif actual != EXPECTED_MOTOR_FIRMWARE:
                         motor_mismatches.append(
-                            f"{key}: expected '{EXPECTED_MOTOR_FIRMWARE}', got '{actual}'"
+                            f"{key}: expected '{EXPECTED_MOTOR_FIRMWARE}', got '{actual}'",
                         )
-                if motor_mismatches:
-                    msg = "Motor firmware version mismatch(es): " + "; ".join(motor_mismatches)
-                    raise ValueError(msg)
+                self._check_motor_firmware_mismatches(motor_mismatches)
 
         except (TimeoutError, ValueError):
             self.logger.exception("Controller info test failed")
@@ -290,9 +462,7 @@ class HardwareTestCommand:
                 motor_mismatches.append(
                     f"{key}: expected '{EXPECTED_MOTOR_FIRMWARE}', got '{actual}'"
                 )
-        if motor_mismatches:
-            msg = "Motor firmware version mismatch(es): " + "; ".join(motor_mismatches)
-            raise ValueError(msg)
+        self._check_motor_firmware_mismatches(motor_mismatches)
 
     def _get_expected_controller_versions(self) -> tuple[str, str]:
         """
@@ -328,14 +498,14 @@ class HardwareTestCommand:
                     self._verify_imu_sample(imu)
                     samples += 1
                     self.new_imu_received = False
-                    if time.monotonic() > deadline:
-                        raise TimeoutError(
-                            "IMU test timed out before receiving enough valid samples."
-                        )
+                    self._ensure_deadline_not_exceeded(
+                        deadline,
+                        "IMU test",
+                    )
         except (TimeoutError, ValueError):
-            self.logger.exception("IMU test failed")
-            self.logger.error(
-                "Ensure that the robot is stationary and IMU data is being published.",
+            self.logger.exception(
+                "IMU test failed. "
+                "Ensure that the robot is stationary and IMU data is being published."
             )
             return False
         return True
@@ -406,19 +576,12 @@ class HardwareTestCommand:
                 ):
                     if not connected:
                         continue
-                    if voltage < BATTERY_MIN_VOLTAGE:
-                        failures.append(
-                            f"{battery_name} voltage {voltage:.2f} V is below "
-                            f"{BATTERY_MIN_VOLTAGE:.2f} V",
-                        )
-                    if voltage > BATTERY_MAX_VOLTAGE:
-                        failures.append(
-                            f"{battery_name} voltage {voltage:.2f} V is above "
-                            f"{BATTERY_MAX_VOLTAGE:.2f} V",
-                        )
+                    try:
+                        self._ensure_battery_in_range(battery_name, voltage)
+                    except ValueError as e:
+                        failures.append(str(e))
 
-                if failures:
-                    raise ValueError("; ".join(failures))
+                self._check_battery_failures(failures)
         except (TimeoutError, ValueError):
             self.logger.exception("Battery voltage test failed")
             return False
@@ -429,12 +592,7 @@ class HardwareTestCommand:
         deadline = time.monotonic() + MESSAGE_TIMEOUT
         while self.latest_power_state is None and time.monotonic() < deadline:
             self._spin_once(0.1)
-        if self.latest_power_state is None:
-            msg = (
-                "Failed to receive power system state message in time. Make sure that ROS is "
-                "running and the controller topics are visible."
-            )
-            raise TimeoutError(msg)
+        self._ensure_power_state_received()
 
     def _test_raph_os_version(self) -> bool:
         """
@@ -446,24 +604,21 @@ class HardwareTestCommand:
             with log_step(
                 "Checking RaphOS version",
             ):
-                if not self.raph_os_version_client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
-                    msg = "Timed out waiting for GetOsVersion service server to start."
-                    raise TimeoutError(msg)
+                self._ensure_service_ready(
+                    self.raph_os_version_client,
+                    "GetOsVersion",
+                )
 
                 future = self.raph_os_version_client.call_async(GetOsVersion.Request())
                 rclpy.spin_until_future_complete(self.node, future, None, SERVICE_TIMEOUT)
-                if not future.done() or future.result() is None:
-                    msg = "RaphOS version service did not respond in time"
-                    raise TimeoutError(msg)
+                self._ensure_future_done(future, "RaphOS version")
 
                 response = future.result()
-                if response.version != EXPECTED_RAPH_OS_VERSION:
-                    msg = (
-                        f"RaphOS version mismatch: "
-                        f"expected {EXPECTED_RAPH_OS_VERSION}, "
-                        f"got {response.version}"
-                    )
-                    raise ValueError(msg)
+                self._ensure_versions_match(
+                    response.version,
+                    EXPECTED_RAPH_OS_VERSION,
+                    "RaphOS version",
+                )
         except (TimeoutError, ValueError):
             self.logger.exception("RaphOS version test failed")
             return False
@@ -488,9 +643,10 @@ class HardwareTestCommand:
                     "before servo calibration",
                 )
 
-                if not self.calibrate_servos_client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
-                    msg = "Timed out waiting for calibrate_servos service server to start."
-                    raise TimeoutError(msg)
+                self._ensure_service_ready(
+                    self.calibrate_servos_client,
+                    "calibrate_servos",
+                )
 
                 calibration_future = self.calibrate_servos_client.call_async(Trigger.Request())
                 rclpy.spin_until_future_complete(
@@ -499,14 +655,13 @@ class HardwareTestCommand:
                     None,
                     SERVICE_TIMEOUT,
                 )
-                if not calibration_future.done() or calibration_future.result() is None:
-                    msg = "Timed out waiting for calibrate_servos service response."
-                    raise TimeoutError(msg)
+                self._ensure_future_done(calibration_future, "calibrate_servos")
 
                 calibration_response = calibration_future.result()
-                if not calibration_response.success:
-                    msg = f"Servo calibration failed: {calibration_response.message}"
-                    raise ValueError(msg)
+                self._ensure_calibration_success(
+                    calibration_response.success,
+                    calibration_response.message,
+                )
 
                 post_calibration_samples = self._collect_motor_diagnostics_samples(
                     MOTOR_DIAGNOSTIC_SAMPLES,
@@ -543,12 +698,7 @@ class HardwareTestCommand:
             samples.append(self.latest_motor_diagnostics)
             self.new_motor_diagnostics_received = False
 
-        if len(samples) < sample_count:
-            msg = (
-                "Timed out waiting for motor diagnostics messages: "
-                f"received {len(samples)}/{sample_count} different messages"
-            )
-            raise TimeoutError(msg)
+        self._ensure_diagnostics_sample_count(len(samples), sample_count)
         return samples
 
     def _validate_motor_diagnostics_samples(
@@ -587,5 +737,4 @@ class HardwareTestCommand:
             if comm_active:
                 faults.append(f"{motor_name} has active communication fault")
 
-        if faults:
-            raise ValueError(f"Motor diagnostics check failed {stage}: " + "; ".join(faults))
+        self._check_motor_diagnostics_faults(faults, stage)
