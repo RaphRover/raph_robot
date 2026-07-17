@@ -255,11 +255,7 @@ class HardwareTestCommand:
         :raises ValueError: If versions don't match.
         """
         if actual != expected:
-            msg = (
-                f"{version_type} mismatch: "
-                f"expected {expected}, "
-                f"got {actual}"
-            )
+            msg = f"{version_type} mismatch: expected {expected}, got {actual}"
             raise ValueError(msg)
 
     def _ensure_battery_in_range(
@@ -275,16 +271,10 @@ class HardwareTestCommand:
         :raises ValueError: If voltage is out of range.
         """
         if voltage < BATTERY_MIN_VOLTAGE:
-            msg = (
-                f"{battery_name} voltage {voltage:.2f} V is below "
-                f"{BATTERY_MIN_VOLTAGE:.2f} V"
-            )
+            msg = f"{battery_name} voltage {voltage:.2f} V is below {BATTERY_MIN_VOLTAGE:.2f} V"
             raise ValueError(msg)
         if voltage > BATTERY_MAX_VOLTAGE:
-            msg = (
-                f"{battery_name} voltage {voltage:.2f} V is above "
-                f"{BATTERY_MAX_VOLTAGE:.2f} V"
-            )
+            msg = f"{battery_name} voltage {voltage:.2f} V is above {BATTERY_MAX_VOLTAGE:.2f} V"
             raise ValueError(msg)
 
     def _check_motor_firmware_mismatches(
