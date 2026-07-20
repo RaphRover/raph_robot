@@ -35,7 +35,6 @@ from raph_fw.console import get_logger, log_step
 from raph_fw.resolve import resolve_raphcore_name
 from raph_fw.versions import get_bootloader_version, get_firmware_version
 
-# TODO: figure out parametrization
 MESSAGE_TIMEOUT = 5.0
 SERVICE_TIMEOUT = 5.0
 IMU_TEST_TIMEOUT = 10.0
@@ -51,14 +50,13 @@ BOOTLOADER_BINARY_NAME = "raphcore_bootloader_latest.bin"
 FIRMWARE_BINARY_NAME = "raphcore_firmware_latest.bin"
 EXPECTED_RAPH_OS_VERSION = "1.0.0"
 EXPECTED_MOTOR_FIRMWARE = "hw34 sw3.3 24.06.03"
-# TODO: currently this is the wrong order but it needs to be fixed in the msg or the firmware
 MOTOR_NAMES = (
     "rear left wheel",
     "rear right wheel",
-    "right servo",
-    "left servo",
     "front left wheel",
     "front right wheel",
+    "left servo",
+    "right servo",
 )
 MOTOR_FIRMWARE_KEYS = (
     "wheel_rl_firmware",
