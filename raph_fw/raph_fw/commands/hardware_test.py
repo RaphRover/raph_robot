@@ -93,18 +93,20 @@ class HardwareTestCommand:
         results: list[tuple[str, bool]] = []
 
         self._setup_ros()
-        results.append(
-            (
-                "Motor firmware, RaphCore firmware and bootloader version",
-                self._test_controller_info(),
-            ),
-        )
-        results.append(("IMU", self._test_imu()))
-        results.append(("Battery voltage", self._test_battery_voltage()))
-        results.append(("RaphOS version", self._test_raph_os_version()))
-        results.append(("Motor diagnostics and servo calibration", self._test_motors()))
+        try:
+            results.append(
+                (
+                    "Motor firmware, RaphCore firmware and bootloader version",
+                    self._test_controller_info(),
+                ),
+            )
+            results.append(("IMU", self._test_imu()))
+            results.append(("Battery voltage", self._test_battery_voltage()))
+            results.append(("RaphOS version", self._test_raph_os_version()))
+            results.append(("Motor diagnostics and servo calibration", self._test_motors()))
+        finally:
+            self._shutdown_ros()
 
-        self._shutdown_ros()
         self._parse_results(results)
 
         sys.exit(self.exit_code)
@@ -419,16 +421,6 @@ class HardwareTestCommand:
                 )
                 extra_info = {kv.key: kv.value for kv in response.extra_information}
                 self._verify_motor_firmware_versions(extra_info)
-                motor_mismatches: list[str] = []
-                for key in MOTOR_FIRMWARE_KEYS:
-                    actual = extra_info.get(key)
-                    if actual is None:
-                        motor_mismatches.append(f"{key}: missing from response")
-                    elif actual != EXPECTED_MOTOR_FIRMWARE:
-                        motor_mismatches.append(
-                            f"{key}: expected '{EXPECTED_MOTOR_FIRMWARE}', got '{actual}'",
-                        )
-                self._check_motor_firmware_mismatches(motor_mismatches)
 
         except (TimeoutError, ValueError) as exc:
             self.logger.error("Controller info test failed: %s", exc)  # noqa: TRY400
