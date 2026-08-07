@@ -22,20 +22,16 @@
 
 """A script for testing Raph robot hardware."""
 
-import argparse
+import contextlib
 
 from raph_fw.commands import HardwareTestCommand
 
 
 def main() -> None:
     """Execute the hardware test process."""
-    parser = argparse.ArgumentParser(
-        description="Test Raph robot hardware.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
     hardware_test_command = HardwareTestCommand()
-    args = parser.parse_args()
-    hardware_test_command.main(args)
+    with contextlib.suppress(KeyboardInterrupt):
+        hardware_test_command.main()
 
 
 if __name__ == "__main__":

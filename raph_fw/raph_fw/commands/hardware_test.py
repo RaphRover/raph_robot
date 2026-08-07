@@ -83,7 +83,7 @@ class HardwareTestCommand:
         self.latest_motor_diagnostics: MotorDiagnostics | None = None
         self.new_motor_diagnostics_received: bool = False
 
-    def main(self, _: argparse.Namespace) -> None:
+    def main(self) -> None:
         """
         Execute the hardware tests.
 

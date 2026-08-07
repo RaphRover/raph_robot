@@ -22,20 +22,16 @@
 
 """A script for interactively checking Raph robot motors."""
 
-import argparse
+import contextlib
 
 from raph_fw.commands import MotorCheckCommand
 
 
 def main() -> None:
     """Execute the motor check process."""
-    parser = argparse.ArgumentParser(
-        description="Interactively check Raph robot motors.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
     motor_check_command = MotorCheckCommand()
-    args = parser.parse_args()
-    motor_check_command.main(args)
+    with contextlib.suppress(KeyboardInterrupt):
+        motor_check_command.main()
 
 
 if __name__ == "__main__":

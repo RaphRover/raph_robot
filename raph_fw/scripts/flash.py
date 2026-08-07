@@ -23,6 +23,7 @@
 """A script for flashing firmware onto the RaphCore device."""
 
 import argparse
+import contextlib
 
 from raph_fw.commands import FlashCommand
 
@@ -36,7 +37,8 @@ def main() -> None:
     flash_command = FlashCommand()
     flash_command.add_arguments(parser)
     args = parser.parse_args()
-    flash_command.main(args)
+    with contextlib.suppress(KeyboardInterrupt):
+        flash_command.main(args)
 
 
 if __name__ == "__main__":
