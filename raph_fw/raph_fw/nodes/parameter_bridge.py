@@ -18,19 +18,21 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from pathlib import Path
 import yaml
+from pathlib import Path
 
 import rclpy
 from rcl_interfaces.msg import ParameterDescriptor
 from rcl_interfaces.srv import SetParameters
 from rclpy.client import Client
-from rclpy.task import Future
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+from rclpy.task import Future
+
 from raph_interfaces.srv import ApplyTfFramePrefix
 
 SERVICE_TIMEOUT = 2.0
+
 
 class ParameterBridge(Node):
     """Node that loads parameter overrides and forwards them to the controller node."""
@@ -76,16 +78,24 @@ class ParameterBridge(Node):
         self.overrides_file = Path(self.get_parameter("overrides_param_file").value)
         self.target_node = self.get_parameter("target_node_name").value.strip("/")
         self.ns = self.get_namespace().strip("/")
-        self.full_node_name = f"/{self.ns}/{self.target_node}" if self.ns else f"/{self.target_node}"
+        self.full_node_name = (
+            f"/{self.ns}/{self.target_node}" if self.ns else f"/{self.target_node}"
+        )
 
         self.apply_tf_frame_prefix_service_name = f"{self.full_node_name}/apply_tf_frame_prefix"
-        self.get_logger().info(f"Apply TF frame prefix service name: {self.apply_tf_frame_prefix_service_name}")
-        self.apply_tf_frame_prefix_client = self.create_client(ApplyTfFramePrefix, self.apply_tf_frame_prefix_service_name)
+        self.get_logger().info(
+            f"Apply TF frame prefix service name: {self.apply_tf_frame_prefix_service_name}",
+        )
+        self.apply_tf_frame_prefix_client = self.create_client(
+            ApplyTfFramePrefix, self.apply_tf_frame_prefix_service_name,
+        )
         self.tf_frame_prefix = self.get_parameter("tf_frame_prefix").value
 
         self.set_parameters_service_name = f"{self.full_node_name}/set_parameters"
         self.get_logger().info(f"SetParameters service name: {self.set_parameters_service_name}")
-        self.set_parameters_client = self.create_client(SetParameters, self.set_parameters_service_name)
+        self.set_parameters_client = self.create_client(
+            SetParameters, self.set_parameters_service_name,
+        )
         self.params_to_set: dict[str, Parameter] = self._parse_overrides_file()
 
         self.get_logger().info(
@@ -104,7 +114,9 @@ class ParameterBridge(Node):
             self.get_logger().info(
                 f"Service {self.apply_tf_frame_prefix_service_name} not available yet, retrying...",
             )
-        self.get_logger().info("apply_tf_frame_prefix service is available. Applying TF frame prefix...")
+        self.get_logger().info(
+            "apply_tf_frame_prefix service is available. Applying TF frame prefix...",
+        )
 
         request = ApplyTfFramePrefix.Request()
         request.tf_frame_prefix = self.tf_frame_prefix
@@ -122,7 +134,9 @@ class ParameterBridge(Node):
             self.get_logger().error(f"Failed to apply TF frame prefix: {future.result().message}")
             return False
 
-        self.get_logger().info(f"Applied TF frame prefix '{self.tf_frame_prefix}' to {self.full_node_name} node")
+        self.get_logger().info(
+            f"Applied TF frame prefix '{self.tf_frame_prefix}' to {self.full_node_name} node",
+        )
         return True
 
     def apply_parameter_overrides(self) -> bool:
@@ -139,7 +153,9 @@ class ParameterBridge(Node):
         self.get_logger().info("set_parameters service is available. Applying parameters...")
 
         request = SetParameters.Request()
-        request.parameters = [parameter.to_parameter_msg() for parameter in self.params_to_set.values()]
+        request.parameters = [
+            parameter.to_parameter_msg() for parameter in self.params_to_set.values()
+        ]
         future = self._call_with_retry(
             self.set_parameters_client,
             request,
@@ -153,7 +169,7 @@ class ParameterBridge(Node):
         results = future.result().results
         failed = [
             (name, result.reason)
-            for name, result in zip(self.params_to_set.keys(), results)
+            for name, result in zip(self.params_to_set.keys(), results, strict=True)
             if not result.successful
         ]
         if failed:
@@ -161,12 +177,13 @@ class ParameterBridge(Node):
                 self.get_logger().error(f"Failed to set '{name}': {reason}")
             return False
 
-        self.get_logger().info(f"Applied {len(self.params_to_set)} parameter(s) to {self.full_node_name} node")
+        self.get_logger().info(
+            f"Applied {len(self.params_to_set)} parameter(s) to {self.full_node_name} node",
+        )
         return True
 
     def _call_with_retry(self, client: Client, request, service_name: str) -> Future:
         """Retry timed out async service calls until the future completes."""
-
         while True:
             future = client.call_async(request)
             rclpy.spin_until_future_complete(self, future, timeout_sec=SERVICE_TIMEOUT)
@@ -231,7 +248,7 @@ class ParameterBridge(Node):
                     continue
 
                 parameter = rclpy.Parameter(
-                    param_name_prefix + key, self.type_dict[type(value)], value
+                    param_name_prefix + key, self.type_dict[type(value)], value,
                 )
                 parameters[parameter.name] = parameter
 

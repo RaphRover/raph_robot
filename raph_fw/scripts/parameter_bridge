@@ -21,8 +21,10 @@
 # THE SOFTWARE.
 
 import contextlib
-from raph_fw.nodes import ParameterBridge
+
 import rclpy
+
+from raph_fw.nodes import ParameterBridge
 
 rclpy.init()
 node = ParameterBridge()
