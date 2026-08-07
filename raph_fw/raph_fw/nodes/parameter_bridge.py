@@ -88,14 +88,16 @@ class ParameterBridge(Node):
             f"Apply TF frame prefix service name: {self.apply_tf_frame_prefix_service_name}",
         )
         self.apply_tf_frame_prefix_client = self.create_client(
-            ApplyTfFramePrefix, self.apply_tf_frame_prefix_service_name,
+            ApplyTfFramePrefix,
+            self.apply_tf_frame_prefix_service_name,
         )
         self.tf_frame_prefix = self.get_parameter("tf_frame_prefix").value
 
         self.set_parameters_service_name = f"{self.full_node_name}/set_parameters"
         self.get_logger().info(f"SetParameters service name: {self.set_parameters_service_name}")
         self.set_parameters_client = self.create_client(
-            SetParameters, self.set_parameters_service_name,
+            SetParameters,
+            self.set_parameters_service_name,
         )
         self.params_to_set: dict[str, Parameter] = self._parse_overrides_file()
 
@@ -254,7 +256,9 @@ class ParameterBridge(Node):
                     continue
 
                 parameter = rclpy.Parameter(
-                    param_name_prefix + key, self.type_dict[type(value)], value,
+                    param_name_prefix + key,
+                    self.type_dict[type(value)],
+                    value,
                 )
                 parameters[parameter.name] = parameter
 
