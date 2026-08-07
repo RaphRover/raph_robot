@@ -28,6 +28,6 @@ rclpy.init()
 node = ParameterBridge()
 
 with contextlib.suppress(KeyboardInterrupt):
-    node.apply_parameter_overrides()
+    node.run()
     node.destroy_node()
     rclpy.shutdown()
