@@ -19,6 +19,10 @@
 
   <node pkg="raph_bringup" exec="raph_system" />
 
+  <node pkg="raph_fw" exec="parameter_bridge">
+    <param name="tf_frame_prefix" value="$(var tf_frame_prefix)" />
+  </node>
+
   <include file="$(find-pkg-share raph_bringup)/launch/oak.launch.xml" />
 
   <include file="$(find-pkg-share raph_bringup)/launch/rplidar.launch.xml">
