@@ -23,7 +23,6 @@
 import contextlib
 
 import rclpy
-
 from raph_fw.nodes import ParameterBridge
 
 rclpy.init()

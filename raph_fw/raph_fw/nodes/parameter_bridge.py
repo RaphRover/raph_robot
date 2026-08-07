@@ -18,18 +18,17 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-import yaml
 from pathlib import Path
 
 import rclpy
+import yaml
+from raph_interfaces.srv import ApplyTfFramePrefix
 from rcl_interfaces.msg import ParameterDescriptor
 from rcl_interfaces.srv import SetParameters
 from rclpy.client import Client
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.task import Future
-
-from raph_interfaces.srv import ApplyTfFramePrefix
 
 SERVICE_TIMEOUT = 2.0
 
@@ -47,12 +46,7 @@ class ParameterBridge(Node):
     set_parameters_service_name: str
     tf_frame_prefix: str
     params_to_set: dict[str, Parameter]
-    type_dict: dict = {
-        str: Parameter.Type.STRING,
-        int: Parameter.Type.INTEGER,
-        bool: Parameter.Type.BOOL,
-        float: Parameter.Type.DOUBLE,
-    }
+    type_dict: dict[type, Parameter.Type]
 
     def __init__(self) -> None:
         """Create and initialize the controller parameter bridge node."""
@@ -74,6 +68,13 @@ class ParameterBridge(Node):
             "",
             ParameterDescriptor(read_only=True),
         )
+
+        self.type_dict = {
+            str: Parameter.Type.STRING,
+            int: Parameter.Type.INTEGER,
+            bool: Parameter.Type.BOOL,
+            float: Parameter.Type.DOUBLE,
+        }
 
         self.overrides_file = Path(self.get_parameter("overrides_param_file").value)
         self.target_node = self.get_parameter("target_node_name").value.strip("/")
@@ -182,7 +183,12 @@ class ParameterBridge(Node):
         )
         return True
 
-    def _call_with_retry(self, client: Client, request, service_name: str) -> Future:
+    def _call_with_retry(
+        self,
+        client: Client,
+        request: ApplyTfFramePrefix.Request | SetParameters.Request,
+        service_name: str,
+    ) -> Future:
         """Retry timed out async service calls until the future completes."""
         while True:
             future = client.call_async(request)
