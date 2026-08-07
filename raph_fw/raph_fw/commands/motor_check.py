@@ -75,12 +75,8 @@ class MotorCheckCommand:
         self.logger = get_logger("MotorCheckCommand")
         self.node: Node | None = None
 
-    def main(self, _: argparse.Namespace) -> None:
-        """
-        Execute the interactive motor check.
-
-        :param _: Parsed command-line arguments.
-        """
+    def main(self) -> None:
+        """Execute the interactive motor check."""
         self._setup_ros()
 
         try:

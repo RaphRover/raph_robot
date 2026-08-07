@@ -84,11 +84,7 @@ class HardwareTestCommand:
         self.new_motor_diagnostics_received: bool = False
 
     def main(self) -> None:
-        """
-        Execute the hardware tests.
-
-        :param args: Parsed command-line arguments.
-        """
+        """Execute the hardware tests."""
         self.logger.info("Starting hardware tests.")
         self._check_raphcore_network()
         self.exit_code = 0
