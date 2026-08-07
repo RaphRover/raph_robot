@@ -480,6 +480,10 @@ class HardwareTestCommand:
                 deadline = time.monotonic() + IMU_TEST_TIMEOUT
 
                 while samples < IMU_SAMPLES:
+                    self._ensure_deadline_not_exceeded(
+                        deadline,
+                        "IMU test",
+                    )
                     self._spin_once(0.1)
                     imu = self.latest_imu
                     if imu is None or not self.new_imu_received:
@@ -488,10 +492,6 @@ class HardwareTestCommand:
                     self._verify_imu_sample(imu)
                     samples += 1
                     self.new_imu_received = False
-                    self._ensure_deadline_not_exceeded(
-                        deadline,
-                        "IMU test",
-                    )
         except (TimeoutError, ValueError) as exc:
             self.logger.error(  # noqa: TRY400
                 "IMU test failed. "
