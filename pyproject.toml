@@ -93,6 +93,8 @@ ignore = [
     "PLR2004", # magic-value-comparison
 
     "UP047", # non-pep695-generic-function, mypy doesn't support this yet
+
+    "S101", # Allow asserts
 ]
 
 mccabe.max-complexity = 10

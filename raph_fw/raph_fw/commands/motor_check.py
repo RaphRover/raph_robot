@@ -129,6 +129,7 @@ class MotorCheckCommand:
 
         with log_step("Calibrating servos"):
             future = self._calibrate_servos_client.call_async(Trigger.Request())
+            assert self.node is not None
             rclpy.spin_until_future_complete(self.node, future, timeout_sec=SERVICE_TIMEOUT)
             if future.result() is None:
                 self.logger.error("calibrate_servos service call timed out.")

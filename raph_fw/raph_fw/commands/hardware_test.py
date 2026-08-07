@@ -27,7 +27,9 @@ import rclpy
 from ament_index_python.packages import get_package_share_directory
 from raph_interfaces.msg import MotorDiagnostics, PowerSystemState
 from raph_interfaces.srv import GetControllerInfo, GetOsVersion
+from rclpy.client import Client
 from rclpy.node import Node
+from rclpy.task import Future
 from sensor_msgs.msg import Imu
 from std_srvs.srv import Trigger
 
@@ -216,7 +218,7 @@ class HardwareTestCommand:
 
     def _ensure_service_ready(
         self,
-        client: object,
+        client: Client,
         service_name: str,
     ) -> None:
         """
@@ -230,7 +232,7 @@ class HardwareTestCommand:
             msg = f"{service_name} server not available. Check ROS and controller node visibility."
             raise TimeoutError(msg)
 
-    def _ensure_future_done(self, future: object, operation: str) -> None:
+    def _ensure_future_done(self, future: Future, operation: str) -> None:
         """
         Ensure a future completed successfully or raise TimeoutError.
 
@@ -405,6 +407,7 @@ class HardwareTestCommand:
                 )
 
                 future = self.controller_info_client.call_async(GetControllerInfo.Request())
+                assert self.node is not None
                 rclpy.spin_until_future_complete(self.node, future, None, SERVICE_TIMEOUT)
                 self._ensure_future_done(future, "Controller info")
 
@@ -549,6 +552,7 @@ class HardwareTestCommand:
             ):
                 if self.latest_power_state is None:
                     self._wait_for_power_state_message()
+                assert self.latest_power_state is not None
 
                 power_state = self.latest_power_state
                 failures: list[str] = []
@@ -598,6 +602,7 @@ class HardwareTestCommand:
                 )
 
                 future = self.raph_os_version_client.call_async(GetOsVersion.Request())
+                assert self.node is not None
                 rclpy.spin_until_future_complete(self.node, future, None, SERVICE_TIMEOUT)
                 self._ensure_future_done(future, "RaphOS version")
 
@@ -637,6 +642,7 @@ class HardwareTestCommand:
                 )
 
                 calibration_future = self.calibrate_servos_client.call_async(Trigger.Request())
+                assert self.node is not None
                 rclpy.spin_until_future_complete(
                     self.node,
                     calibration_future,
