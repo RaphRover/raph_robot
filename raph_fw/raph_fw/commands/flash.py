@@ -44,7 +44,7 @@ class FlashCommand:
         bootloader: bool
         address: str | None
 
-    class FlashCommandArgs(CommonArgs):
+    class FlashCommandArgs(CommonArgs, Protocol):
         """Protocol for the arguments expected by FlashCommand."""
 
         binary_path: str
