@@ -23,6 +23,7 @@
 """A script for updating firmware on the RaphCore device."""
 
 import argparse
+import contextlib
 
 from raph_fw.commands import UpdateCommand
 
@@ -36,7 +37,8 @@ def main() -> None:
     update_command = UpdateCommand()
     update_command.add_arguments(parser)
     args = parser.parse_args()
-    update_command.main(args)
+    with contextlib.suppress(KeyboardInterrupt):
+        update_command.main(args)
 
 
 if __name__ == "__main__":

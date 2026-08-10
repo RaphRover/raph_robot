@@ -139,6 +139,12 @@ def log_step(
         elapsed_ms = (time.perf_counter() - start) * 1000
         _log.info(f"{label}... [red]{failure_text}[/red] ({elapsed_ms:.0f} ms)")
         raise
+    except BaseException:
+        # Catches KeyboardInterrupt/SystemExit, which are not subclasses of
+        # Exception. Make sure the Live display is stopped and the terminal
+        # (cursor, alternate buffer, etc.) is restored before propagating.
+        live.stop()
+        raise
     else:
         live.stop()
         elapsed_ms = (time.perf_counter() - start) * 1000
