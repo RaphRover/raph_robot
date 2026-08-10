@@ -22,10 +22,6 @@ from __future__ import annotations
 
 import sys
 import time
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import argparse
 
 import rclpy
 from raph_interfaces.msg import ServoCommand, WheelCommand
