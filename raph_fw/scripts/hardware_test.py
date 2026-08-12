@@ -20,25 +20,18 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""A script for flashing firmware onto the RaphCore device."""
+"""A script for testing Raph robot hardware."""
 
-import argparse
 import contextlib
 
-from raph_fw.commands import FlashCommand
+from raph_fw.commands import HardwareTestCommand
 
 
 def main() -> None:
-    """Execute the flashing process."""
-    parser = argparse.ArgumentParser(
-        description="Flash firmware onto the RaphCore device.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    flash_command = FlashCommand()
-    flash_command.add_arguments(parser)
-    args = parser.parse_args()
+    """Execute the hardware test process."""
+    hardware_test_command = HardwareTestCommand()
     with contextlib.suppress(KeyboardInterrupt):
-        flash_command.main(args)
+        hardware_test_command.main()
 
 
 if __name__ == "__main__":

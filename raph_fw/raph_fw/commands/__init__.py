@@ -19,9 +19,13 @@
 # THE SOFTWARE.
 
 from .flash import FlashCommand
+from .hardware_test import HardwareTestCommand
+from .motor_check import MotorCheckCommand
 from .update import UpdateCommand
 
 __all__ = [
     "FlashCommand",
+    "HardwareTestCommand",
+    "MotorCheckCommand",
     "UpdateCommand",
 ]
