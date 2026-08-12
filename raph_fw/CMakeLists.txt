@@ -14,6 +14,7 @@ install(
     scripts/hardware_test
     scripts/motor_check.py
     scripts/motor_check
+    scripts/parameter_bridge.py
     scripts/parameter_bridge
     scripts/update.py
     scripts/update
