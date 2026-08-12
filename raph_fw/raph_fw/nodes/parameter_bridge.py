@@ -184,6 +184,12 @@ class ParameterBridge(Node):
               ros__parameters:
                 param1: 10
 
+        Ad-hoc ``-p name:=value`` overrides are stored by rcl under a wildcard that
+        matches *any* node name in the process, so they would also show up in the
+        probe node's overrides even though they're meant for the bridge itself.
+        Since they equally apply to this node, they're filtered out by excluding
+        any name already present in this node's own ``_parameter_overrides``.
+
         The probe node is destroyed immediately after its parameter overrides are
         read; it never advertises services and is not spun.
         """
@@ -200,6 +206,10 @@ class ParameterBridge(Node):
             return {}
 
         try:
-            return dict(probe_node._parameter_overrides)  # noqa: SLF001
+            return {
+                name: parameter
+                for name, parameter in probe_node._parameter_overrides.items()  # noqa: SLF001
+                if name not in self._parameter_overrides
+            }
         finally:
             probe_node.destroy_node()
