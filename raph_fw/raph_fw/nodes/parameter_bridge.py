@@ -34,12 +34,8 @@ class ParameterBridge(Node):
     """Node that loads parameter overrides and forwards them to the controller node."""
 
     target_node: str
-    full_node_name: str
-    ns: str
     apply_tf_frame_prefix_client: Client
     set_parameters_client: Client
-    apply_tf_frame_prefix_service_name: str
-    set_parameters_service_name: str
     tf_frame_prefix: str
     params_to_set: dict[str, Parameter]
 
