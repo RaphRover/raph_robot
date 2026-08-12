@@ -18,10 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from pathlib import Path
-
 import rclpy
-import yaml
 from raph_interfaces.srv import ApplyTfFramePrefix
 from rcl_interfaces.msg import ParameterDescriptor
 from rcl_interfaces.srv import SetParameters
@@ -36,7 +33,6 @@ SERVICE_TIMEOUT = 2.0
 class ParameterBridge(Node):
     """Node that loads parameter overrides and forwards them to the controller node."""
 
-    overrides_file: Path
     target_node: str
     full_node_name: str
     ns: str
@@ -46,7 +42,6 @@ class ParameterBridge(Node):
     set_parameters_service_name: str
     tf_frame_prefix: str
     params_to_set: dict[str, Parameter]
-    type_dict: dict[type, Parameter.Type]
 
     def __init__(self) -> None:
         """Create and initialize the controller parameter bridge node."""
@@ -57,11 +52,6 @@ class ParameterBridge(Node):
             "controller",
             ParameterDescriptor(read_only=True),
         )
-        self.declare_parameter(
-            "overrides_param_file",
-            "/etc/ros/parameter_overrides.yaml",
-            ParameterDescriptor(read_only=True),
-        )
 
         self.declare_parameter(
             "tf_frame_prefix",
@@ -69,40 +59,22 @@ class ParameterBridge(Node):
             ParameterDescriptor(read_only=True),
         )
 
-        self.type_dict = {
-            str: Parameter.Type.STRING,
-            int: Parameter.Type.INTEGER,
-            bool: Parameter.Type.BOOL,
-            float: Parameter.Type.DOUBLE,
-        }
-
-        self.overrides_file = Path(self.get_parameter("overrides_param_file").value)
         self.target_node = self.get_parameter("target_node_name").value.strip("/")
-        self.ns = self.get_namespace().strip("/")
-        self.full_node_name = (
-            f"/{self.ns}/{self.target_node}" if self.ns else f"/{self.target_node}"
-        )
 
-        self.apply_tf_frame_prefix_service_name = f"{self.full_node_name}/apply_tf_frame_prefix"
-        self.get_logger().info(
-            f"Apply TF frame prefix service name: {self.apply_tf_frame_prefix_service_name}",
-        )
         self.apply_tf_frame_prefix_client = self.create_client(
             ApplyTfFramePrefix,
-            self.apply_tf_frame_prefix_service_name,
+            f"{self.target_node}/apply_tf_frame_prefix",
         )
         self.tf_frame_prefix = self.get_parameter("tf_frame_prefix").value
 
-        self.set_parameters_service_name = f"{self.full_node_name}/set_parameters"
-        self.get_logger().info(f"SetParameters service name: {self.set_parameters_service_name}")
         self.set_parameters_client = self.create_client(
             SetParameters,
-            self.set_parameters_service_name,
+            f"{self.target_node}/set_parameters",
         )
         self.params_to_set: dict[str, Parameter] = self._parse_overrides_file()
 
         self.get_logger().info(
-            f"Parameter bridge initialized for {self.full_node_name} target node",
+            f"Parameter bridge initialized for {self.target_node} target node",
         )
 
     def run(self) -> None:
@@ -115,19 +87,17 @@ class ParameterBridge(Node):
         self.get_logger().info("Waiting for apply_tf_frame_prefix service to be available...")
         while not self.apply_tf_frame_prefix_client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
             self.get_logger().info(
-                f"Service {self.apply_tf_frame_prefix_service_name} not available yet, retrying...",
+                f"Service {self.apply_tf_frame_prefix_client.srv_name} not available yet, "
+                "retrying...",
             )
         self.get_logger().info(
-            "apply_tf_frame_prefix service is available. Applying TF frame prefix...",
+            f"{self.apply_tf_frame_prefix_client.srv_name} service is available. "
+            "Applying TF frame prefix...",
         )
 
         request = ApplyTfFramePrefix.Request()
         request.tf_frame_prefix = self.tf_frame_prefix
-        future = self._call_with_retry(
-            self.apply_tf_frame_prefix_client,
-            request,
-            self.apply_tf_frame_prefix_service_name,
-        )
+        future = self._call_with_retry(self.apply_tf_frame_prefix_client, request)
 
         if future.result() is None:
             self.get_logger().error("ApplyTfFramePrefix call failed or returned no result.")
@@ -138,7 +108,7 @@ class ParameterBridge(Node):
             return False
 
         self.get_logger().info(
-            f"Applied TF frame prefix '{self.tf_frame_prefix}' to {self.full_node_name} node",
+            f"Applied TF frame prefix '{self.tf_frame_prefix}' to {self.target_node} node",
         )
         return True
 
@@ -151,19 +121,17 @@ class ParameterBridge(Node):
         self.get_logger().info("Waiting for set_parameters service to be available...")
         while not self.set_parameters_client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
             self.get_logger().info(
-                f"Service {self.set_parameters_service_name} not available yet, retrying...",
+                f"Service {self.set_parameters_client.srv_name} not available yet, retrying...",
             )
-        self.get_logger().info("set_parameters service is available. Applying parameters...")
+        self.get_logger().info(
+            f"{self.set_parameters_client.srv_name} service is available. Applying parameters...",
+        )
 
         request = SetParameters.Request()
         request.parameters = [
             parameter.to_parameter_msg() for parameter in self.params_to_set.values()
         ]
-        future = self._call_with_retry(
-            self.set_parameters_client,
-            request,
-            self.set_parameters_service_name,
-        )
+        future = self._call_with_retry(self.set_parameters_client, request)
 
         if future.result() is None:
             self.get_logger().error("SetParameters call failed or returned no result.")
@@ -181,7 +149,7 @@ class ParameterBridge(Node):
             return False
 
         self.get_logger().info(
-            f"Applied {len(self.params_to_set)} parameter(s) to {self.full_node_name} node",
+            f"Applied {len(self.params_to_set)} parameter(s) to {self.target_node} node",
         )
         return True
 
@@ -189,7 +157,6 @@ class ParameterBridge(Node):
         self,
         client: Client,
         request: ApplyTfFramePrefix.Request | SetParameters.Request,
-        service_name: str,
     ) -> Future:
         """Retry timed out async service calls until the future completes."""
         while True:
@@ -200,77 +167,43 @@ class ParameterBridge(Node):
                 return future
 
             self.get_logger().info(
-                f"Service call to {service_name} timed out, retrying...",
+                f"Service call to {client.srv_name} timed out, retrying...",
             )
             future.cancel()
 
     def _parse_overrides_file(self) -> dict[str, Parameter]:
-        """Parse override YAML file and extract parameters for this bridge."""
-        if not self.overrides_file.exists():
-            self.get_logger().warning(f"Overrides file not found: {self.overrides_file}")
+        """
+        Parse parameter overrides using rcl's own parameter parser.
+
+        The bridge itself is launched with ``--params-file``, so the overrides file
+        is already parsed into this process' global ROS arguments. Rather than
+        reading and interpreting that YAML ourselves, a throwaway probe node is
+        created with the same name/namespace the target (controller) node would
+        have. This makes rcl match the node sections in the inherited global
+        arguments (including ``/**`` wildcards and ``/**/<name>`` patterns) exactly
+        the way it would for the real target node, so the overrides file must
+        follow the standard ROS 2 parameters YAML layout, e.g.::
+
+            /**/controller:
+              ros__parameters:
+                param1: 10
+
+        The probe node is destroyed immediately after its parameter overrides are
+        read; it never advertises services and is not spun.
+        """
+        try:
+            probe_node = Node(
+                self.target_node,
+                namespace=self.get_namespace(),
+                context=self.context,
+                start_parameter_services=False,
+                enable_rosout=False,
+            )
+        except Exception as exc:  # noqa: BLE001 - boundary with rcl's global args parser
+            self.get_logger().error(f"Failed to parse parameter overrides: {exc}")
             return {}
 
         try:
-            file_data = yaml.safe_load(self.overrides_file.read_text(encoding="utf-8"))
-        except (OSError, yaml.YAMLError) as exc:
-            self.get_logger().error(f"Failed to read overrides file {self.overrides_file}: {exc}")
-            return {}
-
-        if not isinstance(file_data, dict):
-            self.get_logger().warning(
-                f"Overrides file must contain a mapping at root: {self.overrides_file}",
-            )
-            return {}
-
-        controller_entry = self._get_controller_entry(file_data)
-        if controller_entry is None:
-            self.get_logger().info(
-                f"No entry for '{self.target_node}' found in overrides file.",
-            )
-            return {}
-
-        ros_parameters = controller_entry.get("ros__parameters")
-        if not isinstance(ros_parameters, dict):
-            self.get_logger().warning(
-                "Controller entry exists but has no ros__parameters mapping.",
-            )
-            return {}
-
-        parsed: dict[str, Parameter] = {}
-
-        def parse_parameters_recursive(
-            parameters: dict[str, Parameter],
-            param_name_prefix: str,
-            values_dict: dict,
-        ) -> None:
-            for key, value in values_dict.items():
-                if not isinstance(key, str):
-                    continue
-
-                if isinstance(value, dict):
-                    parse_parameters_recursive(
-                        parameters,
-                        f"{param_name_prefix}{key}.",
-                        value,
-                    )
-                    continue
-
-                parameter = rclpy.Parameter(
-                    param_name_prefix + key,
-                    self.type_dict[type(value)],
-                    value,
-                )
-                parameters[parameter.name] = parameter
-
-        parse_parameters_recursive(parsed, "", ros_parameters)
-        return parsed
-
-    def _get_controller_entry(self, file_data: dict) -> dict | None:
-        """Return bridge entry from wildcard block or direct root fallback."""
-        wildcard_entry = file_data.get("/**")
-        if isinstance(wildcard_entry, dict):
-            controller_entry = wildcard_entry.get(self.target_node)
-            if isinstance(controller_entry, dict):
-                return controller_entry
-
-        return None
+            return dict(probe_node._parameter_overrides)  # noqa: SLF001
+        finally:
+            probe_node.destroy_node()
