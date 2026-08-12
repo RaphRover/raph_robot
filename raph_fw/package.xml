@@ -15,9 +15,7 @@
   <build_depend>raph_interfaces</build_depend>
 
   <exec_depend>ament_index_python</exec_depend>
-  <exec_depend>raph_interfaces</exec_depend>
   <exec_depend>rcl_interfaces</exec_depend>
-  <exec_depend>rclpy</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
   <exec_depend>python3-rich</exec_depend>
   <exec_depend>python3-zeroconf</exec_depend>
