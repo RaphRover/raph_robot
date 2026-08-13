@@ -12,12 +12,24 @@
     default=""
     description="The prefix added to each published TF frame id" />
 
+  <arg name="param_overrides_yaml_file"
+    default=""
+    description="Absolute path to the yaml file with parameters to be overridden for all nodes" />
+
+  <set_parameters_from_file
+    if="$(eval &quot;'$(var param_overrides_yaml_file)'!=''&quot;)"
+    filename="$(var param_overrides_yaml_file)" />
+
   <include if="$(var spawn_state_publisher)"
     file="$(find-pkg-share raph_description)/launch/state_publisher.launch.xml">
     <arg name="model" value="$(var model)" />
   </include>
 
   <node pkg="raph_bringup" exec="raph_system" />
+
+  <node pkg="raph_fw" exec="parameter_bridge">
+    <param name="tf_frame_prefix" value="$(var tf_frame_prefix)" />
+  </node>
 
   <include file="$(find-pkg-share raph_bringup)/launch/oak.launch.xml" />
 
