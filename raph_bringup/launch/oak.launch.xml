@@ -9,7 +9,6 @@
       pkg="raph_oak"
       plugin="raph_oak::OakWrapper">
       <extra_arg name="use_intra_process_comms" value="true" />
-      <param from="$(find-pkg-share raph_bringup)/config/oak.yaml" />
     </composable_node>
     <composable_node namespace="oak"
       name="point_cloud_xyz"
