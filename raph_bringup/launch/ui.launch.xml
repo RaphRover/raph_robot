@@ -11,7 +11,6 @@
     exec="rosbridge_websocket"
     respawn="true"
     respawn_max_retries="5" >
-    <param from="$(find-pkg-share raph_bringup)/config/rosbridge_server.yaml" />
   </node>
 
   <node name="rosapi"

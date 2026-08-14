@@ -1,4 +1,4 @@
-/oak:
+/**/oak:
   ros__parameters:
     device:
       mx_id: ""

@@ -16,6 +16,11 @@
     default=""
     description="Absolute path to the yaml file with parameters to be overridden for all nodes" />
 
+  <!-- Load default parameter files globally so a later override file (param_overrides_yaml_file) can take precedence. -->
+  <set_parameters_from_file filename="$(find-pkg-share raph_bringup)/config/oak.yaml" />
+  <set_parameters_from_file filename="$(find-pkg-share raph_bringup)/config/box_filter.yaml" />
+  <set_parameters_from_file filename="$(find-pkg-share raph_bringup)/config/rplidar.yaml" />
+  <set_parameters_from_file filename="$(find-pkg-share raph_bringup)/config/rosbridge_server.yaml" />
   <set_parameters_from_file
     if="$(eval &quot;'$(var param_overrides_yaml_file)'!=''&quot;)"
     filename="$(var param_overrides_yaml_file)" />

@@ -1,4 +1,4 @@
-/rplidar/rplidar_node:
+/**/rplidar/rplidar_node:
   ros__parameters:
     channel_type: serial
     serial_port: /dev/ttyS5
