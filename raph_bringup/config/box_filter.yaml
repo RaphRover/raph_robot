@@ -1,5 +1,6 @@
 /**/rplidar/scan_to_scan_filter_chain:
   ros__parameters:
+    lazy_subscription: true
     filter1:
       name: box_filter
       type: laser_filters/LaserScanBoxFilter
