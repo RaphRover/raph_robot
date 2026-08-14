@@ -12,7 +12,6 @@
   </node>
 
   <node namespace="rplidar"
-    name="box_filter"
     pkg="laser_filters"
     exec="scan_to_scan_filter_chain">
     <param name="filter1.params.box_frame" value="$(var tf_frame_prefix)base_link" />
