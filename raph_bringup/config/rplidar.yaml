@@ -5,3 +5,4 @@
     angle_compensate: true
     scan_mode: Standard
     publish_tf: false
+    auto_standby: true
