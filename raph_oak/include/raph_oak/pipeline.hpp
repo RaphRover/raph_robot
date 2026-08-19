@@ -32,7 +32,7 @@ namespace raph_oak
 
 struct PipelineDetails
 {
-    dai::Pipeline pipeline{false};  // no implicit device connection
+    std::shared_ptr<dai::Pipeline> pipeline;
     std::shared_ptr<dai::MessageQueue> rgb_queue;
     std::shared_ptr<dai::MessageQueue> rgb_compressed_queue;
 };

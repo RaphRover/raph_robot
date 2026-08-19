@@ -52,7 +52,7 @@ public:
 
 private:
   std::shared_ptr<dai::Device> device_;
-  dai::Pipeline pipeline_;
+  std::shared_ptr<dai::Pipeline> pipeline_;
 
   // DepthAI data queues
   std::shared_ptr<dai::MessageQueue> rgb_queue_;

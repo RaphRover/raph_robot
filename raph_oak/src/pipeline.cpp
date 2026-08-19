@@ -36,11 +36,11 @@ namespace raph_oak
 PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const Params & params)
 {
   PipelineDetails details;
-  dai::Pipeline pipeline(device);
+  auto pipeline = std::make_shared<dai::Pipeline>(device);
 
   // Create nodes
   // RGB camera node
-  auto rgb_node = pipeline.create<dai::node::Camera>()->build(dai::CameraBoardSocket::CAM_A);
+  auto rgb_node = pipeline->create<dai::node::Camera>()->build(dai::CameraBoardSocket::CAM_A);
   rgb_node->setImageOrientation(dai::CameraImageOrientation::ROTATE_180_DEG);
   auto rgb_output = rgb_node->requestOutput(
     {params.rgb.width, params.rgb.height}, dai::ImgFrame::Type::NV12,
@@ -49,16 +49,16 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   rgb_queue->setName("rgb");
 
   // RGB compressed
-  auto rgb_encoder_node = pipeline.create<dai::node::VideoEncoder>();
+  auto rgb_encoder_node = pipeline->create<dai::node::VideoEncoder>();
   rgb_encoder_node->setDefaultProfilePreset(
     params.rgb.fps, dai::VideoEncoderProperties::Profile::MJPEG);
   rgb_encoder_node->setQuality(params.rgb_compressed.jpeg_quality);
   rgb_output->link(rgb_encoder_node->input);
-  auto rgb_encoder_queue = rgb_encoder_node->out.createOutputQueue(1, false); //maybe true?
+  auto rgb_encoder_queue = rgb_encoder_node->out.createOutputQueue(1, false);
   rgb_encoder_queue->setName("rgb_compressed");
 
   // Create pipeline details
-  details.pipeline = std::move(pipeline);
+  details.pipeline = pipeline;
   details.rgb_queue = rgb_queue;
   details.rgb_compressed_queue = rgb_encoder_queue;
 

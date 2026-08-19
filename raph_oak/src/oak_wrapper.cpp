@@ -73,8 +73,7 @@ static const std::vector<std::string> UsbStrings = {"UNKNOWN", "LOW",   "FULL",
 OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 : Node("oak_wrapper", options),
   steady_base_time_(std::chrono::steady_clock::now()),
-  param_listener_(get_node_parameters_interface()),
-  pipeline_(false)
+  param_listener_(get_node_parameters_interface())
 {
   ros_base_time_ = rclcpp::Clock().now();
   update_parameters();
@@ -192,8 +191,8 @@ void OakWrapper::run_pipeline()
 
   rgb_queue_ = pipeline_details.rgb_queue;
   rgb_compressed_queue_ = pipeline_details.rgb_compressed_queue;
-  pipeline_ = std::move(pipeline_details.pipeline);
-  pipeline_.start();
+  pipeline_ = pipeline_details.pipeline;
+  pipeline_->start();
 }
 
 void OakWrapper::check_timer_callback()
@@ -238,7 +237,7 @@ void OakWrapper::check_timer_callback()
   if (device_->isClosed()) {
     RCLCPP_ERROR(get_logger(), "Device disconnected. Freeing resources...");
 
-    pipeline_.stop();
+    pipeline_->stop();
     // Reset all queues and device
     rgb_queue_.reset();
     rgb_compressed_queue_.reset();
@@ -254,6 +253,7 @@ void OakWrapper::check_timer_callback()
     //imu_queue_.reset();
     //depth_config_queue_.reset();
     device_.reset();
+    pipeline_.reset();
 
     // Reset callback ids
     rgb_callback_id_ = -1;
@@ -360,21 +360,18 @@ void OakWrapper::check_publishers()
       &OakWrapper::publish_compressed_image, this, rgb_compressed_pub_,
       "oak_rgb_camera_optical_frame", rgb_compressed_queue_));
 
-  //if (params_.device.ir_laser_dot_projector_lazy) {
-  //  const bool should_be_active =
-  //    stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count() >
-  //    0;
-  //  if (should_be_active && !laser_dot_projector_active_) {
-  //    device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
-  //    laser_dot_projector_active_ = true;
-  //  } else if (!should_be_active && laser_dot_projector_active_) {
-  //    device_->setIrLaserDotProjectorIntensity(0.0);
-  //    laser_dot_projector_active_ = false;
-  //  }
-  //}
-
-  //Temp (review the code above):
-  device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
+  if (params_.device.ir_laser_dot_projector_lazy) {
+    const bool should_be_active =
+      stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count() >
+      0;
+    if (should_be_active && !laser_dot_projector_active_) {
+      device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
+      laser_dot_projector_active_ = true;
+    } else if (!should_be_active && laser_dot_projector_active_) {
+      device_->setIrLaserDotProjectorIntensity(0.0);
+      laser_dot_projector_active_ = false;
+    }
+  }
 }
 
 void OakWrapper::manage_callback(
