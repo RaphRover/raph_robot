@@ -27,11 +27,11 @@
 #include <string>
 
 // DepthAI
-#include "depthai-shared/datatype/RawStereoDepthConfig.hpp"
 #include "depthai/device/CalibrationHandler.hpp"
-#include "depthai/device/DataQueue.hpp"
 #include "depthai/device/Device.hpp"
-#include "depthai_bridge/ImuConverter.hpp"
+#include "depthai/pipeline/Pipeline.hpp"
+#include "depthai/pipeline/MessageQueue.hpp"
+
 
 // ROS
 #include "raph_oak/oak_wrapper_parameters.hpp"
@@ -51,22 +51,23 @@ public:
   explicit OakWrapper(rclcpp::NodeOptions options);
 
 private:
-  std::unique_ptr<dai::Device> device_;
+  std::shared_ptr<dai::Device> device_;
+  dai::Pipeline pipeline_;
 
   // DepthAI data queues
-  std::shared_ptr<dai::DataOutputQueue> rgb_queue_;
-  std::shared_ptr<dai::DataOutputQueue> rgb_compressed_queue_;
-  std::shared_ptr<dai::DataOutputQueue> left_queue_;
-  std::shared_ptr<dai::DataOutputQueue> left_compressed_queue_;
-  std::shared_ptr<dai::DataOutputQueue> left_rect_queue_;
-  std::shared_ptr<dai::DataOutputQueue> left_rect_compressed_queue_;
-  std::shared_ptr<dai::DataOutputQueue> right_queue_;
-  std::shared_ptr<dai::DataOutputQueue> right_compressed_queue_;
-  std::shared_ptr<dai::DataOutputQueue> right_rect_queue_;
-  std::shared_ptr<dai::DataOutputQueue> right_rect_compressed_queue_;
-  std::shared_ptr<dai::DataOutputQueue> depth_queue_;
-  std::shared_ptr<dai::DataOutputQueue> imu_queue_;
-  std::shared_ptr<dai::DataInputQueue> depth_config_queue_;
+  std::shared_ptr<dai::MessageQueue> rgb_queue_;
+  std::shared_ptr<dai::MessageQueue> rgb_compressed_queue_;
+  //std::shared_ptr<dai::DataOutputQueue> left_queue_;
+  //std::shared_ptr<dai::DataOutputQueue> left_compressed_queue_;
+  //std::shared_ptr<dai::DataOutputQueue> left_rect_queue_;
+  //std::shared_ptr<dai::DataOutputQueue> left_rect_compressed_queue_;
+  //std::shared_ptr<dai::DataOutputQueue> right_queue_;
+  //std::shared_ptr<dai::DataOutputQueue> right_compressed_queue_;
+  //std::shared_ptr<dai::DataOutputQueue> right_rect_queue_;
+  //std::shared_ptr<dai::DataOutputQueue> right_rect_compressed_queue_;
+  //std::shared_ptr<dai::DataOutputQueue> depth_queue_;
+  //std::shared_ptr<dai::DataOutputQueue> imu_queue_;
+  //std::shared_ptr<dai::DataInputQueue> depth_config_queue_;
 
   // ROS Publishers
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> rgb_img_pub_;
@@ -88,29 +89,29 @@ private:
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> stereo_cam_info_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Imu>> imu_pub_;
 
-  std::shared_ptr<dai::rosBridge::ImuConverter> imu_converter_;
+  //std::shared_ptr<dai::rosBridge::ImuConverter> imu_converter_;
 
   // Callback IDs for dynamic callback management
   int rgb_callback_id_{-1};
   int rgb_compressed_callback_id_{-1};
-  int left_callback_id_{-1};
-  int left_compressed_callback_id_{-1};
-  int left_rect_callback_id_{-1};
-  int left_rect_compressed_callback_id_{-1};
-  int right_callback_id_{-1};
-  int right_compressed_callback_id_{-1};
-  int right_rect_callback_id_{-1};
-  int right_rect_compressed_callback_id_{-1};
-  int depth_callback_id_{-1};
-  int imu_callback_id_{-1};
+  //int left_callback_id_{-1};
+  //int left_compressed_callback_id_{-1};
+  //int left_rect_callback_id_{-1};
+  //int left_rect_compressed_callback_id_{-1};
+  //int right_callback_id_{-1};
+  //int right_compressed_callback_id_{-1};
+  //int right_rect_callback_id_{-1};
+  //int right_rect_compressed_callback_id_{-1};
+  //int depth_callback_id_{-1};
+  //int imu_callback_id_{-1};
 
   // Camera info for callbacks
   sensor_msgs::msg::CameraInfo rgb_camera_info_;
-  sensor_msgs::msg::CameraInfo left_camera_info_;
-  sensor_msgs::msg::CameraInfo left_rect_camera_info_;
-  sensor_msgs::msg::CameraInfo right_camera_info_;
-  sensor_msgs::msg::CameraInfo right_rect_camera_info_;
-  sensor_msgs::msg::CameraInfo stereo_camera_info_;
+  //sensor_msgs::msg::CameraInfo left_camera_info_;
+  //sensor_msgs::msg::CameraInfo left_rect_camera_info_;
+  //sensor_msgs::msg::CameraInfo right_camera_info_;
+  //sensor_msgs::msg::CameraInfo right_rect_camera_info_;
+  //sensor_msgs::msg::CameraInfo stereo_camera_info_;
 
   std::chrono::time_point<std::chrono::steady_clock> steady_base_time_;
   rclcpp::Time ros_base_time_;
@@ -120,17 +121,18 @@ private:
   Params params_;
   PostSetParametersCallbackHandle::SharedPtr parameter_callback_handle_;
 
-  dai::RawStereoDepthConfig depth_config_;
+  //dai::RawStereoDepthConfig depth_config_;
 
   bool laser_dot_projector_active_ = false;
 
+  void run_pipeline();
   void create_ros_publishers();
   void fill_camera_info(const dai::CalibrationHandler & calibration_handler);
   void check_timer_callback();
-  std::unique_ptr<dai::Device> connect_to_device();
+  std::shared_ptr<dai::Device> connect_to_device();
   void check_publishers();
   void manage_callback(
-    int subscription_count, std::shared_ptr<dai::DataOutputQueue> queue, int & callback_id,
+    int subscription_count, std::shared_ptr<dai::MessageQueue> queue, int & callback_id,
     std::function<void()> callback);
   void post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters);
   void update_parameters();
@@ -138,10 +140,10 @@ private:
   void publish_image(
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> img_pub,
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
-    sensor_msgs::msg::CameraInfo cam_info, std::shared_ptr<dai::DataOutputQueue> queue);
+    sensor_msgs::msg::CameraInfo cam_info, std::shared_ptr<dai::MessageQueue> queue);
   void publish_compressed_image(
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
-    const std::string & frame_id, std::shared_ptr<dai::DataOutputQueue> queue);
+    const std::string & frame_id, std::shared_ptr<dai::MessageQueue> queue);
   void publish_imu();
 };
 

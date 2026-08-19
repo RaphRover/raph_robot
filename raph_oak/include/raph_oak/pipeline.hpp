@@ -20,12 +20,24 @@
 
 #pragma once
 
+#include <memory>
+
+#include "depthai/device/Device.hpp"
+#include "depthai/pipeline/MessageQueue.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 
 namespace raph_oak
 {
 
-dai::Pipeline create_dai_pipeline(const Params & params);
+struct PipelineDetails
+{
+    dai::Pipeline pipeline{false};  // no implicit device connection
+    std::shared_ptr<dai::MessageQueue> rgb_queue;
+    std::shared_ptr<dai::MessageQueue> rgb_compressed_queue;
+};
+
+
+PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const Params & params);
 
 }  // namespace raph_oak

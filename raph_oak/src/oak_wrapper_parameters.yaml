@@ -1,9 +1,9 @@
 raph_oak:
   device:
-    mx_id:
+    id:
       type: string
       default_value: ""
-      description: Device MX ID to connect to.
+      description: Device ID to connect to.
       read_only: true
     usb_port_id:
       type: string

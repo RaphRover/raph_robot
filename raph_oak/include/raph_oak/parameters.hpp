@@ -20,13 +20,9 @@
 
 #pragma once
 
-#include "depthai-shared/datatype/RawStereoDepthConfig.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 
 namespace raph_oak
 {
-
-void update_depth_config_from_params(
-  dai::RawStereoDepthConfig & depth_config, const Params & params);
 
 }  // namespace raph_oak
