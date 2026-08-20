@@ -35,6 +35,7 @@ struct PipelineDetails
     std::shared_ptr<dai::Pipeline> pipeline;
     std::shared_ptr<dai::MessageQueue> rgb_queue;
     std::shared_ptr<dai::MessageQueue> rgb_compressed_queue;
+    std::shared_ptr<dai::MessageQueue> imu_queue;
 };
 
 

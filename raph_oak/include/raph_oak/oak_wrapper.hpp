@@ -31,7 +31,7 @@
 #include "depthai/device/Device.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/MessageQueue.hpp"
-
+#include "depthai_bridge/ImuConverter.hpp"
 
 // ROS
 #include "raph_oak/oak_wrapper_parameters.hpp"
@@ -66,7 +66,7 @@ private:
   //std::shared_ptr<dai::DataOutputQueue> right_rect_queue_;
   //std::shared_ptr<dai::DataOutputQueue> right_rect_compressed_queue_;
   //std::shared_ptr<dai::DataOutputQueue> depth_queue_;
-  //std::shared_ptr<dai::DataOutputQueue> imu_queue_;
+  std::shared_ptr<dai::MessageQueue> imu_queue_;
   //std::shared_ptr<dai::DataInputQueue> depth_config_queue_;
 
   // ROS Publishers
@@ -89,7 +89,7 @@ private:
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> stereo_cam_info_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Imu>> imu_pub_;
 
-  //std::shared_ptr<dai::rosBridge::ImuConverter> imu_converter_;
+  std::shared_ptr<depthai_bridge::ImuConverter> imu_converter_;
 
   // Callback IDs for dynamic callback management
   int rgb_callback_id_{-1};
@@ -103,7 +103,7 @@ private:
   //int right_rect_callback_id_{-1};
   //int right_rect_compressed_callback_id_{-1};
   //int depth_callback_id_{-1};
-  //int imu_callback_id_{-1};
+  int imu_callback_id_{-1};
 
   // Camera info for callbacks
   sensor_msgs::msg::CameraInfo rgb_camera_info_;

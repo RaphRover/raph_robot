@@ -82,8 +82,9 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 
   this->create_ros_publishers();
 
-  //imu_converter_ = std::make_shared<dai::rosBridge::ImuConverter>(
-  //  "oak_imu_frame", dai::ros::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO, 0.001, 0.00001);
+  // TODO: make sure this works under namespace
+  imu_converter_ = std::make_shared<depthai_bridge::ImuConverter>(
+    "oak_imu_frame", depthai_bridge::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO, 0.001, 0.00001);
 
   check_timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check_timer_callback, this));
 }
@@ -191,6 +192,7 @@ void OakWrapper::run_pipeline()
 
   rgb_queue_ = pipeline_details.rgb_queue;
   rgb_compressed_queue_ = pipeline_details.rgb_compressed_queue;
+  imu_queue_ = pipeline_details.imu_queue;
   pipeline_ = pipeline_details.pipeline;
   pipeline_->start();
 }
@@ -250,7 +252,7 @@ void OakWrapper::check_timer_callback()
     //right_rect_queue_.reset();
     //right_rect_compressed_queue_.reset();
     //depth_queue_.reset();
-    //imu_queue_.reset();
+    imu_queue_.reset();
     //depth_config_queue_.reset();
     device_.reset();
     pipeline_.reset();
@@ -267,7 +269,7 @@ void OakWrapper::check_timer_callback()
     //right_rect_callback_id_ = -1;
     //right_rect_compressed_callback_id_ = -1;
     //depth_callback_id_ = -1;
-    //imu_callback_id_ = -1;
+    imu_callback_id_ = -1;
 
     return;
   }
@@ -359,6 +361,10 @@ void OakWrapper::check_publishers()
     std::bind(
       &OakWrapper::publish_compressed_image, this, rgb_compressed_pub_,
       "oak_rgb_camera_optical_frame", rgb_compressed_queue_));
+
+  manage_callback(
+    imu_pub_->get_subscription_count(), imu_queue_, imu_callback_id_,
+    std::bind(&OakWrapper::publish_imu, this));
 
   if (params_.device.ir_laser_dot_projector_lazy) {
     const bool should_be_active =
@@ -499,15 +505,15 @@ void OakWrapper::publish_compressed_image(
 
 void OakWrapper::publish_imu()
 {
-  //auto in_data = imu_queue_->tryGet<dai::IMUData>();
-  //if (!in_data) {
-  //  RCLCPP_WARN_STREAM(
-  //    get_logger(), "Failed to get data from \"" << imu_queue_->getName() << "\" queue");
-  //  return;
-  //}
+  auto in_data = imu_queue_->tryGet<dai::IMUData>();
+  if (!in_data) {
+    RCLCPP_WARN_STREAM(
+      get_logger(), "Failed to get data from \"" << imu_queue_->getName() << "\" queue");
+    return;
+  }
 
   std::deque<sensor_msgs::msg::Imu> op_msgs;
-  //imu_converter_->toRosMsg(in_data, op_msgs);
+  imu_converter_->toRosMsg(in_data, op_msgs);
 
   while (!op_msgs.empty()) {
     sensor_msgs::msg::Imu imu = op_msgs.front();
@@ -516,7 +522,7 @@ void OakWrapper::publish_imu()
     // Mark the orientation as unknown
     imu.orientation_covariance[0] = -1.0;
 
-    //imu_pub_->publish(imu);
+    imu_pub_->publish(imu);
   }
 }
 

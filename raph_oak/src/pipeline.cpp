@@ -26,6 +26,7 @@
 #include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/node/Camera.hpp"
 #include "depthai/pipeline/node/VideoEncoder.hpp"
+#include "depthai/pipeline/node/IMU.hpp"
 
 // ROS
 #include "raph_oak/oak_wrapper_parameters.hpp"
@@ -57,10 +58,20 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto rgb_encoder_queue = rgb_encoder_node->out.createOutputQueue(1, false);
   rgb_encoder_queue->setName("rgb_compressed");
 
+  // Imu node
+  auto imu_node = pipeline->create<dai::node::IMU>();
+  imu_node->enableIMUSensor(dai::IMUSensor::ACCELEROMETER_RAW, 500);
+  imu_node->enableIMUSensor(dai::IMUSensor::GYROSCOPE_RAW, 400);
+  imu_node->setBatchReportThreshold(5);
+  imu_node->setMaxBatchReports(20);
+  auto imu_queue = imu_node->out.createOutputQueue(1, false);
+  imu_queue->setName("imu");
+
   // Create pipeline details
   details.pipeline = pipeline;
   details.rgb_queue = rgb_queue;
   details.rgb_compressed_queue = rgb_encoder_queue;
+  details.imu_queue = imu_queue;
 
   return details;
 }
