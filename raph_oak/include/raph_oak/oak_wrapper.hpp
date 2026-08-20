@@ -57,14 +57,14 @@ private:
   // DepthAI data queues
   std::shared_ptr<dai::MessageQueue> rgb_queue_;
   std::shared_ptr<dai::MessageQueue> rgb_compressed_queue_;
-  //std::shared_ptr<dai::DataOutputQueue> left_queue_;
-  //std::shared_ptr<dai::DataOutputQueue> left_compressed_queue_;
-  //std::shared_ptr<dai::DataOutputQueue> left_rect_queue_;
-  //std::shared_ptr<dai::DataOutputQueue> left_rect_compressed_queue_;
-  //std::shared_ptr<dai::DataOutputQueue> right_queue_;
-  //std::shared_ptr<dai::DataOutputQueue> right_compressed_queue_;
-  //std::shared_ptr<dai::DataOutputQueue> right_rect_queue_;
-  //std::shared_ptr<dai::DataOutputQueue> right_rect_compressed_queue_;
+  std::shared_ptr<dai::MessageQueue> left_queue_;
+  std::shared_ptr<dai::MessageQueue> left_compressed_queue_;
+  std::shared_ptr<dai::MessageQueue> left_rect_queue_;
+  std::shared_ptr<dai::MessageQueue> left_rect_compressed_queue_;
+  std::shared_ptr<dai::MessageQueue> right_queue_;
+  std::shared_ptr<dai::MessageQueue> right_compressed_queue_;
+  std::shared_ptr<dai::MessageQueue> right_rect_queue_;
+  std::shared_ptr<dai::MessageQueue> right_rect_compressed_queue_;
   //std::shared_ptr<dai::DataOutputQueue> depth_queue_;
   std::shared_ptr<dai::MessageQueue> imu_queue_;
   //std::shared_ptr<dai::DataInputQueue> depth_config_queue_;
@@ -94,23 +94,23 @@ private:
   // Callback IDs for dynamic callback management
   int rgb_callback_id_{-1};
   int rgb_compressed_callback_id_{-1};
-  //int left_callback_id_{-1};
-  //int left_compressed_callback_id_{-1};
-  //int left_rect_callback_id_{-1};
-  //int left_rect_compressed_callback_id_{-1};
-  //int right_callback_id_{-1};
-  //int right_compressed_callback_id_{-1};
-  //int right_rect_callback_id_{-1};
-  //int right_rect_compressed_callback_id_{-1};
+  int left_callback_id_{-1};
+  int left_compressed_callback_id_{-1};
+  int left_rect_callback_id_{-1};
+  int left_rect_compressed_callback_id_{-1};
+  int right_callback_id_{-1};
+  int right_compressed_callback_id_{-1};
+  int right_rect_callback_id_{-1};
+  int right_rect_compressed_callback_id_{-1};
   //int depth_callback_id_{-1};
   int imu_callback_id_{-1};
 
   // Camera info for callbacks
   sensor_msgs::msg::CameraInfo rgb_camera_info_;
-  //sensor_msgs::msg::CameraInfo left_camera_info_;
-  //sensor_msgs::msg::CameraInfo left_rect_camera_info_;
-  //sensor_msgs::msg::CameraInfo right_camera_info_;
-  //sensor_msgs::msg::CameraInfo right_rect_camera_info_;
+  sensor_msgs::msg::CameraInfo left_camera_info_;
+  sensor_msgs::msg::CameraInfo left_rect_camera_info_;
+  sensor_msgs::msg::CameraInfo right_camera_info_;
+  sensor_msgs::msg::CameraInfo right_rect_camera_info_;
   //sensor_msgs::msg::CameraInfo stereo_camera_info_;
 
   std::chrono::time_point<std::chrono::steady_clock> steady_base_time_;

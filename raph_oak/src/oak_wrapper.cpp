@@ -152,32 +152,32 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   rgb_camera_info_.header.frame_id = "oak_rgb_camera_optical_frame";
 
   // Left (physically right camera, but becomes left after 180 degree rotation)
-  //left_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
-  //  calibration_handler, calibration_handler.getStereoRightCameraId(), params_.mono.width,
-  //  params_.mono.height));
-  //left_camera_info_.header.frame_id = "oak_left_camera_optical_frame";
+  left_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
+    calibration_handler, calibration_handler.getStereoRightCameraId(), params_.mono.width,
+    params_.mono.height));
+  left_camera_info_.header.frame_id = "oak_left_camera_optical_frame";
 
   // Left Rect
-  //left_rect_camera_info_ = get_rotated_camera_info(
-  //  img_converter.calibrationToCameraInfo(
-  //    calibration_handler, calibration_handler.getStereoRightCameraId(), params_.mono.width,
-  //    params_.mono.height),
-  //  true);
-  //left_rect_camera_info_.header.frame_id = "oak_left_camera_optical_frame";
+  left_rect_camera_info_ = get_rotated_camera_info(
+    img_converter.calibrationToCameraInfo(
+      calibration_handler, calibration_handler.getStereoRightCameraId(), params_.mono.width,
+      params_.mono.height),
+    true);
+  left_rect_camera_info_.header.frame_id = "oak_left_camera_optical_frame";
 
   // Right (physically left camera, but becomes right after 180 degree rotation)
-  //right_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
-  //  calibration_handler, calibration_handler.getStereoLeftCameraId(), params_.mono.width,
-  //  params_.mono.height));
-  //right_camera_info_.header.frame_id = "oak_right_camera_optical_frame";
+  right_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
+    calibration_handler, calibration_handler.getStereoLeftCameraId(), params_.mono.width,
+    params_.mono.height));
+  right_camera_info_.header.frame_id = "oak_right_camera_optical_frame";
 
   // Right Rect
-  //right_rect_camera_info_ = get_rotated_camera_info(
-  //  img_converter.calibrationToCameraInfo(
-  //    calibration_handler, calibration_handler.getStereoLeftCameraId(), params_.mono.width,
-  //    params_.mono.height),
-  //  true);
-  //right_rect_camera_info_.header.frame_id = "oak_right_camera_optical_frame";
+  right_rect_camera_info_ = get_rotated_camera_info(
+    img_converter.calibrationToCameraInfo(
+      calibration_handler, calibration_handler.getStereoLeftCameraId(), params_.mono.width,
+      params_.mono.height),
+    true);
+  right_rect_camera_info_.header.frame_id = "oak_right_camera_optical_frame";
 
   // Depth
   //stereo_camera_info_ = img_converter.calibrationToCameraInfo(
@@ -192,6 +192,14 @@ void OakWrapper::run_pipeline()
 
   rgb_queue_ = pipeline_details.rgb_queue;
   rgb_compressed_queue_ = pipeline_details.rgb_compressed_queue;
+  left_queue_ = pipeline_details.left_queue;
+  left_compressed_queue_ = pipeline_details.left_compressed_queue;
+  left_rect_queue_ = pipeline_details.left_rect_queue;
+  left_rect_compressed_queue_ = pipeline_details.left_rect_compressed_queue;
+  right_queue_ = pipeline_details.right_queue;
+  right_compressed_queue_ = pipeline_details.right_compressed_queue;
+  right_rect_queue_ = pipeline_details.right_rect_queue;
+  right_rect_compressed_queue_ = pipeline_details.right_rect_compressed_queue;
   imu_queue_ = pipeline_details.imu_queue;
   pipeline_ = pipeline_details.pipeline;
   pipeline_->start();
@@ -243,14 +251,14 @@ void OakWrapper::check_timer_callback()
     // Reset all queues and device
     rgb_queue_.reset();
     rgb_compressed_queue_.reset();
-    //left_queue_.reset();
-    //left_compressed_queue_.reset();
-    //left_rect_queue_.reset();
-    //left_rect_compressed_queue_.reset();
-    //right_queue_.reset();
-    //right_compressed_queue_.reset();
-    //right_rect_queue_.reset();
-    //right_rect_compressed_queue_.reset();
+    left_queue_.reset();
+    left_compressed_queue_.reset();
+    left_rect_queue_.reset();
+    left_rect_compressed_queue_.reset();
+    right_queue_.reset();
+    right_compressed_queue_.reset();
+    right_rect_queue_.reset();
+    right_rect_compressed_queue_.reset();
     //depth_queue_.reset();
     imu_queue_.reset();
     //depth_config_queue_.reset();
@@ -260,14 +268,14 @@ void OakWrapper::check_timer_callback()
     // Reset callback ids
     rgb_callback_id_ = -1;
     rgb_compressed_callback_id_ = -1;
-    //left_callback_id_ = -1;
-    //left_compressed_callback_id_ = -1;
-    //left_rect_callback_id_ = -1;
-    //left_rect_compressed_callback_id_ = -1;
-    //right_callback_id_ = -1;
-    //right_compressed_callback_id_ = -1;
-    //right_rect_callback_id_ = -1;
-    //right_rect_compressed_callback_id_ = -1;
+    left_callback_id_ = -1;
+    left_compressed_callback_id_ = -1;
+    left_rect_callback_id_ = -1;
+    left_rect_compressed_callback_id_ = -1;
+    right_callback_id_ = -1;
+    right_compressed_callback_id_ = -1;
+    right_rect_callback_id_ = -1;
+    right_rect_compressed_callback_id_ = -1;
     //depth_callback_id_ = -1;
     imu_callback_id_ = -1;
 
@@ -363,6 +371,62 @@ void OakWrapper::check_publishers()
       "oak_rgb_camera_optical_frame", rgb_compressed_queue_));
 
   manage_callback(
+    left_img_pub_->get_subscription_count() + left_cam_info_pub_->get_subscription_count(),
+    left_queue_, left_callback_id_,
+    std::bind(
+      &OakWrapper::publish_image, this, left_img_pub_, left_cam_info_pub_, left_camera_info_,
+      left_queue_));
+
+  manage_callback(
+    left_compressed_pub_->get_subscription_count(), left_compressed_queue_,
+    left_compressed_callback_id_,
+    std::bind(
+      &OakWrapper::publish_compressed_image, this, left_compressed_pub_,
+      "oak_left_camera_optical_frame", left_compressed_queue_));
+
+  manage_callback(
+    left_rect_img_pub_->get_subscription_count() + left_rect_cam_info_pub_->get_subscription_count(),
+    left_rect_queue_, left_rect_callback_id_,
+    std::bind(
+      &OakWrapper::publish_image, this, left_rect_img_pub_, left_rect_cam_info_pub_,
+      left_rect_camera_info_, left_rect_queue_));
+
+  manage_callback(
+    left_rect_compressed_pub_->get_subscription_count(), left_rect_compressed_queue_,
+    left_rect_compressed_callback_id_,
+    std::bind(
+      &OakWrapper::publish_compressed_image, this, left_rect_compressed_pub_,
+      "oak_left_camera_optical_frame", left_rect_compressed_queue_));
+
+  manage_callback(
+    right_img_pub_->get_subscription_count() + right_cam_info_pub_->get_subscription_count(),
+    right_queue_, right_callback_id_,
+    std::bind(
+      &OakWrapper::publish_image, this, right_img_pub_, right_cam_info_pub_, right_camera_info_,
+      right_queue_));
+
+  manage_callback(
+    right_compressed_pub_->get_subscription_count(), right_compressed_queue_,
+    right_compressed_callback_id_,
+    std::bind(
+      &OakWrapper::publish_compressed_image, this, right_compressed_pub_,
+      "oak_right_camera_optical_frame", right_compressed_queue_));
+
+  manage_callback(
+    right_rect_img_pub_->get_subscription_count() + right_rect_cam_info_pub_->get_subscription_count(),
+    right_rect_queue_, right_rect_callback_id_,
+    std::bind(
+      &OakWrapper::publish_image, this, right_rect_img_pub_, right_rect_cam_info_pub_,
+      right_rect_camera_info_, right_rect_queue_));
+
+  manage_callback(
+    right_rect_compressed_pub_->get_subscription_count(), right_rect_compressed_queue_,
+    right_rect_compressed_callback_id_,
+    std::bind(
+      &OakWrapper::publish_compressed_image, this, right_rect_compressed_pub_,
+      "oak_right_camera_optical_frame", right_rect_compressed_queue_));
+
+  manage_callback(
     imu_pub_->get_subscription_count(), imu_queue_, imu_callback_id_,
     std::bind(&OakWrapper::publish_imu, this));
 
@@ -382,7 +446,7 @@ void OakWrapper::check_publishers()
 
 void OakWrapper::manage_callback(
   int subscription_count, std::shared_ptr<dai::MessageQueue> queue, int & callback_id,
-  std::function<void()> callback)
+  std::function<void()> callback) // std::shared_ptr<dai::MessageQueue> parent_queue
 {
   const bool should_be_active = subscription_count > 0;
   const bool is_active = callback_id >= 0;
@@ -391,10 +455,12 @@ void OakWrapper::manage_callback(
     RCLCPP_INFO_STREAM(
       get_logger(), "Activating callback for \"" << queue->getName() << "\" queue");
     callback_id = queue->addCallback(callback);
+    //parent_queue->setBlocking(false);
     queue->tryGetAll();  // Clear any existing data in the queue
   } else if (!should_be_active && is_active) {
     RCLCPP_INFO_STREAM(
       get_logger(), "Deactivating callback for \"" << queue->getName() << "\" queue");
+    //parent_queue->setBlocking(true);
     queue->removeCallback(callback_id);
     callback_id = -1;
   }

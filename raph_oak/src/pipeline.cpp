@@ -23,8 +23,14 @@
 #include <memory>
 
 // DepthAI
+#include "depthai/common/CameraBoardSocket.hpp"
+#include "depthai/common/CameraImageOrientation.hpp"
+#include "depthai/device/Device.hpp"
+#include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/node/Camera.hpp"
+#include "depthai/pipeline/node/IMU.hpp"
+#include "depthai/pipeline/node/ImageManip.hpp"
 #include "depthai/pipeline/node/VideoEncoder.hpp"
 #include "depthai/pipeline/node/IMU.hpp"
 
@@ -58,6 +64,89 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto rgb_encoder_queue = rgb_encoder_node->out.createOutputQueue(1, false);
   rgb_encoder_queue->setName("rgb_compressed");
 
+  // Mono cameras are mounted upside down. Use CAM_C as logical left and CAM_B as logical right,
+  // then rotate by 180 degrees with ImageManip.
+  auto left_node = pipeline->create<dai::node::Camera>()->build(
+    dai::CameraBoardSocket::CAM_C, {}, params.mono.fps);
+  auto right_node = pipeline->create<dai::node::Camera>()->build(
+    dai::CameraBoardSocket::CAM_B, {}, params.mono.fps);
+
+  auto left_raw_output = left_node->requestOutput(
+    {params.mono.width, params.mono.height}, dai::ImgFrame::Type::RAW8,
+    dai::ImgResizeMode::CROP, params.mono.fps);
+  auto right_raw_output = right_node->requestOutput(
+    {params.mono.width, params.mono.height}, dai::ImgFrame::Type::RAW8,
+    dai::ImgResizeMode::CROP, params.mono.fps);
+
+  auto left_rotate = pipeline->create<dai::node::ImageManip>();
+  left_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
+  left_rotate->initialConfig->addRotateDeg(180.0);
+  left_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
+  left_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  left_raw_output->link(left_rotate->inputImage);
+
+  auto right_rotate = pipeline->create<dai::node::ImageManip>();
+  right_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
+  right_rotate->initialConfig->addRotateDeg(180.0);
+  right_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
+  right_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  right_raw_output->link(right_rotate->inputImage);
+
+  auto left_rect_rotate = pipeline->create<dai::node::ImageManip>();
+  left_rect_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
+  left_rect_rotate->initialConfig->addRotateDeg(180.0);
+  left_rect_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
+  left_rect_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  left_raw_output->link(left_rect_rotate->inputImage);
+
+  auto right_rect_rotate = pipeline->create<dai::node::ImageManip>();
+  right_rect_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
+  right_rect_rotate->initialConfig->addRotateDeg(180.0);
+  right_rect_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
+  right_rect_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  right_raw_output->link(right_rect_rotate->inputImage);
+
+  auto left_queue = left_rotate->out.createOutputQueue(1, false);
+  left_queue->setName("left");
+  auto left_rect_queue = left_rect_rotate->out.createOutputQueue(1, false);
+  left_rect_queue->setName("left_rect");
+  auto right_queue = right_rotate->out.createOutputQueue(1, true);
+  right_queue->setName("right");
+  auto right_rect_queue = right_rect_rotate->out.createOutputQueue(1, false);
+  right_rect_queue->setName("right_rect");
+
+  auto left_encoder_node = pipeline->create<dai::node::VideoEncoder>();
+  left_encoder_node->setDefaultProfilePreset(
+    params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
+  left_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+  left_rotate->out.link(left_encoder_node->input);
+  auto left_compressed_queue = left_encoder_node->out.createOutputQueue(1, false);
+  left_compressed_queue->setName("left_compressed");
+
+  auto left_rect_encoder_node = pipeline->create<dai::node::VideoEncoder>();
+  left_rect_encoder_node->setDefaultProfilePreset(
+    params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
+  left_rect_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+  left_rect_rotate->out.link(left_rect_encoder_node->input);
+  auto left_rect_compressed_queue = left_rect_encoder_node->out.createOutputQueue(1, false);
+  left_rect_compressed_queue->setName("left_rect_compressed");
+
+  auto right_encoder_node = pipeline->create<dai::node::VideoEncoder>();
+  right_encoder_node->setDefaultProfilePreset(
+    params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
+  right_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+  right_rotate->out.link(right_encoder_node->input);
+  auto right_compressed_queue = right_encoder_node->out.createOutputQueue(1, false);
+  right_compressed_queue->setName("right_compressed");
+
+  auto right_rect_encoder_node = pipeline->create<dai::node::VideoEncoder>();
+  right_rect_encoder_node->setDefaultProfilePreset(
+    params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
+  right_rect_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+  right_rect_rotate->out.link(right_rect_encoder_node->input);
+  auto right_rect_compressed_queue = right_rect_encoder_node->out.createOutputQueue(1, false);
+  right_rect_compressed_queue->setName("right_rect_compressed");
+
   // Imu node
   auto imu_node = pipeline->create<dai::node::IMU>();
   imu_node->enableIMUSensor(dai::IMUSensor::ACCELEROMETER_RAW, 500);
@@ -71,6 +160,14 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   details.pipeline = pipeline;
   details.rgb_queue = rgb_queue;
   details.rgb_compressed_queue = rgb_encoder_queue;
+  details.left_queue = left_queue;
+  details.left_compressed_queue = left_compressed_queue;
+  details.left_rect_queue = left_rect_queue;
+  details.left_rect_compressed_queue = left_rect_compressed_queue;
+  details.right_queue = right_queue;
+  details.right_compressed_queue = right_compressed_queue;
+  details.right_rect_queue = right_rect_queue;
+  details.right_rect_compressed_queue = right_rect_compressed_queue;
   details.imu_queue = imu_queue;
 
   return details;
