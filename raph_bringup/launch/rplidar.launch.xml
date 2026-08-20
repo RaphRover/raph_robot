@@ -5,7 +5,7 @@
     description="The prefix added to each published TF frame id" />
 
   <lifecycle_node namespace="rplidar"
-    name="rplidar_node"
+    name="rplidar_driver"
     pkg="rplidar_driver"
     exec="rplidar_node"
     autostart="true">
