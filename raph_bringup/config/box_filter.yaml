@@ -2,13 +2,25 @@
   ros__parameters:
     lazy_subscription: true
     filter1:
-      name: box_filter
+      name: box_filter_rover_contour_and_antennas
       type: laser_filters/LaserScanBoxFilter
       params:
-        max_x: -0.28
-        max_y: 0.25
+        max_x: -0.08
+        max_y: 0.215
         max_z: 0.3
         min_x: -0.48
-        min_y: -0.25
+        min_y: -0.215
         min_z: -0.3
         invert: false
+    filter2:
+      name: angle_filter_left_motor_cover
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        lower_angle: 2.4
+        upper_angle: 2.75
+    filter3:
+      name: angle_filter_right_motor_cover
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        lower_angle: 3.53
+        upper_angle: 3.88

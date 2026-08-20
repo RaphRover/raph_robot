@@ -4,12 +4,13 @@
     default=""
     description="The prefix added to each published TF frame id" />
 
-  <node namespace="rplidar"
+  <lifecycle_node namespace="rplidar"
     name="rplidar_node"
-    pkg="rplidar_ros"
-    exec="rplidar_node">
+    pkg="rplidar_driver"
+    exec="rplidar_node"
+    autostart="true">
     <param name="frame_id" value="$(var tf_frame_prefix)laser_frame" />
-  </node>
+  </lifecycle_node>
 
   <node namespace="rplidar"
     pkg="laser_filters"
