@@ -446,7 +446,7 @@ void OakWrapper::check_publishers()
 
 void OakWrapper::manage_callback(
   int subscription_count, std::shared_ptr<dai::MessageQueue> queue, int & callback_id,
-  std::function<void()> callback) // std::shared_ptr<dai::MessageQueue> parent_queue
+  std::function<void()> callback)
 {
   const bool should_be_active = subscription_count > 0;
   const bool is_active = callback_id >= 0;
@@ -455,12 +455,10 @@ void OakWrapper::manage_callback(
     RCLCPP_INFO_STREAM(
       get_logger(), "Activating callback for \"" << queue->getName() << "\" queue");
     callback_id = queue->addCallback(callback);
-    //parent_queue->setBlocking(false);
     queue->tryGetAll();  // Clear any existing data in the queue
   } else if (!should_be_active && is_active) {
     RCLCPP_INFO_STREAM(
       get_logger(), "Deactivating callback for \"" << queue->getName() << "\" queue");
-    //parent_queue->setBlocking(true);
     queue->removeCallback(callback_id);
     callback_id = -1;
   }

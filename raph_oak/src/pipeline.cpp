@@ -110,7 +110,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   left_queue->setName("left");
   auto left_rect_queue = left_rect_rotate->out.createOutputQueue(1, false);
   left_rect_queue->setName("left_rect");
-  auto right_queue = right_rotate->out.createOutputQueue(1, true);
+  auto right_queue = right_rotate->out.createOutputQueue(1, false);
   right_queue->setName("right");
   auto right_rect_queue = right_rect_rotate->out.createOutputQueue(1, false);
   right_rect_queue->setName("right_rect");
