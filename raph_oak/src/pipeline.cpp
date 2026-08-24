@@ -27,12 +27,14 @@
 #include "depthai/common/CameraImageOrientation.hpp"
 #include "depthai/device/Device.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
+#include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/node/Camera.hpp"
 #include "depthai/pipeline/node/IMU.hpp"
 #include "depthai/pipeline/node/ImageManip.hpp"
 #include "depthai/pipeline/node/VideoEncoder.hpp"
 #include "depthai/pipeline/node/IMU.hpp"
+#include "depthai/pipeline/node/StereoDepth.hpp"
 
 // ROS
 #include "raph_oak/oak_wrapper_parameters.hpp"
@@ -64,57 +66,39 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto rgb_encoder_queue = rgb_encoder_node->out.createOutputQueue(1, false);
   rgb_encoder_queue->setName("rgb_compressed");
 
-  // Mono cameras are mounted upside down. Use CAM_C as logical left and CAM_B as logical right,
-  // then rotate by 180 degrees with ImageManip.
-  auto left_node = pipeline->create<dai::node::Camera>()->build(
-    dai::CameraBoardSocket::CAM_C, {}, params.mono.fps);
-  auto right_node = pipeline->create<dai::node::Camera>()->build(
-    dai::CameraBoardSocket::CAM_B, {}, params.mono.fps);
+  // Stereo depth
+  auto stereo_depth_node = pipeline->create<dai::node::StereoDepth>()->build(true, dai::node::StereoDepth::PresetMode::ROBOTICS, {params.mono.width, params.mono.height}, params.mono.fps);
+  stereo_depth_node->setRectifyEdgeFillColor(0);
+  stereo_depth_node->setExtendedDisparity(false);
+  stereo_depth_node->setRuntimeModeSwitch(true);
 
-  auto left_raw_output = left_node->requestOutput(
-    {params.mono.width, params.mono.height}, dai::ImgFrame::Type::RAW8,
-    dai::ImgResizeMode::CROP, params.mono.fps);
-  auto right_raw_output = right_node->requestOutput(
-    {params.mono.width, params.mono.height}, dai::ImgFrame::Type::RAW8,
-    dai::ImgResizeMode::CROP, params.mono.fps);
+  // Align to right (which becomes left after 180-degree rotation)
+  stereo_depth_node->setDepthAlign(dai::StereoDepthProperties::DepthAlign::RECTIFIED_RIGHT);
+  update_depth_config_from_params(*stereo_depth_node->initialConfig, params);
 
+  auto depth_rotate = pipeline->create<dai::node::ImageManip>();
+  // Robotics preset outputs depth at half the input resolution
+  depth_rotate->initialConfig->setOutputSize(params.mono.width / 2, params.mono.height / 2);
+  depth_rotate->initialConfig->addRotateDeg(180.0);
+  depth_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW16);
+  depth_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  stereo_depth_node->depth.link(depth_rotate->inputImage);
+
+  auto depth_queue = depth_rotate->out.createOutputQueue(1, false);
+  depth_queue->setName("depth");
+
+  // Left camera 
   auto left_rotate = pipeline->create<dai::node::ImageManip>();
   left_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
   left_rotate->initialConfig->addRotateDeg(180.0);
   left_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
   left_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
-  left_raw_output->link(left_rotate->inputImage);
-
-  auto right_rotate = pipeline->create<dai::node::ImageManip>();
-  right_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
-  right_rotate->initialConfig->addRotateDeg(180.0);
-  right_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
-  right_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
-  right_raw_output->link(right_rotate->inputImage);
-
-  auto left_rect_rotate = pipeline->create<dai::node::ImageManip>();
-  left_rect_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
-  left_rect_rotate->initialConfig->addRotateDeg(180.0);
-  left_rect_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
-  left_rect_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
-  left_raw_output->link(left_rect_rotate->inputImage);
-
-  auto right_rect_rotate = pipeline->create<dai::node::ImageManip>();
-  right_rect_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
-  right_rect_rotate->initialConfig->addRotateDeg(180.0);
-  right_rect_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
-  right_rect_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
-  right_raw_output->link(right_rect_rotate->inputImage);
-
+  // Link the right camera output to the left_rotate input (after 180-degree rotation)
+  stereo_depth_node->syncedRight.link(left_rotate->inputImage);
   auto left_queue = left_rotate->out.createOutputQueue(1, false);
   left_queue->setName("left");
-  auto left_rect_queue = left_rect_rotate->out.createOutputQueue(1, false);
-  left_rect_queue->setName("left_rect");
-  auto right_queue = right_rotate->out.createOutputQueue(1, false);
-  right_queue->setName("right");
-  auto right_rect_queue = right_rect_rotate->out.createOutputQueue(1, false);
-  right_rect_queue->setName("right_rect");
 
+  // Left compressed
   auto left_encoder_node = pipeline->create<dai::node::VideoEncoder>();
   left_encoder_node->setDefaultProfilePreset(
     params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
@@ -123,6 +107,18 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto left_compressed_queue = left_encoder_node->out.createOutputQueue(1, false);
   left_compressed_queue->setName("left_compressed");
 
+  // Left rectified
+  auto left_rect_rotate = pipeline->create<dai::node::ImageManip>();
+  left_rect_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
+  left_rect_rotate->initialConfig->addRotateDeg(180.0);
+  left_rect_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
+  left_rect_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  // Link the right camera output to the left_rect_rotate input (after 180-degree rotation)
+  stereo_depth_node->rectifiedRight.link(left_rect_rotate->inputImage);
+  auto left_rect_queue = left_rect_rotate->out.createOutputQueue(1, false);
+  left_rect_queue->setName("left_rect");
+
+  // Left rectified compressed
   auto left_rect_encoder_node = pipeline->create<dai::node::VideoEncoder>();
   left_rect_encoder_node->setDefaultProfilePreset(
     params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
@@ -131,6 +127,18 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto left_rect_compressed_queue = left_rect_encoder_node->out.createOutputQueue(1, false);
   left_rect_compressed_queue->setName("left_rect_compressed");
 
+  // Right camera
+  auto right_rotate = pipeline->create<dai::node::ImageManip>();
+  right_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
+  right_rotate->initialConfig->addRotateDeg(180.0);
+  right_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
+  right_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  // Link the left camera output to the right_rotate input (after 180-degree rotation)
+  stereo_depth_node->syncedLeft.link(right_rotate->inputImage);
+  auto right_queue = right_rotate->out.createOutputQueue(1, false);
+  right_queue->setName("right");
+
+  // Right compressed
   auto right_encoder_node = pipeline->create<dai::node::VideoEncoder>();
   right_encoder_node->setDefaultProfilePreset(
     params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
@@ -139,6 +147,18 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto right_compressed_queue = right_encoder_node->out.createOutputQueue(1, false);
   right_compressed_queue->setName("right_compressed");
 
+  // Right rectified
+  auto right_rect_rotate = pipeline->create<dai::node::ImageManip>();
+  right_rect_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
+  right_rect_rotate->initialConfig->addRotateDeg(180.0);
+  right_rect_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
+  right_rect_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  // Link the left camera output to the right_rect_rotate input (after 180-degree rotation)
+  stereo_depth_node->rectifiedLeft.link(right_rect_rotate->inputImage);
+  auto right_rect_queue = right_rect_rotate->out.createOutputQueue(1, false);
+  right_rect_queue->setName("right_rect");
+
+  // Right rectified compressed
   auto right_rect_encoder_node = pipeline->create<dai::node::VideoEncoder>();
   right_rect_encoder_node->setDefaultProfilePreset(
     params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
@@ -160,6 +180,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   details.pipeline = pipeline;
   details.rgb_queue = rgb_queue;
   details.rgb_compressed_queue = rgb_encoder_queue;
+  details.depth_queue = depth_queue;
   details.left_queue = left_queue;
   details.left_compressed_queue = left_compressed_queue;
   details.left_rect_queue = left_rect_queue;

@@ -180,10 +180,10 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   right_rect_camera_info_.header.frame_id = "oak_right_camera_optical_frame";
 
   // Depth
-  //stereo_camera_info_ = img_converter.calibrationToCameraInfo(
-  //  calibration_handler, calibration_handler.getStereoRightCameraId(), params_.mono.width,
-  //  params_.mono.height);
-  //stereo_camera_info_.header.frame_id = "oak_stereo_camera_optical_frame";
+  stereo_camera_info_ = img_converter.calibrationToCameraInfo(
+    calibration_handler, calibration_handler.getStereoRightCameraId(), params_.mono.width,
+    params_.mono.height);
+  stereo_camera_info_.header.frame_id = "oak_stereo_camera_optical_frame";
 }
 
 void OakWrapper::run_pipeline()
@@ -192,6 +192,7 @@ void OakWrapper::run_pipeline()
 
   rgb_queue_ = pipeline_details.rgb_queue;
   rgb_compressed_queue_ = pipeline_details.rgb_compressed_queue;
+  depth_queue_ = pipeline_details.depth_queue;
   left_queue_ = pipeline_details.left_queue;
   left_compressed_queue_ = pipeline_details.left_compressed_queue;
   left_rect_queue_ = pipeline_details.left_rect_queue;
@@ -259,7 +260,7 @@ void OakWrapper::check_timer_callback()
     right_compressed_queue_.reset();
     right_rect_queue_.reset();
     right_rect_compressed_queue_.reset();
-    //depth_queue_.reset();
+    depth_queue_.reset();
     imu_queue_.reset();
     //depth_config_queue_.reset();
     device_.reset();
@@ -276,7 +277,7 @@ void OakWrapper::check_timer_callback()
     right_compressed_callback_id_ = -1;
     right_rect_callback_id_ = -1;
     right_rect_compressed_callback_id_ = -1;
-    //depth_callback_id_ = -1;
+    depth_callback_id_ = -1;
     imu_callback_id_ = -1;
 
     return;
@@ -299,7 +300,7 @@ std::shared_ptr<dai::Device> OakWrapper::connect_to_device()
       get_logger(),
       "No device.id or device.usb_port_id specified, connecting to the next available "
       "device.");
-    device = std::make_shared<dai::Device>(available_devices[0], dai::UsbSpeed::HIGH);
+    device = std::make_shared<dai::Device>(available_devices[0], dai::UsbSpeed::SUPER);
   } else {
     for (const auto & info : available_devices) {
       if (!params_.device.id.empty() && info.getDeviceId() == params_.device.id) {
@@ -371,6 +372,13 @@ void OakWrapper::check_publishers()
       "oak_rgb_camera_optical_frame", rgb_compressed_queue_));
 
   manage_callback(
+    stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count(),
+    depth_queue_, depth_callback_id_,
+    std::bind(
+      &OakWrapper::publish_image, this, stereo_depth_pub_, stereo_cam_info_pub_,
+      stereo_camera_info_, depth_queue_));
+
+  manage_callback(
     left_img_pub_->get_subscription_count() + left_cam_info_pub_->get_subscription_count(),
     left_queue_, left_callback_id_,
     std::bind(
@@ -430,7 +438,7 @@ void OakWrapper::check_publishers()
     imu_pub_->get_subscription_count(), imu_queue_, imu_callback_id_,
     std::bind(&OakWrapper::publish_imu, this));
 
-  if (params_.device.ir_laser_dot_projector_lazy) {
+  if (params_.device.ir_laser_dot_projector_lazy && !device_->isClosed()) {
     const bool should_be_active =
       stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count() >
       0;
@@ -483,7 +491,7 @@ void OakWrapper::update_parameters()
   param_listener_.refresh_dynamic_parameters();
   params_ = param_listener_.get_params();
 
-  //update_depth_config_from_params(depth_config_, params_);
+  update_depth_config_from_params(depth_config_, params_);
 }
 
 void OakWrapper::send_parameters() const

@@ -21,8 +21,12 @@
 #pragma once
 
 #include "raph_oak/oak_wrapper_parameters.hpp"
+#include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 
 namespace raph_oak
 {
+
+void update_depth_config_from_params(
+  dai::StereoDepthConfig & depth_config, const Params & params);
 
 }  // namespace raph_oak

@@ -31,6 +31,7 @@
 #include "depthai/device/Device.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/MessageQueue.hpp"
+#include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai_bridge/ImuConverter.hpp"
 
 // ROS
@@ -65,7 +66,7 @@ private:
   std::shared_ptr<dai::MessageQueue> right_compressed_queue_;
   std::shared_ptr<dai::MessageQueue> right_rect_queue_;
   std::shared_ptr<dai::MessageQueue> right_rect_compressed_queue_;
-  //std::shared_ptr<dai::DataOutputQueue> depth_queue_;
+  std::shared_ptr<dai::MessageQueue> depth_queue_;
   std::shared_ptr<dai::MessageQueue> imu_queue_;
   //std::shared_ptr<dai::DataInputQueue> depth_config_queue_;
 
@@ -102,7 +103,7 @@ private:
   int right_compressed_callback_id_{-1};
   int right_rect_callback_id_{-1};
   int right_rect_compressed_callback_id_{-1};
-  //int depth_callback_id_{-1};
+  int depth_callback_id_{-1};
   int imu_callback_id_{-1};
 
   // Camera info for callbacks
@@ -111,7 +112,7 @@ private:
   sensor_msgs::msg::CameraInfo left_rect_camera_info_;
   sensor_msgs::msg::CameraInfo right_camera_info_;
   sensor_msgs::msg::CameraInfo right_rect_camera_info_;
-  //sensor_msgs::msg::CameraInfo stereo_camera_info_;
+  sensor_msgs::msg::CameraInfo stereo_camera_info_;
 
   std::chrono::time_point<std::chrono::steady_clock> steady_base_time_;
   rclcpp::Time ros_base_time_;
@@ -121,7 +122,7 @@ private:
   Params params_;
   PostSetParametersCallbackHandle::SharedPtr parameter_callback_handle_;
 
-  //dai::RawStereoDepthConfig depth_config_;
+  dai::StereoDepthConfig depth_config_;
 
   bool laser_dot_projector_active_ = false;
 
