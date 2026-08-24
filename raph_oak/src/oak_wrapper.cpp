@@ -306,7 +306,7 @@ std::shared_ptr<dai::Device> OakWrapper::connect_to_device()
         RCLCPP_INFO(
           get_logger(), "Connecting to the camera using ID: %s", params_.device.id.c_str());
         if (info.state != X_LINK_BOOTED) {
-          device = std::make_shared<dai::Device>(info, dai::UsbSpeed::HIGH);
+          device = std::make_shared<dai::Device>(info, dai::UsbSpeed::SUPER);
           break;
         }
         throw std::runtime_error("Device is already booted in different process.");
@@ -316,7 +316,7 @@ std::shared_ptr<dai::Device> OakWrapper::connect_to_device()
           get_logger(), "Connecting to the camera using USB ID: %s",
           params_.device.usb_port_id.c_str());
         if (info.state != X_LINK_BOOTED) {
-          device = std::make_shared<dai::Device>(info, dai::UsbSpeed::HIGH);
+          device = std::make_shared<dai::Device>(info, dai::UsbSpeed::SUPER);
           break;
         }
         throw std::runtime_error("Device is already booted in different process.");
