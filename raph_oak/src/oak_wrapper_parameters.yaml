@@ -80,20 +80,6 @@ raph_oak:
       validation:
         bounds<>: [1, 800]
       read_only: true
-    isp_scale_num:
-      type: int
-      default_value: 1
-      description: ISP scale numerator
-      validation:
-        bounds<>: [1, 16]
-      read_only: true
-    isp_scale_den:
-      type: int
-      default_value: 1
-      description: ISP scale denominator
-      validation:
-        bounds<>: [1, 63]
-      read_only: true
     fps:
       type: double
       default_value: 10.0
@@ -123,20 +109,6 @@ raph_oak:
       description: RGB camera image height
       validation:
         bounds<>: [1, 2160]
-      read_only: true
-    isp_scale_num:
-      type: int
-      default_value: 1
-      description: ISP scale numerator
-      validation:
-        bounds<>: [1, 16]
-      read_only: true
-    isp_scale_den:
-      type: int
-      default_value: 3
-      description: ISP scale denominator
-      validation:
-        bounds<>: [1, 63]
       read_only: true
     fps:
       type: double
