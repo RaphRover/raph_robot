@@ -46,6 +46,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
 {
   PipelineDetails details;
   auto pipeline = std::make_shared<dai::Pipeline>(device);
+  pipeline->setAutoCalibrationMode(dai::Pipeline::AutoCalibrationMode::CONTINUOUS);
 
   // Create nodes
   // RGB camera node
