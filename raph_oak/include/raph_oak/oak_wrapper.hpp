@@ -31,6 +31,7 @@
 #include "depthai/device/Device.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/MessageQueue.hpp"
+#include "depthai/pipeline/InputQueue.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai_bridge/ImuConverter.hpp"
 
@@ -68,7 +69,7 @@ private:
   std::shared_ptr<dai::MessageQueue> right_rect_compressed_queue_;
   std::shared_ptr<dai::MessageQueue> depth_queue_;
   std::shared_ptr<dai::MessageQueue> imu_queue_;
-  //std::shared_ptr<dai::DataInputQueue> depth_config_queue_;
+  std::shared_ptr<dai::InputQueue> depth_config_queue_;
 
   // ROS Publishers
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> rgb_img_pub_;

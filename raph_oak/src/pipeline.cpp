@@ -87,6 +87,8 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto depth_queue = depth_rotate->out.createOutputQueue(1, false);
   depth_queue->setName("depth");
 
+  auto depth_config_queue = stereo_depth_node->inputConfig.createInputQueue(1, false);
+
   // Left camera 
   auto left_rotate = pipeline->create<dai::node::ImageManip>();
   left_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
@@ -190,6 +192,8 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   details.right_rect_queue = right_rect_queue;
   details.right_rect_compressed_queue = right_rect_compressed_queue;
   details.imu_queue = imu_queue;
+  details.depth_config_queue = depth_config_queue;
+  details.depth_config = *stereo_depth_node->initialConfig;
 
   return details;
 }

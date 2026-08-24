@@ -203,6 +203,8 @@ void OakWrapper::run_pipeline()
   right_rect_compressed_queue_ = pipeline_details.right_rect_compressed_queue;
   imu_queue_ = pipeline_details.imu_queue;
   pipeline_ = pipeline_details.pipeline;
+  depth_config_queue_ = pipeline_details.depth_config_queue;
+  depth_config_ = pipeline_details.depth_config;
   pipeline_->start();
 }
 
@@ -221,23 +223,6 @@ void OakWrapper::check_timer_callback()
 
     auto calibration_handler = device_->readCalibration();
     this->fill_camera_info(calibration_handler);
-
-    // Set all output queues to blocking with size 1
-    //rgb_queue_ = device_->getOutputQueue("rgb", 1, true);
-    //rgb_compressed_queue_ = device_->getOutputQueue("rgb_compressed", 1, true);
-    //left_queue_ = device_->getOutputQueue("left", 1, true);
-    //left_compressed_queue_ = device_->getOutputQueue("left_compressed", 1, true);
-    //left_rect_queue_ = device_->getOutputQueue("left_rect", 1, true);
-    //left_rect_compressed_queue_ = device_->getOutputQueue("left_rect_compressed", 1, true);
-    //right_queue_ = device_->getOutputQueue("right", 1, true);
-    //right_compressed_queue_ = device_->getOutputQueue("right_compressed", 1, true);
-    //right_rect_queue_ = device_->getOutputQueue("right_rect", 1, true);
-    //right_rect_compressed_queue_ = device_->getOutputQueue("right_rect_compressed", 1, true);
-    //depth_queue_ = device_->getOutputQueue("depth", 1, true);
-    //imu_queue_ = device_->getOutputQueue("imu", 1, true);
-
-    // Depth Config
-    //depth_config_queue_ = device_->getInputQueue("depth_config");
 
     if (!params_.device.ir_laser_dot_projector_lazy) {
       device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
@@ -262,7 +247,7 @@ void OakWrapper::check_timer_callback()
     right_rect_compressed_queue_.reset();
     depth_queue_.reset();
     imu_queue_.reset();
-    //depth_config_queue_.reset();
+    depth_config_queue_.reset();
     device_.reset();
     pipeline_.reset();
 
@@ -496,9 +481,7 @@ void OakWrapper::update_parameters()
 
 void OakWrapper::send_parameters() const
 {
-  //dai::StereoDepthConfig config;
-  //config.set(depth_config_);
-  //depth_config_queue_->send(config);
+  depth_config_queue_->send(std::make_shared<dai::StereoDepthConfig>(depth_config_));
 
   if (!params_.device.ir_laser_dot_projector_lazy) {
     device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
