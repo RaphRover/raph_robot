@@ -29,7 +29,7 @@ raph_oak:
   depth:
     confidence_threshold:
       type: int
-      default_value: 110
+      default_value: 15
       description: Depth images will only contain pixels where depth confidence is below the confidence threshold (lower the confidence value means better depth accuracy)
       validation:
         bounds<>: [0, 255]
@@ -39,7 +39,7 @@ raph_oak:
       description: Computes and combines disparities in both L-R and R-L directions, and combine them
     lr_check_threshold:
       type: int
-      default_value: 5
+      default_value: 10
       description: Disparity is considered for the output when the difference between LR and RL disparities is smaller than the LR check threshold
       validation:
         bounds<>: [0, 255]
