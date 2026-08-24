@@ -34,6 +34,7 @@
 #include "depthai/pipeline/InputQueue.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai_bridge/ImuConverter.hpp"
+#include "depthai_bridge/PointCloudConverter.hpp"
 
 // ROS
 #include "raph_oak/oak_wrapper_parameters.hpp"
@@ -43,6 +44,7 @@
 #include "sensor_msgs/msg/compressed_image.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
 
 namespace raph_oak
 {
@@ -70,6 +72,7 @@ private:
   std::shared_ptr<dai::MessageQueue> depth_queue_;
   std::shared_ptr<dai::MessageQueue> imu_queue_;
   std::shared_ptr<dai::InputQueue> depth_config_queue_;
+  std::shared_ptr<dai::MessageQueue> pointcloud_queue_;
 
   // ROS Publishers
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> rgb_img_pub_;
@@ -90,8 +93,10 @@ private:
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> stereo_depth_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> stereo_cam_info_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Imu>> imu_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>> pointcloud_pub_;
 
   std::shared_ptr<depthai_bridge::ImuConverter> imu_converter_;
+  std::shared_ptr<depthai_bridge::PointCloudConverter> pointcloud_converter_;
 
   // Callback IDs for dynamic callback management
   int rgb_callback_id_{-1};
@@ -106,6 +111,7 @@ private:
   int right_rect_compressed_callback_id_{-1};
   int depth_callback_id_{-1};
   int imu_callback_id_{-1};
+  int pointcloud_callback_id_{-1};
 
   // Camera info for callbacks
   sensor_msgs::msg::CameraInfo rgb_camera_info_;
@@ -147,6 +153,7 @@ private:
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
     const std::string & frame_id, std::shared_ptr<dai::MessageQueue> queue);
   void publish_imu();
+  void publish_pointcloud();
 };
 
 }  // namespace raph_oak

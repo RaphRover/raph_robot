@@ -42,6 +42,7 @@
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
+#include "depthai/pipeline/datatype/PointCloudData.hpp"
 
 // ROS
 #include "depthai_bridge/ImageConverter.hpp"
@@ -61,6 +62,7 @@
 #include "sensor_msgs/msg/compressed_image.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
 
 using namespace std::chrono_literals;
 
@@ -85,6 +87,8 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
   // TODO: make sure this works under namespace
   imu_converter_ = std::make_shared<depthai_bridge::ImuConverter>(
     "oak_imu_frame", depthai_bridge::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO, 0.001, 0.00001);
+
+  pointcloud_converter_ = std::make_shared<depthai_bridge::PointCloudConverter>("oak_stereo_camera_optical_frame");
 
   check_timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check_timer_callback, this));
 }
@@ -139,6 +143,9 @@ void OakWrapper::create_ros_publishers()
 
   // IMU
   imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("~/imu/data_raw", 10);
+
+  // Pointcloud
+  pointcloud_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("~/points", 1);
 }
 
 void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_handler)
@@ -205,6 +212,7 @@ void OakWrapper::run_pipeline()
   pipeline_ = pipeline_details.pipeline;
   depth_config_queue_ = pipeline_details.depth_config_queue;
   depth_config_ = pipeline_details.depth_config;
+  pointcloud_queue_ = pipeline_details.pointcloud_queue;
   pipeline_->start();
 }
 
@@ -248,6 +256,7 @@ void OakWrapper::check_timer_callback()
     depth_queue_.reset();
     imu_queue_.reset();
     depth_config_queue_.reset();
+    pointcloud_queue_.reset();
     device_.reset();
     pipeline_.reset();
 
@@ -264,6 +273,7 @@ void OakWrapper::check_timer_callback()
     right_rect_compressed_callback_id_ = -1;
     depth_callback_id_ = -1;
     imu_callback_id_ = -1;
+    pointcloud_callback_id_ = -1;
 
     return;
   }
@@ -423,6 +433,10 @@ void OakWrapper::check_publishers()
     imu_pub_->get_subscription_count(), imu_queue_, imu_callback_id_,
     std::bind(&OakWrapper::publish_imu, this));
 
+  manage_callback(
+    pointcloud_pub_->get_subscription_count(), pointcloud_queue_, pointcloud_callback_id_,
+    std::bind(&OakWrapper::publish_pointcloud, this));
+
   if (params_.device.ir_laser_dot_projector_lazy && !device_->isClosed()) {
     const bool should_be_active =
       stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count() >
@@ -578,6 +592,27 @@ void OakWrapper::publish_imu()
     imu.orientation_covariance[0] = -1.0;
 
     imu_pub_->publish(imu);
+  }
+}
+
+void OakWrapper::publish_pointcloud()
+{
+  auto in_data = pointcloud_queue_->tryGet<dai::PointCloudData>();
+
+  if (!in_data) {
+    RCLCPP_WARN_STREAM(
+      get_logger(), "Failed to get data from \"" << pointcloud_queue_->getName() << "\" queue");
+    return;
+  }
+
+  std::deque<sensor_msgs::msg::PointCloud2> op_msgs;
+  pointcloud_converter_->toRosMsg(in_data, op_msgs);
+
+  while (!op_msgs.empty()) {
+    sensor_msgs::msg::PointCloud2 pointcloud = op_msgs.front();
+    op_msgs.pop_front();
+
+    pointcloud_pub_->publish(pointcloud);
   }
 }
 

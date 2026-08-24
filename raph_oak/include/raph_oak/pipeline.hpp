@@ -48,6 +48,7 @@ struct PipelineDetails
     std::shared_ptr<dai::MessageQueue> right_rect_compressed_queue;
     std::shared_ptr<dai::MessageQueue> imu_queue;
     std::shared_ptr<dai::InputQueue> depth_config_queue;
+    std::shared_ptr<dai::MessageQueue> pointcloud_queue;
 
     dai::StereoDepthConfig depth_config;
 };

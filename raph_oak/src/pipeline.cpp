@@ -35,6 +35,7 @@
 #include "depthai/pipeline/node/VideoEncoder.hpp"
 #include "depthai/pipeline/node/IMU.hpp"
 #include "depthai/pipeline/node/StereoDepth.hpp"
+#include "depthai/pipeline/node/PointCloud.hpp"
 
 // ROS
 #include "raph_oak/oak_wrapper_parameters.hpp"
@@ -179,6 +180,15 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto imu_queue = imu_node->out.createOutputQueue(1, false);
   imu_queue->setName("imu");
 
+  // Pointcloud node
+  auto pointcloud_node = pipeline->create<dai::node::PointCloud>();
+  pointcloud_node->initialConfig->setOrganized(true);
+  pointcloud_node->initialConfig->setTargetCoordinateSystem(dai::CameraBoardSocket::CAM_A); //TODO: verify if this is correct
+  pointcloud_node->initialConfig->setLengthUnit(dai::LengthUnit::METER);
+  depth_rotate->out.link(pointcloud_node->inputDepth);
+  auto pointcloud_queue = pointcloud_node->outputPointCloud.createOutputQueue(1, false);
+  pointcloud_queue->setName("pointcloud");
+
   // Create pipeline details
   details.pipeline = pipeline;
   details.rgb_queue = rgb_queue;
@@ -195,6 +205,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   details.imu_queue = imu_queue;
   details.depth_config_queue = depth_config_queue;
   details.depth_config = *stereo_depth_node->initialConfig;
+  details.pointcloud_queue = pointcloud_queue;
 
   return details;
 }
