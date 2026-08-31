@@ -53,6 +53,10 @@ raph_oak:
       description: Number of fractional bits for subpixel mode
       validation:
         bounds<>: [3, 5]
+    extended_disparity_enabled:
+      type: bool
+      default_value: false
+      description: Extends the disparity range from 95 to 190 by combining full resolution and downscaled images. Suitable for short range objects
     min_distance:
       type: double
       default_value: 0.0

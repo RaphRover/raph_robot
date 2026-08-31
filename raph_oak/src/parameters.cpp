@@ -33,6 +33,7 @@ void update_depth_config_from_params(
   depth_config.algorithmControl.leftRightCheckThreshold = params.depth.lr_check_threshold;
   depth_config.algorithmControl.enableSubpixel = params.depth.subpixel_enabled;
   depth_config.algorithmControl.subpixelFractionalBits = params.depth.subpixel_fractional_bits;
+  depth_config.algorithmControl.enableExtended = params.depth.extended_disparity_enabled;
   depth_config.postProcessing.thresholdFilter.minRange =
     static_cast<int>(params.depth.min_distance * 1000.0);
   depth_config.postProcessing.thresholdFilter.maxRange =

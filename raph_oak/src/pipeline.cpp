@@ -71,7 +71,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   // Stereo depth
   auto stereo_depth_node = pipeline->create<dai::node::StereoDepth>()->build(true, dai::node::StereoDepth::PresetMode::ROBOTICS, {params.mono.width, params.mono.height}, params.mono.fps);
   stereo_depth_node->setRectifyEdgeFillColor(0);
-  stereo_depth_node->setExtendedDisparity(false);
+  stereo_depth_node->setExtendedDisparity(params.depth.extended_disparity_enabled);
   stereo_depth_node->setRuntimeModeSwitch(true);
 
   // Align to right (which becomes left after 180-degree rotation)
@@ -91,7 +91,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
 
   auto depth_config_queue = stereo_depth_node->inputConfig.createInputQueue(1, false);
 
-  // Left camera 
+  // Left camera
   auto left_rotate = pipeline->create<dai::node::ImageManip>();
   left_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
   left_rotate->initialConfig->addRotateDeg(180.0);
