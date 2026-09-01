@@ -183,7 +183,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   // Pointcloud node
   auto pointcloud_node = pipeline->create<dai::node::PointCloud>();
   pointcloud_node->initialConfig->setOrganized(true);
-  pointcloud_node->initialConfig->setTargetCoordinateSystem(dai::CameraBoardSocket::CAM_A); //TODO: verify if this is correct
+  pointcloud_node->initialConfig->setTargetCoordinateSystem(dai::CameraBoardSocket::CAM_C);
   pointcloud_node->initialConfig->setLengthUnit(dai::LengthUnit::METER);
   depth_rotate->out.link(pointcloud_node->inputDepth);
   auto pointcloud_queue = pointcloud_node->outputPointCloud.createOutputQueue(1, false);
