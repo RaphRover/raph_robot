@@ -96,50 +96,50 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 void OakWrapper::create_ros_publishers()
 {
   // RGB
-  rgb_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/rgb/image_raw", 10);
-  rgb_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/rgb/camera_info", 10);
+  rgb_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/rgb/image_raw", 1);
+  rgb_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/rgb/camera_info", 1);
 
   // RGB Compressed
   rgb_compressed_pub_ =
-    create_publisher<sensor_msgs::msg::CompressedImage>("~/rgb/image_raw/compressed", 10);
+    create_publisher<sensor_msgs::msg::CompressedImage>("~/rgb/image_raw/compressed", 1);
 
   // Left
-  left_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/left/image_raw", 10);
-  left_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/left/camera_info", 10);
+  left_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/left/image_raw", 1);
+  left_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/left/camera_info", 1);
 
   // Left Compressed
   left_compressed_pub_ =
-    create_publisher<sensor_msgs::msg::CompressedImage>("~/left/image_raw/compressed", 10);
+    create_publisher<sensor_msgs::msg::CompressedImage>("~/left/image_raw/compressed", 1);
 
   // Left Rect
-  left_rect_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/left_rect/image_rect", 10);
+  left_rect_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/left_rect/image_rect", 1);
   left_rect_cam_info_pub_ =
-    create_publisher<sensor_msgs::msg::CameraInfo>("~/left_rect/camera_info", 10);
+    create_publisher<sensor_msgs::msg::CameraInfo>("~/left_rect/camera_info", 1);
 
   // Left Rect Compressed
   left_rect_compressed_pub_ =
-    create_publisher<sensor_msgs::msg::CompressedImage>("~/left_rect/image_rect/compressed", 10);
+    create_publisher<sensor_msgs::msg::CompressedImage>("~/left_rect/image_rect/compressed", 1);
 
   // Right
-  right_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/right/image_raw", 10);
-  right_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/right/camera_info", 10);
+  right_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/right/image_raw", 1);
+  right_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/right/camera_info", 1);
 
   // Right Compressed
   right_compressed_pub_ =
-    create_publisher<sensor_msgs::msg::CompressedImage>("~/right/image_raw/compressed", 10);
+    create_publisher<sensor_msgs::msg::CompressedImage>("~/right/image_raw/compressed", 1);
 
   // Right Rect
-  right_rect_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/right_rect/image_rect", 10);
+  right_rect_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/right_rect/image_rect", 1);
   right_rect_cam_info_pub_ =
-    create_publisher<sensor_msgs::msg::CameraInfo>("~/right_rect/camera_info", 10);
+    create_publisher<sensor_msgs::msg::CameraInfo>("~/right_rect/camera_info", 1);
 
   // Right Rect Compressed
   right_rect_compressed_pub_ =
-    create_publisher<sensor_msgs::msg::CompressedImage>("~/right_rect/image_rect/compressed", 10);
+    create_publisher<sensor_msgs::msg::CompressedImage>("~/right_rect/image_rect/compressed", 1);
 
   // Depth
-  stereo_depth_pub_ = create_publisher<sensor_msgs::msg::Image>("~/stereo/image_raw", 10);
-  stereo_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/stereo/camera_info", 10);
+  stereo_depth_pub_ = create_publisher<sensor_msgs::msg::Image>("~/stereo/image_raw", 1);
+  stereo_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/stereo/camera_info", 1);
 
   // IMU
   imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("~/imu/data_raw", 10);
