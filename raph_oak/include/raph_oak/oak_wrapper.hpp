@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 // DepthAI
@@ -32,6 +33,7 @@
 #include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/MessageQueue.hpp"
 #include "depthai/pipeline/InputQueue.hpp"
+#include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai_bridge/ImuConverter.hpp"
 #include "depthai_bridge/PointCloudConverter.hpp"
@@ -40,11 +42,14 @@
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "rclcpp/node.hpp"
 #include "rclcpp/node_options.hpp"
+#include "rclcpp/service.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
+#include "std_msgs/msg/header.hpp"
+#include "std_srvs/srv/trigger.hpp"
 
 namespace raph_oak
 {
@@ -73,6 +78,8 @@ private:
   std::shared_ptr<dai::MessageQueue> imu_queue_;
   std::shared_ptr<dai::InputQueue> depth_config_queue_;
   std::shared_ptr<dai::MessageQueue> pointcloud_queue_;
+  std::shared_ptr<dai::MessageQueue> still_image_queue_;
+  std::shared_ptr<dai::InputQueue> still_trigger_queue_;
 
   // ROS Publishers
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> rgb_img_pub_;
@@ -94,6 +101,11 @@ private:
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> stereo_cam_info_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Imu>> imu_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>> pointcloud_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> still_image_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> still_cam_info_pub_;
+
+  // ROS Services
+  std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> capture_still_srv_;
 
   std::shared_ptr<depthai_bridge::ImuConverter> imu_converter_;
   std::shared_ptr<depthai_bridge::PointCloudConverter> pointcloud_converter_;
@@ -121,6 +133,11 @@ private:
   sensor_msgs::msg::CameraInfo right_rect_camera_info_;
   sensor_msgs::msg::CameraInfo stereo_camera_info_;
 
+  // The still image resolution is only known once the first frame arrives, so its camera info is
+  // built on demand and cached here, together with the calibration it was derived from.
+  std::optional<dai::CalibrationHandler> calibration_handler_;
+  sensor_msgs::msg::CameraInfo still_camera_info_;
+
   std::chrono::time_point<std::chrono::steady_clock> steady_base_time_;
   rclcpp::Time ros_base_time_;
   std::shared_ptr<rclcpp::TimerBase> check_timer_;
@@ -135,7 +152,9 @@ private:
 
   void run_pipeline();
   void create_ros_publishers();
+  void create_ros_services();
   void fill_camera_info(const dai::CalibrationHandler & calibration_handler);
+  const sensor_msgs::msg::CameraInfo & get_still_camera_info(uint32_t width, uint32_t height);
   void check_timer_callback();
   std::shared_ptr<dai::Device> connect_to_device();
   void check_publishers();
@@ -149,11 +168,16 @@ private:
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> img_pub,
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
     sensor_msgs::msg::CameraInfo cam_info, std::shared_ptr<dai::MessageQueue> queue);
+    std::unique_ptr<sensor_msgs::msg::Image> to_ros_image(
+    const std::shared_ptr<dai::ImgFrame> & in_data, const std_msgs::msg::Header & header) const;
   void publish_compressed_image(
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
     const std::string & frame_id, std::shared_ptr<dai::MessageQueue> queue);
   void publish_imu();
   void publish_pointcloud();
+  void capture_still(
+    const std_srvs::srv::Trigger::Request::SharedPtr request,
+    std_srvs::srv::Trigger::Response::SharedPtr response);
 };
 
 }  // namespace raph_oak

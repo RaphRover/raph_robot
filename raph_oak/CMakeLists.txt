@@ -8,6 +8,7 @@ find_package(generate_parameter_library REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 
 generate_parameter_library(
   oak_wrapper_parameters
@@ -26,6 +27,7 @@ target_link_libraries(raph_oak
   rclcpp::rclcpp
   rclcpp_components::component
   ${sensor_msgs_TARGETS}
+  ${std_srvs_TARGETS}
   oak_wrapper_parameters
 )
 target_include_directories(raph_oak

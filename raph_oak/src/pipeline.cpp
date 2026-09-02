@@ -36,6 +36,7 @@
 #include "depthai/pipeline/node/IMU.hpp"
 #include "depthai/pipeline/node/StereoDepth.hpp"
 #include "depthai/pipeline/node/PointCloud.hpp"
+#include "depthai/pipeline/node/Script.hpp"
 
 // ROS
 #include "raph_oak/oak_wrapper_parameters.hpp"
@@ -189,6 +190,29 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto pointcloud_queue = pointcloud_node->outputPointCloud.createOutputQueue(1, false);
   pointcloud_queue->setName("pointcloud");
 
+  // Still image
+  auto still_output = rgb_node->requestFullResolutionOutput(
+    dai::ImgFrame::Type::NV12, static_cast<float>(params.rgb.fps));
+
+  // Current workaround for OAK4 cameras, as Camera node doesn't yet support "still" frame capture:
+  // a script node continuously consumes the full resolution stream and only forwards a frame to
+  // the host once a trigger message arrives.
+  auto still_script_node = pipeline->create<dai::node::Script>();
+  still_script_node->inputs["in"].setBlocking(false);
+  still_script_node->inputs["in"].setMaxSize(1);
+  still_output->link(still_script_node->inputs["in"]);
+
+  still_script_node->setScript(R"(
+      while True:
+          message = node.inputs["in"].get()
+          if node.inputs["trigger"].tryGet() is not None:
+              node.io["still"].send(message)
+  )");
+
+  auto still_image_queue = still_script_node->outputs["still"].createOutputQueue(1, false);
+  still_image_queue->setName("still_image");
+  auto still_trigger_queue = still_script_node->inputs["trigger"].createInputQueue();
+
   // Create pipeline details
   details.pipeline = pipeline;
   details.rgb_queue = rgb_queue;
@@ -206,6 +230,8 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   details.depth_config_queue = depth_config_queue;
   details.depth_config = *stereo_depth_node->initialConfig;
   details.pointcloud_queue = pointcloud_queue;
+  details.still_image_queue = still_image_queue;
+  details.still_trigger_queue = still_trigger_queue;
 
   return details;
 }

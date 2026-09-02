@@ -39,6 +39,7 @@
 #include <opencv2/imgproc.hpp>
 
 // DepthAI
+#include "depthai/pipeline/datatype/Buffer.hpp"
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
@@ -72,6 +73,9 @@ namespace raph_oak
 static const std::vector<std::string> UsbStrings = {"UNKNOWN", "LOW",   "FULL",
                                                     "HIGH",    "SUPER", "SUPER_PLUS"};
 
+// How long the ~/capture_still service waits for the triggered frame to arrive from the device
+static constexpr std::chrono::milliseconds kStillCaptureTimeout{2000};
+
 OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 : Node("oak_wrapper", options),
   steady_base_time_(std::chrono::steady_clock::now()),
@@ -83,6 +87,7 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
     std::bind(&OakWrapper::post_set_parameters_callback, this, std::placeholders::_1));
 
   this->create_ros_publishers();
+  this->create_ros_services();
 
   // TODO: make sure this works under namespace
   imu_converter_ = std::make_shared<depthai_bridge::ImuConverter>(
@@ -146,10 +151,25 @@ void OakWrapper::create_ros_publishers()
 
   // Pointcloud
   pointcloud_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("~/points", 1);
+
+  // Still Image
+  const auto still_qos = rclcpp::QoS(1).transient_local();
+  still_image_pub_ = create_publisher<sensor_msgs::msg::Image>("~/rgb_still/image_still", still_qos);
+  still_cam_info_pub_ =
+    create_publisher<sensor_msgs::msg::CameraInfo>("~/rgb_still/camera_info", still_qos);
+}
+
+void OakWrapper::create_ros_services()
+{
+  capture_still_srv_ = create_service<std_srvs::srv::Trigger>(
+    "~/capture_still",
+    std::bind(&OakWrapper::capture_still, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_handler)
 {
+  calibration_handler_ = calibration_handler;
+
   // Only used to get camera info matrices
   auto img_converter = depthai_bridge::ImageConverter("oak_rgb_camera_optical_frame", false);
 
@@ -157,6 +177,9 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   rgb_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
     calibration_handler, dai::CameraBoardSocket::CAM_A, params_.rgb.width, params_.rgb.height));
   rgb_camera_info_.header.frame_id = "oak_rgb_camera_optical_frame";
+
+  // Invalidate the cached still image camera info, it is rebuilt on the next capture
+  still_camera_info_ = sensor_msgs::msg::CameraInfo();
 
   // Left (physically right camera, but becomes left after 180 degree rotation)
   left_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
@@ -193,6 +216,25 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   stereo_camera_info_.header.frame_id = "oak_stereo_camera_optical_frame";
 }
 
+const sensor_msgs::msg::CameraInfo & OakWrapper::get_still_camera_info(
+  uint32_t width, uint32_t height)
+{
+  if (still_camera_info_.width == width && still_camera_info_.height == height) {
+    return still_camera_info_;
+  }
+
+  // Only used to get camera info matrices
+  auto img_converter = depthai_bridge::ImageConverter("oak_rgb_camera_optical_frame", false);
+
+  // Same sensor as the RGB stream, but at the full resolution the still frame came in at
+  still_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
+    *calibration_handler_, dai::CameraBoardSocket::CAM_A, static_cast<int>(width),
+    static_cast<int>(height)));
+  still_camera_info_.header.frame_id = "oak_rgb_camera_optical_frame";
+
+  return still_camera_info_;
+}
+
 void OakWrapper::run_pipeline()
 {
   auto pipeline_details = create_dai_pipeline(device_, params_);
@@ -213,6 +255,8 @@ void OakWrapper::run_pipeline()
   depth_config_queue_ = pipeline_details.depth_config_queue;
   depth_config_ = pipeline_details.depth_config;
   pointcloud_queue_ = pipeline_details.pointcloud_queue;
+  still_image_queue_ = pipeline_details.still_image_queue;
+  still_trigger_queue_ = pipeline_details.still_trigger_queue;
   pipeline_->start();
 }
 
@@ -257,6 +301,8 @@ void OakWrapper::check_timer_callback()
     imu_queue_.reset();
     depth_config_queue_.reset();
     pointcloud_queue_.reset();
+    still_image_queue_.reset();
+    still_trigger_queue_.reset();
     device_.reset();
     pipeline_.reset();
 
@@ -517,11 +563,23 @@ void OakWrapper::publish_image(
 
   cam_info.header.stamp =
     depthai_bridge::getFrameTime(ros_base_time_, steady_base_time_, in_data->getTimestamp());
-  cam_info_pub->publish(cam_info);
 
+  auto image = to_ros_image(in_data, cam_info.header);
+  if (!image) {
+    return;
+  }
+
+  cam_info_pub->publish(cam_info);
+  img_pub->publish(std::move(image));
+}
+
+
+std::unique_ptr<sensor_msgs::msg::Image> OakWrapper::to_ros_image(
+  const std::shared_ptr<dai::ImgFrame> & in_data, const std_msgs::msg::Header & header) const
+{
   auto image = std::make_unique<sensor_msgs::msg::Image>();
 
-  image->header = cam_info.header;
+  image->header = header;
   image->width = in_data->getWidth();
   image->height = in_data->getHeight();
   image->is_bigendian = 1U;
@@ -546,9 +604,13 @@ void OakWrapper::publish_image(
     image->is_bigendian = 0U;
     image->step = image->width * 2;
     image->data.assign(in_data->getData().begin(), in_data->getData().end());
+  } else {
+    RCLCPP_WARN_STREAM(
+      get_logger(), "Unsupported image frame type: " << static_cast<int>(in_data->getType()));
+    return nullptr;
   }
 
-  img_pub->publish(std::move(image));
+  return image;
 }
 
 void OakWrapper::publish_compressed_image(
@@ -614,6 +676,55 @@ void OakWrapper::publish_pointcloud()
 
     pointcloud_pub_->publish(pointcloud);
   }
+}
+
+void OakWrapper::capture_still(
+  const std_srvs::srv::Trigger::Request::SharedPtr /*request*/,
+  std_srvs::srv::Trigger::Response::SharedPtr response)
+{
+  if (
+    !device_ || device_->isClosed() || !still_trigger_queue_ || !still_image_queue_ ||
+    !calibration_handler_) {
+    response->success = false;
+    response->message = "Device is not connected";
+    RCLCPP_WARN_STREAM(get_logger(), "Still image capture failed: " << response->message);
+    return;
+  }
+
+  // Drop anything left over from a previous, timed out capture
+  still_image_queue_->tryGetAll();
+  still_trigger_queue_->send(std::make_shared<dai::Buffer>());
+
+  bool timed_out = false;
+  auto in_data = still_image_queue_->get<dai::ImgFrame>(kStillCaptureTimeout, timed_out);
+  if (timed_out || !in_data) {
+    response->success = false;
+    response->message = "Timed out waiting for the still image frame";
+    RCLCPP_WARN_STREAM(get_logger(), "Still image capture failed: " << response->message);
+    return;
+  }
+
+  sensor_msgs::msg::CameraInfo cam_info =
+    get_still_camera_info(in_data->getWidth(), in_data->getHeight());
+  cam_info.header.stamp =
+    depthai_bridge::getFrameTime(ros_base_time_, steady_base_time_, in_data->getTimestamp());
+
+  auto image = to_ros_image(in_data, cam_info.header);
+  if (!image) {
+    response->success = false;
+    response->message = "Failed to convert the still image frame";
+    RCLCPP_WARN_STREAM(get_logger(), "Still image capture failed: " << response->message);
+    return;
+  }
+
+  RCLCPP_INFO_STREAM(
+    get_logger(), "Captured still image (" << image->width << "x" << image->height << ")");
+
+  still_cam_info_pub_->publish(cam_info);
+  still_image_pub_->publish(std::move(image));
+
+  response->success = true;
+  response->message = "Captured still image";
 }
 
 }  // namespace raph_oak
