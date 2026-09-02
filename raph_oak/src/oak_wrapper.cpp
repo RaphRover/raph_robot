@@ -39,15 +39,25 @@
 #include <opencv2/imgproc.hpp>
 
 // DepthAI
+#include "depthai/common/CameraBoardSocket.hpp"
+#include "depthai/common/UsbSpeed.hpp"
+#include "depthai/device/CalibrationHandler.hpp"
+#include "depthai/device/Device.hpp"
+#include "depthai/pipeline/MessageQueue.hpp"
 #include "depthai/pipeline/datatype/Buffer.hpp"
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
+#include "depthai/xlink/XLinkConnection.hpp"
+
+// XLink
+#include "XLink/XLinkPublicDefines.h"
 
 // ROS
 #include "depthai_bridge/ImageConverter.hpp"
 #include "depthai_bridge/ImuConverter.hpp"
+#include "depthai_bridge/PointCloudConverter.hpp"
 #include "depthai_bridge/depthaiUtility.hpp"
 #include "raph_oak/camera_info.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
@@ -64,6 +74,8 @@
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
+#include "std_msgs/msg/header.hpp"
+#include "std_srvs/srv/trigger.hpp"
 
 using namespace std::chrono_literals;
 
@@ -74,7 +86,7 @@ static const std::vector<std::string> UsbStrings = {"UNKNOWN", "LOW",   "FULL",
                                                     "HIGH",    "SUPER", "SUPER_PLUS"};
 
 // How long the ~/capture_still service waits for the triggered frame to arrive from the device
-static constexpr std::chrono::milliseconds kStillCaptureTimeout{2000};
+static constexpr std::chrono::milliseconds StillCaptureTimeout{2000};
 
 OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 : Node("oak_wrapper", options),
@@ -89,11 +101,12 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
   this->create_ros_publishers();
   this->create_ros_services();
 
-  // TODO: make sure this works under namespace
+  // TODO(fszkudlarek): make sure this works under namespace
   imu_converter_ = std::make_shared<depthai_bridge::ImuConverter>(
     "oak_imu_frame", depthai_bridge::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO, 0.001, 0.00001);
 
-  pointcloud_converter_ = std::make_shared<depthai_bridge::PointCloudConverter>("oak_stereo_camera_optical_frame");
+  pointcloud_converter_ =
+    std::make_shared<depthai_bridge::PointCloudConverter>("oak_stereo_camera_optical_frame");
 
   check_timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check_timer_callback, this));
 }
@@ -154,7 +167,8 @@ void OakWrapper::create_ros_publishers()
 
   // Still Image
   const auto still_qos = rclcpp::QoS(1).transient_local();
-  still_image_pub_ = create_publisher<sensor_msgs::msg::Image>("~/rgb_still/image_still", still_qos);
+  still_image_pub_ =
+    create_publisher<sensor_msgs::msg::Image>("~/rgb_still/image_still", still_qos);
   still_cam_info_pub_ =
     create_publisher<sensor_msgs::msg::CameraInfo>("~/rgb_still/camera_info", still_qos);
 }
@@ -375,7 +389,7 @@ std::shared_ptr<dai::Device> OakWrapper::connect_to_device()
 
   RCLCPP_INFO_STREAM(
     get_logger(), "Connected to device with ID: " << device->getDeviceId() << ", USB port id: "
-                                                     << device->getDeviceInfo().name);
+                                                  << device->getDeviceInfo().name);
   RCLCPP_INFO_STREAM(
     get_logger(), "USB Speed: " << UsbStrings[static_cast<int32_t>(device->getUsbSpeed())]);
 
@@ -434,7 +448,8 @@ void OakWrapper::check_publishers()
       "oak_left_camera_optical_frame", left_compressed_queue_));
 
   manage_callback(
-    left_rect_img_pub_->get_subscription_count() + left_rect_cam_info_pub_->get_subscription_count(),
+    left_rect_img_pub_->get_subscription_count() +
+      left_rect_cam_info_pub_->get_subscription_count(),
     left_rect_queue_, left_rect_callback_id_,
     std::bind(
       &OakWrapper::publish_image, this, left_rect_img_pub_, left_rect_cam_info_pub_,
@@ -462,7 +477,8 @@ void OakWrapper::check_publishers()
       "oak_right_camera_optical_frame", right_compressed_queue_));
 
   manage_callback(
-    right_rect_img_pub_->get_subscription_count() + right_rect_cam_info_pub_->get_subscription_count(),
+    right_rect_img_pub_->get_subscription_count() +
+      right_rect_cam_info_pub_->get_subscription_count(),
     right_rect_queue_, right_rect_callback_id_,
     std::bind(
       &OakWrapper::publish_image, this, right_rect_img_pub_, right_rect_cam_info_pub_,
@@ -573,7 +589,6 @@ void OakWrapper::publish_image(
   img_pub->publish(std::move(image));
 }
 
-
 std::unique_ptr<sensor_msgs::msg::Image> OakWrapper::to_ros_image(
   const std::shared_ptr<dai::ImgFrame> & in_data, const std_msgs::msg::Header & header) const
 {
@@ -671,7 +686,7 @@ void OakWrapper::publish_pointcloud()
   pointcloud_converter_->toRosMsg(in_data, op_msgs);
 
   while (!op_msgs.empty()) {
-    sensor_msgs::msg::PointCloud2 pointcloud = op_msgs.front();
+    const sensor_msgs::msg::PointCloud2 pointcloud = op_msgs.front();
     op_msgs.pop_front();
 
     pointcloud_pub_->publish(pointcloud);
@@ -696,7 +711,7 @@ void OakWrapper::capture_still(
   still_trigger_queue_->send(std::make_shared<dai::Buffer>());
 
   bool timed_out = false;
-  auto in_data = still_image_queue_->get<dai::ImgFrame>(kStillCaptureTimeout, timed_out);
+  auto in_data = still_image_queue_->get<dai::ImgFrame>(StillCaptureTimeout, timed_out);
   if (timed_out || !in_data) {
     response->success = false;
     response->message = "Timed out waiting for the still image frame";

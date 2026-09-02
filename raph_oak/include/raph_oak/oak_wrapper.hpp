@@ -30,9 +30,9 @@
 // DepthAI
 #include "depthai/device/CalibrationHandler.hpp"
 #include "depthai/device/Device.hpp"
-#include "depthai/pipeline/Pipeline.hpp"
-#include "depthai/pipeline/MessageQueue.hpp"
 #include "depthai/pipeline/InputQueue.hpp"
+#include "depthai/pipeline/MessageQueue.hpp"
+#include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai_bridge/ImuConverter.hpp"
@@ -168,7 +168,7 @@ private:
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> img_pub,
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
     sensor_msgs::msg::CameraInfo cam_info, std::shared_ptr<dai::MessageQueue> queue);
-    std::unique_ptr<sensor_msgs::msg::Image> to_ros_image(
+  std::unique_ptr<sensor_msgs::msg::Image> to_ros_image(
     const std::shared_ptr<dai::ImgFrame> & in_data, const std_msgs::msg::Header & header) const;
   void publish_compressed_image(
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,

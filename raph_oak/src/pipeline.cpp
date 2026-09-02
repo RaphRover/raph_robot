@@ -23,20 +23,24 @@
 #include <memory>
 
 // DepthAI
+#include "depthai/capabilities/ImgFrameCapability.hpp"
 #include "depthai/common/CameraBoardSocket.hpp"
 #include "depthai/common/CameraImageOrientation.hpp"
+#include "depthai/common/DepthUnit.hpp"
 #include "depthai/device/Device.hpp"
+#include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
-#include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/node/Camera.hpp"
 #include "depthai/pipeline/node/IMU.hpp"
 #include "depthai/pipeline/node/ImageManip.hpp"
-#include "depthai/pipeline/node/VideoEncoder.hpp"
-#include "depthai/pipeline/node/IMU.hpp"
-#include "depthai/pipeline/node/StereoDepth.hpp"
 #include "depthai/pipeline/node/PointCloud.hpp"
 #include "depthai/pipeline/node/Script.hpp"
+#include "depthai/pipeline/node/StereoDepth.hpp"
+#include "depthai/pipeline/node/VideoEncoder.hpp"
+#include "depthai/properties/IMUProperties.hpp"
+#include "depthai/properties/StereoDepthProperties.hpp"
+#include "depthai/properties/VideoEncoderProperties.hpp"
 
 // ROS
 #include "raph_oak/oak_wrapper_parameters.hpp"
@@ -54,9 +58,9 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   // RGB camera node
   auto rgb_node = pipeline->create<dai::node::Camera>()->build(dai::CameraBoardSocket::CAM_A);
   rgb_node->setImageOrientation(dai::CameraImageOrientation::ROTATE_180_DEG);
-  auto rgb_output = rgb_node->requestOutput(
-    {params.rgb.width, params.rgb.height}, dai::ImgFrame::Type::NV12,
-    dai::ImgResizeMode::CROP, params.rgb.fps);
+  auto * rgb_output = rgb_node->requestOutput(
+    {params.rgb.width, params.rgb.height}, dai::ImgFrame::Type::NV12, dai::ImgResizeMode::CROP,
+    params.rgb.fps);
   auto rgb_queue = rgb_output->createOutputQueue(1, false);
   rgb_queue->setName("rgb");
 
@@ -70,7 +74,9 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   rgb_encoder_queue->setName("rgb_compressed");
 
   // Stereo depth
-  auto stereo_depth_node = pipeline->create<dai::node::StereoDepth>()->build(true, dai::node::StereoDepth::PresetMode::ROBOTICS, {params.mono.width, params.mono.height}, params.mono.fps);
+  auto stereo_depth_node = pipeline->create<dai::node::StereoDepth>()->build(
+    true, dai::node::StereoDepth::PresetMode::ROBOTICS, {params.mono.width, params.mono.height},
+    params.mono.fps);
   stereo_depth_node->setRectifyEdgeFillColor(0);
   stereo_depth_node->setExtendedDisparity(params.depth.extended_disparity_enabled);
   stereo_depth_node->setRuntimeModeSwitch(true);
@@ -191,7 +197,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   pointcloud_queue->setName("pointcloud");
 
   // Still image
-  auto still_output = rgb_node->requestFullResolutionOutput(
+  auto * still_output = rgb_node->requestFullResolutionOutput(
     dai::ImgFrame::Type::NV12, static_cast<float>(params.rgb.fps));
 
   // Current workaround for OAK4 cameras, as Camera node doesn't yet support "still" frame capture:
