@@ -25,6 +25,7 @@ jobs:
   industrial_ci:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         ROS_DISTRO: [jazzy]
         ROS_REPO: [testing, main]
