@@ -40,6 +40,7 @@
 
 // ROS
 #include "raph_oak/oak_wrapper_parameters.hpp"
+#include "raph_oak/pipeline.hpp"
 #include "rclcpp/node.hpp"
 #include "rclcpp/node_options.hpp"
 #include "rclcpp/service.hpp"
@@ -61,25 +62,7 @@ public:
 
 private:
   std::shared_ptr<dai::Device> device_;
-  std::shared_ptr<dai::Pipeline> pipeline_;
-
-  // DepthAI data queues
-  std::shared_ptr<dai::MessageQueue> rgb_queue_;
-  std::shared_ptr<dai::MessageQueue> rgb_compressed_queue_;
-  std::shared_ptr<dai::MessageQueue> left_queue_;
-  std::shared_ptr<dai::MessageQueue> left_compressed_queue_;
-  std::shared_ptr<dai::MessageQueue> left_rect_queue_;
-  std::shared_ptr<dai::MessageQueue> left_rect_compressed_queue_;
-  std::shared_ptr<dai::MessageQueue> right_queue_;
-  std::shared_ptr<dai::MessageQueue> right_compressed_queue_;
-  std::shared_ptr<dai::MessageQueue> right_rect_queue_;
-  std::shared_ptr<dai::MessageQueue> right_rect_compressed_queue_;
-  std::shared_ptr<dai::MessageQueue> depth_queue_;
-  std::shared_ptr<dai::MessageQueue> imu_queue_;
-  std::shared_ptr<dai::InputQueue> depth_config_queue_;
-  std::shared_ptr<dai::MessageQueue> pointcloud_queue_;
-  std::shared_ptr<dai::MessageQueue> still_image_queue_;
-  std::shared_ptr<dai::InputQueue> still_trigger_queue_;
+  PipelineDetails pipeline_details_;
 
   // ROS Publishers
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> rgb_img_pub_;
@@ -110,20 +93,15 @@ private:
   std::shared_ptr<depthai_bridge::ImuConverter> imu_converter_;
   std::shared_ptr<depthai_bridge::PointCloudConverter> pointcloud_converter_;
 
-  // Callback IDs for dynamic callback management
-  int rgb_callback_id_{-1};
-  int rgb_compressed_callback_id_{-1};
-  int left_callback_id_{-1};
-  int left_compressed_callback_id_{-1};
-  int left_rect_callback_id_{-1};
-  int left_rect_compressed_callback_id_{-1};
-  int right_callback_id_{-1};
-  int right_compressed_callback_id_{-1};
-  int right_rect_callback_id_{-1};
-  int right_rect_compressed_callback_id_{-1};
-  int depth_callback_id_{-1};
-  int imu_callback_id_{-1};
-  int pointcloud_callback_id_{-1};
+  // Gate states for lazy activation
+  bool rgb_gate_open_{false};
+  bool left_gate_open_{false};
+  bool left_rect_gate_open_{false};
+  bool right_gate_open_{false};
+  bool right_rect_gate_open_{false};
+  bool depth_gate_open_{false};
+  bool imu_gate_open_{false};
+  bool pointcloud_gate_open_{false};
 
   // Camera info for callbacks
   sensor_msgs::msg::CameraInfo rgb_camera_info_;
@@ -158,9 +136,9 @@ private:
   void check_timer_callback();
   std::shared_ptr<dai::Device> connect_to_device();
   void check_publishers();
-  void manage_callback(
-    int subscription_count, std::shared_ptr<dai::MessageQueue> queue, int & callback_id,
-    std::function<void()> callback);
+  void manage_gate(
+    int subscription_count, const std::string & stream_name,
+    std::shared_ptr<dai::InputQueue> gate_queue, bool & is_open);
   void post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters);
   void update_parameters();
   void send_parameters() const;

@@ -29,9 +29,11 @@
 #include "depthai/common/DepthUnit.hpp"
 #include "depthai/device/Device.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
+#include "depthai/pipeline/datatype/GateControl.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai/pipeline/node/Camera.hpp"
+#include "depthai/pipeline/node/Gate.hpp"
 #include "depthai/pipeline/node/IMU.hpp"
 #include "depthai/pipeline/node/ImageManip.hpp"
 #include "depthai/pipeline/node/PointCloud.hpp"
@@ -52,7 +54,18 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
 {
   PipelineDetails details;
   auto pipeline = std::make_shared<dai::Pipeline>(device);
-  pipeline->setAutoCalibrationMode(dai::Pipeline::AutoCalibrationMode::CONTINUOUS);
+  pipeline->setAutoCalibrationMode(dai::Pipeline::AutoCalibrationMode::OFF);
+
+  auto make_gated_output = [&](dai::Node::Output & output, const std::string & name) {
+      auto gate = pipeline->create<dai::node::Gate>();
+      gate->initialConfig->open = false;
+      gate->input.setBlocking(false);
+      output.link(gate->input);
+      auto queue = gate->output.createOutputQueue(1, false);
+      queue->setName(name);
+      auto ctrl_queue = gate->inputControl.createInputQueue(4, false);
+      return std::make_pair(queue, ctrl_queue);
+    };
 
   // Create nodes
   // RGB camera node
@@ -61,14 +74,14 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto * rgb_output = rgb_node->requestOutput(
     {params.rgb.width, params.rgb.height}, dai::ImgFrame::Type::NV12, dai::ImgResizeMode::CROP,
     params.rgb.fps);
-  auto rgb_queue = rgb_output->createOutputQueue(1, false);
-  rgb_queue->setName("rgb");
+  auto [rgb_queue, rgb_gate_queue] = make_gated_output(*rgb_output, "rgb");
 
   // RGB compressed
   auto rgb_encoder_node = pipeline->create<dai::node::VideoEncoder>();
   rgb_encoder_node->setDefaultProfilePreset(
     params.rgb.fps, dai::VideoEncoderProperties::Profile::MJPEG);
   rgb_encoder_node->setQuality(params.rgb_compressed.jpeg_quality);
+  rgb_encoder_node->input.setBlocking(false);
   rgb_output->link(rgb_encoder_node->input);
   auto rgb_encoder_queue = rgb_encoder_node->out.createOutputQueue(1, false);
   rgb_encoder_queue->setName("rgb_compressed");
@@ -91,10 +104,10 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   depth_rotate->initialConfig->addRotateDeg(180.0);
   depth_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW16);
   depth_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  depth_rotate->inputImage.setBlocking(false);
   stereo_depth_node->depth.link(depth_rotate->inputImage);
 
-  auto depth_queue = depth_rotate->out.createOutputQueue(1, false);
-  depth_queue->setName("depth");
+  auto [depth_queue, depth_gate_queue] = make_gated_output(depth_rotate->out, "depth");
 
   auto depth_config_queue = stereo_depth_node->inputConfig.createInputQueue(1, false);
 
@@ -104,16 +117,17 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   left_rotate->initialConfig->addRotateDeg(180.0);
   left_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
   left_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  left_rotate->inputImage.setBlocking(false);
   // Link the right camera output to the left_rotate input (after 180-degree rotation)
   stereo_depth_node->syncedRight.link(left_rotate->inputImage);
-  auto left_queue = left_rotate->out.createOutputQueue(1, false);
-  left_queue->setName("left");
+  auto [left_queue, left_gate_queue] = make_gated_output(left_rotate->out, "left");
 
   // Left compressed
   auto left_encoder_node = pipeline->create<dai::node::VideoEncoder>();
   left_encoder_node->setDefaultProfilePreset(
     params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
   left_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+  left_encoder_node->input.setBlocking(false);
   left_rotate->out.link(left_encoder_node->input);
   auto left_compressed_queue = left_encoder_node->out.createOutputQueue(1, false);
   left_compressed_queue->setName("left_compressed");
@@ -124,16 +138,18 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   left_rect_rotate->initialConfig->addRotateDeg(180.0);
   left_rect_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
   left_rect_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  left_rect_rotate->inputImage.setBlocking(false);
   // Link the right camera output to the left_rect_rotate input (after 180-degree rotation)
   stereo_depth_node->rectifiedRight.link(left_rect_rotate->inputImage);
-  auto left_rect_queue = left_rect_rotate->out.createOutputQueue(1, false);
-  left_rect_queue->setName("left_rect");
+  auto [left_rect_queue, left_rect_gate_queue] =
+    make_gated_output(left_rect_rotate->out, "left_rect");
 
   // Left rectified compressed
   auto left_rect_encoder_node = pipeline->create<dai::node::VideoEncoder>();
   left_rect_encoder_node->setDefaultProfilePreset(
     params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
   left_rect_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+  left_rect_encoder_node->input.setBlocking(false);
   left_rect_rotate->out.link(left_rect_encoder_node->input);
   auto left_rect_compressed_queue = left_rect_encoder_node->out.createOutputQueue(1, false);
   left_rect_compressed_queue->setName("left_rect_compressed");
@@ -144,16 +160,17 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   right_rotate->initialConfig->addRotateDeg(180.0);
   right_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
   right_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  right_rotate->inputImage.setBlocking(false);
   // Link the left camera output to the right_rotate input (after 180-degree rotation)
   stereo_depth_node->syncedLeft.link(right_rotate->inputImage);
-  auto right_queue = right_rotate->out.createOutputQueue(1, false);
-  right_queue->setName("right");
+  auto [right_queue, right_gate_queue] = make_gated_output(right_rotate->out, "right");
 
   // Right compressed
   auto right_encoder_node = pipeline->create<dai::node::VideoEncoder>();
   right_encoder_node->setDefaultProfilePreset(
     params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
   right_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+  right_encoder_node->input.setBlocking(false);
   right_rotate->out.link(right_encoder_node->input);
   auto right_compressed_queue = right_encoder_node->out.createOutputQueue(1, false);
   right_compressed_queue->setName("right_compressed");
@@ -164,16 +181,18 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   right_rect_rotate->initialConfig->addRotateDeg(180.0);
   right_rect_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
   right_rect_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  right_rect_rotate->inputImage.setBlocking(false);
   // Link the left camera output to the right_rect_rotate input (after 180-degree rotation)
   stereo_depth_node->rectifiedLeft.link(right_rect_rotate->inputImage);
-  auto right_rect_queue = right_rect_rotate->out.createOutputQueue(1, false);
-  right_rect_queue->setName("right_rect");
+  auto [right_rect_queue, right_rect_gate_queue] =
+    make_gated_output(right_rect_rotate->out, "right_rect");
 
   // Right rectified compressed
   auto right_rect_encoder_node = pipeline->create<dai::node::VideoEncoder>();
   right_rect_encoder_node->setDefaultProfilePreset(
     params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
   right_rect_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+  right_rect_encoder_node->input.setBlocking(false);
   right_rect_rotate->out.link(right_rect_encoder_node->input);
   auto right_rect_compressed_queue = right_rect_encoder_node->out.createOutputQueue(1, false);
   right_rect_compressed_queue->setName("right_rect_compressed");
@@ -184,15 +203,19 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   imu_node->enableIMUSensor(dai::IMUSensor::GYROSCOPE_RAW, 400);
   imu_node->setBatchReportThreshold(5);
   imu_node->setMaxBatchReports(20);
-  auto imu_queue = imu_node->out.createOutputQueue(1, false);
-  imu_queue->setName("imu");
+  auto [imu_queue, imu_gate_queue] = make_gated_output(imu_node->out, "imu");
 
-  // Pointcloud node
+  // Pointcloud node (gating inputDepth so pointcloud calculations only run when subscribed)
+  auto pc_depth_gate = pipeline->create<dai::node::Gate>();
+  pc_depth_gate->initialConfig->open = false;
+  depth_rotate->out.link(pc_depth_gate->input);
+  auto pointcloud_gate_queue = pc_depth_gate->inputControl.createInputQueue(4, false);
+
   auto pointcloud_node = pipeline->create<dai::node::PointCloud>();
   pointcloud_node->initialConfig->setOrganized(true);
   pointcloud_node->initialConfig->setTargetCoordinateSystem(dai::CameraBoardSocket::CAM_C);
   pointcloud_node->initialConfig->setLengthUnit(dai::LengthUnit::METER);
-  depth_rotate->out.link(pointcloud_node->inputDepth);
+  pc_depth_gate->output.link(pointcloud_node->inputDepth);
   auto pointcloud_queue = pointcloud_node->outputPointCloud.createOutputQueue(1, false);
   pointcloud_queue->setName("pointcloud");
 
@@ -208,7 +231,8 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   still_script_node->inputs["in"].setMaxSize(1);
   still_output->link(still_script_node->inputs["in"]);
 
-  still_script_node->setScript(R"(
+  still_script_node->setScript(
+      R"(
       while True:
           message = node.inputs["in"].get()
           if node.inputs["trigger"].tryGet() is not None:
@@ -238,6 +262,15 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   details.pointcloud_queue = pointcloud_queue;
   details.still_image_queue = still_image_queue;
   details.still_trigger_queue = still_trigger_queue;
+
+  details.rgb_gate_queue = rgb_gate_queue;
+  details.depth_gate_queue = depth_gate_queue;
+  details.left_gate_queue = left_gate_queue;
+  details.left_rect_gate_queue = left_rect_gate_queue;
+  details.right_gate_queue = right_gate_queue;
+  details.right_rect_gate_queue = right_rect_gate_queue;
+  details.imu_gate_queue = imu_gate_queue;
+  details.pointcloud_gate_queue = pointcloud_gate_queue;
 
   return details;
 }

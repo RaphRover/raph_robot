@@ -52,6 +52,16 @@ struct PipelineDetails
   std::shared_ptr<dai::MessageQueue> still_image_queue;
   std::shared_ptr<dai::InputQueue> still_trigger_queue;
 
+  // Gate control queues for on-demand USB transfer
+  std::shared_ptr<dai::InputQueue> rgb_gate_queue;
+  std::shared_ptr<dai::InputQueue> depth_gate_queue;
+  std::shared_ptr<dai::InputQueue> left_gate_queue;
+  std::shared_ptr<dai::InputQueue> left_rect_gate_queue;
+  std::shared_ptr<dai::InputQueue> right_gate_queue;
+  std::shared_ptr<dai::InputQueue> right_rect_gate_queue;
+  std::shared_ptr<dai::InputQueue> imu_gate_queue;
+  std::shared_ptr<dai::InputQueue> pointcloud_gate_queue;
+
   dai::StereoDepthConfig depth_config;
 };
 

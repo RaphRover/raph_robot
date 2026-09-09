@@ -46,6 +46,7 @@
 #include "depthai/pipeline/MessageQueue.hpp"
 #include "depthai/pipeline/datatype/Buffer.hpp"
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
+#include "depthai/pipeline/datatype/GateControl.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
@@ -82,8 +83,8 @@ using namespace std::chrono_literals;
 namespace raph_oak
 {
 
-static const std::vector<std::string> UsbStrings = {"UNKNOWN", "LOW",   "FULL",
-                                                    "HIGH",    "SUPER", "SUPER_PLUS"};
+static const std::vector<std::string> UsbStrings = {"UNKNOWN", "LOW", "FULL",
+  "HIGH", "SUPER", "SUPER_PLUS"};
 
 // How long the ~/capture_still service waits for the triggered frame to arrive from the device
 static constexpr std::chrono::milliseconds StillCaptureTimeout{2000};
@@ -251,27 +252,86 @@ const sensor_msgs::msg::CameraInfo & OakWrapper::get_still_camera_info(
 
 void OakWrapper::run_pipeline()
 {
-  auto pipeline_details = create_dai_pipeline(device_, params_);
+  pipeline_details_ = create_dai_pipeline(device_, params_);
 
-  rgb_queue_ = pipeline_details.rgb_queue;
-  rgb_compressed_queue_ = pipeline_details.rgb_compressed_queue;
-  depth_queue_ = pipeline_details.depth_queue;
-  left_queue_ = pipeline_details.left_queue;
-  left_compressed_queue_ = pipeline_details.left_compressed_queue;
-  left_rect_queue_ = pipeline_details.left_rect_queue;
-  left_rect_compressed_queue_ = pipeline_details.left_rect_compressed_queue;
-  right_queue_ = pipeline_details.right_queue;
-  right_compressed_queue_ = pipeline_details.right_compressed_queue;
-  right_rect_queue_ = pipeline_details.right_rect_queue;
-  right_rect_compressed_queue_ = pipeline_details.right_rect_compressed_queue;
-  imu_queue_ = pipeline_details.imu_queue;
-  pipeline_ = pipeline_details.pipeline;
-  depth_config_queue_ = pipeline_details.depth_config_queue;
-  depth_config_ = pipeline_details.depth_config;
-  pointcloud_queue_ = pipeline_details.pointcloud_queue;
-  still_image_queue_ = pipeline_details.still_image_queue;
-  still_trigger_queue_ = pipeline_details.still_trigger_queue;
-  pipeline_->start();
+  // Register permanent callbacks on queues
+  pipeline_details_.rgb_queue->addCallback([this]() {
+      publish_image(rgb_img_pub_, rgb_cam_info_pub_, rgb_camera_info_, pipeline_details_.rgb_queue);
+  });
+
+  pipeline_details_.rgb_compressed_queue->addCallback([this]() {
+      publish_compressed_image(
+      rgb_compressed_pub_, "oak_rgb_camera_optical_frame",
+      pipeline_details_.rgb_compressed_queue);
+  });
+
+  pipeline_details_.depth_queue->addCallback([this]() {
+      publish_image(
+      stereo_depth_pub_, stereo_cam_info_pub_, stereo_camera_info_,
+      pipeline_details_.depth_queue);
+  });
+
+  pipeline_details_.left_queue->addCallback([this]() {
+      publish_image(left_img_pub_, left_cam_info_pub_, left_camera_info_,
+        pipeline_details_.left_queue);
+  });
+
+  pipeline_details_.left_compressed_queue->addCallback([this]() {
+      publish_compressed_image(
+      left_compressed_pub_, "oak_left_camera_optical_frame",
+      pipeline_details_.left_compressed_queue);
+  });
+
+  pipeline_details_.left_rect_queue->addCallback([this]() {
+      publish_image(
+      left_rect_img_pub_, left_rect_cam_info_pub_, left_rect_camera_info_,
+      pipeline_details_.left_rect_queue);
+  });
+
+  pipeline_details_.left_rect_compressed_queue->addCallback([this]() {
+      publish_compressed_image(
+      left_rect_compressed_pub_, "oak_left_camera_optical_frame",
+      pipeline_details_.left_rect_compressed_queue);
+  });
+
+  pipeline_details_.right_queue->addCallback([this]() {
+      publish_image(
+      right_img_pub_, right_cam_info_pub_, right_camera_info_, pipeline_details_.right_queue);
+  });
+
+  pipeline_details_.right_compressed_queue->addCallback([this]() {
+      publish_compressed_image(
+      right_compressed_pub_, "oak_right_camera_optical_frame",
+      pipeline_details_.right_compressed_queue);
+  });
+
+  pipeline_details_.right_rect_queue->addCallback([this]() {
+      publish_image(
+      right_rect_img_pub_, right_rect_cam_info_pub_, right_rect_camera_info_,
+      pipeline_details_.right_rect_queue);
+  });
+
+  pipeline_details_.right_rect_compressed_queue->addCallback([this]() {
+      publish_compressed_image(
+      right_rect_compressed_pub_, "oak_right_camera_optical_frame",
+      pipeline_details_.right_rect_compressed_queue);
+  });
+
+  pipeline_details_.imu_queue->addCallback([this]() {publish_imu();});
+
+  pipeline_details_.pointcloud_queue->addCallback([this]() {publish_pointcloud();});
+
+  // Initialize gate state flags to closed
+  rgb_gate_open_ = false;
+  left_gate_open_ = false;
+  left_rect_gate_open_ = false;
+  right_gate_open_ = false;
+  right_rect_gate_open_ = false;
+  depth_gate_open_ = false;
+  imu_gate_open_ = false;
+  pointcloud_gate_open_ = false;
+
+  pipeline_details_.pipeline->start();
 }
 
 void OakWrapper::check_timer_callback()
@@ -299,41 +359,22 @@ void OakWrapper::check_timer_callback()
   if (device_->isClosed()) {
     RCLCPP_ERROR(get_logger(), "Device disconnected. Freeing resources...");
 
-    pipeline_->stop();
-    // Reset all queues and device
-    rgb_queue_.reset();
-    rgb_compressed_queue_.reset();
-    left_queue_.reset();
-    left_compressed_queue_.reset();
-    left_rect_queue_.reset();
-    left_rect_compressed_queue_.reset();
-    right_queue_.reset();
-    right_compressed_queue_.reset();
-    right_rect_queue_.reset();
-    right_rect_compressed_queue_.reset();
-    depth_queue_.reset();
-    imu_queue_.reset();
-    depth_config_queue_.reset();
-    pointcloud_queue_.reset();
-    still_image_queue_.reset();
-    still_trigger_queue_.reset();
-    device_.reset();
-    pipeline_.reset();
+    if (pipeline_details_.pipeline) {
+      pipeline_details_.pipeline->stop();
+    }
+    pipeline_details_ = PipelineDetails{};
 
-    // Reset callback ids
-    rgb_callback_id_ = -1;
-    rgb_compressed_callback_id_ = -1;
-    left_callback_id_ = -1;
-    left_compressed_callback_id_ = -1;
-    left_rect_callback_id_ = -1;
-    left_rect_compressed_callback_id_ = -1;
-    right_callback_id_ = -1;
-    right_compressed_callback_id_ = -1;
-    right_rect_callback_id_ = -1;
-    right_rect_compressed_callback_id_ = -1;
-    depth_callback_id_ = -1;
-    imu_callback_id_ = -1;
-    pointcloud_callback_id_ = -1;
+    device_.reset();
+
+    // Reset gate states
+    rgb_gate_open_ = false;
+    left_gate_open_ = false;
+    left_rect_gate_open_ = false;
+    right_gate_open_ = false;
+    right_rect_gate_open_ = false;
+    depth_gate_open_ = false;
+    imu_gate_open_ = false;
+    pointcloud_gate_open_ = false;
 
     return;
   }
@@ -412,92 +453,39 @@ std::shared_ptr<dai::Device> OakWrapper::connect_to_device()
 
 void OakWrapper::check_publishers()
 {
-  manage_callback(
+  manage_gate(
     rgb_img_pub_->get_subscription_count() + rgb_cam_info_pub_->get_subscription_count(),
-    rgb_queue_, rgb_callback_id_,
-    std::bind(
-      &OakWrapper::publish_image, this, rgb_img_pub_, rgb_cam_info_pub_, rgb_camera_info_,
-      rgb_queue_));
+    "rgb", pipeline_details_.rgb_gate_queue, rgb_gate_open_);
 
-  manage_callback(
-    rgb_compressed_pub_->get_subscription_count(), rgb_compressed_queue_,
-    rgb_compressed_callback_id_,
-    std::bind(
-      &OakWrapper::publish_compressed_image, this, rgb_compressed_pub_,
-      "oak_rgb_camera_optical_frame", rgb_compressed_queue_));
-
-  manage_callback(
+  manage_gate(
     stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count(),
-    depth_queue_, depth_callback_id_,
-    std::bind(
-      &OakWrapper::publish_image, this, stereo_depth_pub_, stereo_cam_info_pub_,
-      stereo_camera_info_, depth_queue_));
+    "depth", pipeline_details_.depth_gate_queue, depth_gate_open_);
 
-  manage_callback(
+  manage_gate(
     left_img_pub_->get_subscription_count() + left_cam_info_pub_->get_subscription_count(),
-    left_queue_, left_callback_id_,
-    std::bind(
-      &OakWrapper::publish_image, this, left_img_pub_, left_cam_info_pub_, left_camera_info_,
-      left_queue_));
+    "left", pipeline_details_.left_gate_queue, left_gate_open_);
 
-  manage_callback(
-    left_compressed_pub_->get_subscription_count(), left_compressed_queue_,
-    left_compressed_callback_id_,
-    std::bind(
-      &OakWrapper::publish_compressed_image, this, left_compressed_pub_,
-      "oak_left_camera_optical_frame", left_compressed_queue_));
-
-  manage_callback(
+  manage_gate(
     left_rect_img_pub_->get_subscription_count() +
       left_rect_cam_info_pub_->get_subscription_count(),
-    left_rect_queue_, left_rect_callback_id_,
-    std::bind(
-      &OakWrapper::publish_image, this, left_rect_img_pub_, left_rect_cam_info_pub_,
-      left_rect_camera_info_, left_rect_queue_));
+    "left_rect", pipeline_details_.left_rect_gate_queue, left_rect_gate_open_);
 
-  manage_callback(
-    left_rect_compressed_pub_->get_subscription_count(), left_rect_compressed_queue_,
-    left_rect_compressed_callback_id_,
-    std::bind(
-      &OakWrapper::publish_compressed_image, this, left_rect_compressed_pub_,
-      "oak_left_camera_optical_frame", left_rect_compressed_queue_));
-
-  manage_callback(
+  manage_gate(
     right_img_pub_->get_subscription_count() + right_cam_info_pub_->get_subscription_count(),
-    right_queue_, right_callback_id_,
-    std::bind(
-      &OakWrapper::publish_image, this, right_img_pub_, right_cam_info_pub_, right_camera_info_,
-      right_queue_));
+    "right", pipeline_details_.right_gate_queue, right_gate_open_);
 
-  manage_callback(
-    right_compressed_pub_->get_subscription_count(), right_compressed_queue_,
-    right_compressed_callback_id_,
-    std::bind(
-      &OakWrapper::publish_compressed_image, this, right_compressed_pub_,
-      "oak_right_camera_optical_frame", right_compressed_queue_));
-
-  manage_callback(
+  manage_gate(
     right_rect_img_pub_->get_subscription_count() +
       right_rect_cam_info_pub_->get_subscription_count(),
-    right_rect_queue_, right_rect_callback_id_,
-    std::bind(
-      &OakWrapper::publish_image, this, right_rect_img_pub_, right_rect_cam_info_pub_,
-      right_rect_camera_info_, right_rect_queue_));
+    "right_rect", pipeline_details_.right_rect_gate_queue, right_rect_gate_open_);
 
-  manage_callback(
-    right_rect_compressed_pub_->get_subscription_count(), right_rect_compressed_queue_,
-    right_rect_compressed_callback_id_,
-    std::bind(
-      &OakWrapper::publish_compressed_image, this, right_rect_compressed_pub_,
-      "oak_right_camera_optical_frame", right_rect_compressed_queue_));
+  manage_gate(
+    imu_pub_->get_subscription_count(),
+    "imu", pipeline_details_.imu_gate_queue, imu_gate_open_);
 
-  manage_callback(
-    imu_pub_->get_subscription_count(), imu_queue_, imu_callback_id_,
-    std::bind(&OakWrapper::publish_imu, this));
-
-  manage_callback(
-    pointcloud_pub_->get_subscription_count(), pointcloud_queue_, pointcloud_callback_id_,
-    std::bind(&OakWrapper::publish_pointcloud, this));
+  manage_gate(
+    pointcloud_pub_->get_subscription_count(),
+    "pointcloud", pipeline_details_.pointcloud_gate_queue, pointcloud_gate_open_);
 
   if (params_.device.ir_laser_dot_projector_lazy && !device_->isClosed()) {
     const bool should_be_active =
@@ -513,23 +501,26 @@ void OakWrapper::check_publishers()
   }
 }
 
-void OakWrapper::manage_callback(
-  int subscription_count, std::shared_ptr<dai::MessageQueue> queue, int & callback_id,
-  std::function<void()> callback)
+void OakWrapper::manage_gate(
+  int subscription_count, const std::string & stream_name,
+  std::shared_ptr<dai::InputQueue> gate_queue, bool & is_open)
 {
-  const bool should_be_active = subscription_count > 0;
-  const bool is_active = callback_id >= 0;
+  const bool should_be_open = subscription_count > 0;
 
-  if (should_be_active && !is_active) {
+  if (should_be_open && !is_open) {
     RCLCPP_INFO_STREAM(
-      get_logger(), "Activating callback for \"" << queue->getName() << "\" queue");
-    callback_id = queue->addCallback(callback);
-    queue->tryGetAll();  // Clear any existing data in the queue
-  } else if (!should_be_active && is_active) {
+      get_logger(), "Opening gate for \"" << stream_name << "\" stream");
+    if (gate_queue) {
+      gate_queue->send(dai::GateControl::openGate());
+    }
+    is_open = true;
+  } else if (!should_be_open && is_open) {
     RCLCPP_INFO_STREAM(
-      get_logger(), "Deactivating callback for \"" << queue->getName() << "\" queue");
-    queue->removeCallback(callback_id);
-    callback_id = -1;
+      get_logger(), "Closing gate for \"" << stream_name << "\" stream");
+    if (gate_queue) {
+      gate_queue->send(dai::GateControl::closeGate());
+    }
+    is_open = false;
   }
 }
 
@@ -557,7 +548,10 @@ void OakWrapper::update_parameters()
 
 void OakWrapper::send_parameters() const
 {
-  depth_config_queue_->send(std::make_shared<dai::StereoDepthConfig>(depth_config_));
+  if (pipeline_details_.depth_config_queue) {
+    pipeline_details_.depth_config_queue->send(
+      std::make_shared<dai::StereoDepthConfig>(depth_config_));
+  }
 
   if (!params_.device.ir_laser_dot_projector_lazy) {
     device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
@@ -651,10 +645,11 @@ void OakWrapper::publish_compressed_image(
 
 void OakWrapper::publish_imu()
 {
-  auto in_data = imu_queue_->tryGet<dai::IMUData>();
+  auto in_data = pipeline_details_.imu_queue->tryGet<dai::IMUData>();
   if (!in_data) {
     RCLCPP_WARN_STREAM(
-      get_logger(), "Failed to get data from \"" << imu_queue_->getName() << "\" queue");
+      get_logger(),
+        "Failed to get data from \"" << pipeline_details_.imu_queue->getName() << "\" queue");
     return;
   }
 
@@ -674,11 +669,13 @@ void OakWrapper::publish_imu()
 
 void OakWrapper::publish_pointcloud()
 {
-  auto in_data = pointcloud_queue_->tryGet<dai::PointCloudData>();
+  auto in_data = pipeline_details_.pointcloud_queue->tryGet<dai::PointCloudData>();
 
   if (!in_data) {
     RCLCPP_WARN_STREAM(
-      get_logger(), "Failed to get data from \"" << pointcloud_queue_->getName() << "\" queue");
+      get_logger(),
+        "Failed to get data from \"" << pipeline_details_.pointcloud_queue->getName() <<
+        "\" queue");
     return;
   }
 
@@ -698,8 +695,9 @@ void OakWrapper::capture_still(
   std_srvs::srv::Trigger::Response::SharedPtr response)
 {
   if (
-    !device_ || device_->isClosed() || !still_trigger_queue_ || !still_image_queue_ ||
-    !calibration_handler_) {
+    !device_ || device_->isClosed() || !pipeline_details_.still_trigger_queue ||
+    !pipeline_details_.still_image_queue || !calibration_handler_)
+  {
     response->success = false;
     response->message = "Device is not connected";
     RCLCPP_WARN_STREAM(get_logger(), "Still image capture failed: " << response->message);
@@ -707,11 +705,12 @@ void OakWrapper::capture_still(
   }
 
   // Drop anything left over from a previous, timed out capture
-  still_image_queue_->tryGetAll();
-  still_trigger_queue_->send(std::make_shared<dai::Buffer>());
+  pipeline_details_.still_image_queue->tryGetAll();
+  pipeline_details_.still_trigger_queue->send(std::make_shared<dai::Buffer>());
 
   bool timed_out = false;
-  auto in_data = still_image_queue_->get<dai::ImgFrame>(StillCaptureTimeout, timed_out);
+  auto in_data = pipeline_details_.still_image_queue->get<dai::ImgFrame>(StillCaptureTimeout,
+      timed_out);
   if (timed_out || !in_data) {
     response->success = false;
     response->message = "Timed out waiting for the still image frame";
