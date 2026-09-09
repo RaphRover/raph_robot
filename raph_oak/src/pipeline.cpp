@@ -57,15 +57,15 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   pipeline->setAutoCalibrationMode(dai::Pipeline::AutoCalibrationMode::OFF);
 
   auto make_gated_output = [&](dai::Node::Output & output, const std::string & name) {
-      auto gate = pipeline->create<dai::node::Gate>();
-      gate->initialConfig->open = false;
-      gate->input.setBlocking(false);
-      output.link(gate->input);
-      auto queue = gate->output.createOutputQueue(1, false);
-      queue->setName(name);
-      auto ctrl_queue = gate->inputControl.createInputQueue(4, false);
-      return std::make_pair(queue, ctrl_queue);
-    };
+    auto gate = pipeline->create<dai::node::Gate>();
+    gate->initialConfig->open = false;
+    gate->input.setBlocking(false);
+    output.link(gate->input);
+    auto queue = gate->output.createOutputQueue(1, false);
+    queue->setName(name);
+    auto ctrl_queue = gate->inputControl.createInputQueue(4, false);
+    return std::make_pair(queue, ctrl_queue);
+  };
 
   // Create nodes
   // RGB camera node
@@ -232,7 +232,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   still_output->link(still_script_node->inputs["in"]);
 
   still_script_node->setScript(
-      R"(
+    R"(
       while True:
           message = node.inputs["in"].get()
           if node.inputs["trigger"].tryGet() is not None:

@@ -83,8 +83,8 @@ using namespace std::chrono_literals;
 namespace raph_oak
 {
 
-static const std::vector<std::string> UsbStrings = {"UNKNOWN", "LOW", "FULL",
-  "HIGH", "SUPER", "SUPER_PLUS"};
+static const std::vector<std::string> UsbStrings = {"UNKNOWN", "LOW",   "FULL",
+                                                    "HIGH",    "SUPER", "SUPER_PLUS"};
 
 // How long the ~/capture_still service waits for the triggered frame to arrive from the device
 static constexpr std::chrono::milliseconds StillCaptureTimeout{2000};
@@ -256,70 +256,68 @@ void OakWrapper::run_pipeline()
 
   // Register permanent callbacks on queues
   pipeline_details_.rgb_queue->addCallback([this]() {
-      publish_image(rgb_img_pub_, rgb_cam_info_pub_, rgb_camera_info_, pipeline_details_.rgb_queue);
+    publish_image(rgb_img_pub_, rgb_cam_info_pub_, rgb_camera_info_, pipeline_details_.rgb_queue);
   });
 
   pipeline_details_.rgb_compressed_queue->addCallback([this]() {
-      publish_compressed_image(
-      rgb_compressed_pub_, "oak_rgb_camera_optical_frame",
-      pipeline_details_.rgb_compressed_queue);
+    publish_compressed_image(
+      rgb_compressed_pub_, "oak_rgb_camera_optical_frame", pipeline_details_.rgb_compressed_queue);
   });
 
   pipeline_details_.depth_queue->addCallback([this]() {
-      publish_image(
-      stereo_depth_pub_, stereo_cam_info_pub_, stereo_camera_info_,
-      pipeline_details_.depth_queue);
+    publish_image(
+      stereo_depth_pub_, stereo_cam_info_pub_, stereo_camera_info_, pipeline_details_.depth_queue);
   });
 
   pipeline_details_.left_queue->addCallback([this]() {
-      publish_image(left_img_pub_, left_cam_info_pub_, left_camera_info_,
-        pipeline_details_.left_queue);
+    publish_image(
+      left_img_pub_, left_cam_info_pub_, left_camera_info_, pipeline_details_.left_queue);
   });
 
   pipeline_details_.left_compressed_queue->addCallback([this]() {
-      publish_compressed_image(
+    publish_compressed_image(
       left_compressed_pub_, "oak_left_camera_optical_frame",
       pipeline_details_.left_compressed_queue);
   });
 
   pipeline_details_.left_rect_queue->addCallback([this]() {
-      publish_image(
+    publish_image(
       left_rect_img_pub_, left_rect_cam_info_pub_, left_rect_camera_info_,
       pipeline_details_.left_rect_queue);
   });
 
   pipeline_details_.left_rect_compressed_queue->addCallback([this]() {
-      publish_compressed_image(
+    publish_compressed_image(
       left_rect_compressed_pub_, "oak_left_camera_optical_frame",
       pipeline_details_.left_rect_compressed_queue);
   });
 
   pipeline_details_.right_queue->addCallback([this]() {
-      publish_image(
+    publish_image(
       right_img_pub_, right_cam_info_pub_, right_camera_info_, pipeline_details_.right_queue);
   });
 
   pipeline_details_.right_compressed_queue->addCallback([this]() {
-      publish_compressed_image(
+    publish_compressed_image(
       right_compressed_pub_, "oak_right_camera_optical_frame",
       pipeline_details_.right_compressed_queue);
   });
 
   pipeline_details_.right_rect_queue->addCallback([this]() {
-      publish_image(
+    publish_image(
       right_rect_img_pub_, right_rect_cam_info_pub_, right_rect_camera_info_,
       pipeline_details_.right_rect_queue);
   });
 
   pipeline_details_.right_rect_compressed_queue->addCallback([this]() {
-      publish_compressed_image(
+    publish_compressed_image(
       right_rect_compressed_pub_, "oak_right_camera_optical_frame",
       pipeline_details_.right_rect_compressed_queue);
   });
 
-  pipeline_details_.imu_queue->addCallback([this]() {publish_imu();});
+  pipeline_details_.imu_queue->addCallback([this]() { publish_imu(); });
 
-  pipeline_details_.pointcloud_queue->addCallback([this]() {publish_pointcloud();});
+  pipeline_details_.pointcloud_queue->addCallback([this]() { publish_pointcloud(); });
 
   // Initialize gate state flags to closed
   rgb_gate_open_ = false;
@@ -454,16 +452,16 @@ std::shared_ptr<dai::Device> OakWrapper::connect_to_device()
 void OakWrapper::check_publishers()
 {
   manage_gate(
-    rgb_img_pub_->get_subscription_count() + rgb_cam_info_pub_->get_subscription_count(),
-    "rgb", pipeline_details_.rgb_gate_queue, rgb_gate_open_);
+    rgb_img_pub_->get_subscription_count() + rgb_cam_info_pub_->get_subscription_count(), "rgb",
+    pipeline_details_.rgb_gate_queue, rgb_gate_open_);
 
   manage_gate(
     stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count(),
     "depth", pipeline_details_.depth_gate_queue, depth_gate_open_);
 
   manage_gate(
-    left_img_pub_->get_subscription_count() + left_cam_info_pub_->get_subscription_count(),
-    "left", pipeline_details_.left_gate_queue, left_gate_open_);
+    left_img_pub_->get_subscription_count() + left_cam_info_pub_->get_subscription_count(), "left",
+    pipeline_details_.left_gate_queue, left_gate_open_);
 
   manage_gate(
     left_rect_img_pub_->get_subscription_count() +
@@ -480,12 +478,11 @@ void OakWrapper::check_publishers()
     "right_rect", pipeline_details_.right_rect_gate_queue, right_rect_gate_open_);
 
   manage_gate(
-    imu_pub_->get_subscription_count(),
-    "imu", pipeline_details_.imu_gate_queue, imu_gate_open_);
+    imu_pub_->get_subscription_count(), "imu", pipeline_details_.imu_gate_queue, imu_gate_open_);
 
   manage_gate(
-    pointcloud_pub_->get_subscription_count(),
-    "pointcloud", pipeline_details_.pointcloud_gate_queue, pointcloud_gate_open_);
+    pointcloud_pub_->get_subscription_count(), "pointcloud",
+    pipeline_details_.pointcloud_gate_queue, pointcloud_gate_open_);
 
   if (params_.device.ir_laser_dot_projector_lazy && !device_->isClosed()) {
     const bool should_be_active =
@@ -508,15 +505,13 @@ void OakWrapper::manage_gate(
   const bool should_be_open = subscription_count > 0;
 
   if (should_be_open && !is_open) {
-    RCLCPP_INFO_STREAM(
-      get_logger(), "Opening gate for \"" << stream_name << "\" stream");
+    RCLCPP_INFO_STREAM(get_logger(), "Opening gate for \"" << stream_name << "\" stream");
     if (gate_queue) {
       gate_queue->send(dai::GateControl::openGate());
     }
     is_open = true;
   } else if (!should_be_open && is_open) {
-    RCLCPP_INFO_STREAM(
-      get_logger(), "Closing gate for \"" << stream_name << "\" stream");
+    RCLCPP_INFO_STREAM(get_logger(), "Closing gate for \"" << stream_name << "\" stream");
     if (gate_queue) {
       gate_queue->send(dai::GateControl::closeGate());
     }
@@ -649,7 +644,7 @@ void OakWrapper::publish_imu()
   if (!in_data) {
     RCLCPP_WARN_STREAM(
       get_logger(),
-        "Failed to get data from \"" << pipeline_details_.imu_queue->getName() << "\" queue");
+      "Failed to get data from \"" << pipeline_details_.imu_queue->getName() << "\" queue");
     return;
   }
 
@@ -674,8 +669,7 @@ void OakWrapper::publish_pointcloud()
   if (!in_data) {
     RCLCPP_WARN_STREAM(
       get_logger(),
-        "Failed to get data from \"" << pipeline_details_.pointcloud_queue->getName() <<
-        "\" queue");
+      "Failed to get data from \"" << pipeline_details_.pointcloud_queue->getName() << "\" queue");
     return;
   }
 
@@ -696,8 +690,7 @@ void OakWrapper::capture_still(
 {
   if (
     !device_ || device_->isClosed() || !pipeline_details_.still_trigger_queue ||
-    !pipeline_details_.still_image_queue || !calibration_handler_)
-  {
+    !pipeline_details_.still_image_queue || !calibration_handler_) {
     response->success = false;
     response->message = "Device is not connected";
     RCLCPP_WARN_STREAM(get_logger(), "Still image capture failed: " << response->message);
@@ -709,8 +702,8 @@ void OakWrapper::capture_still(
   pipeline_details_.still_trigger_queue->send(std::make_shared<dai::Buffer>());
 
   bool timed_out = false;
-  auto in_data = pipeline_details_.still_image_queue->get<dai::ImgFrame>(StillCaptureTimeout,
-      timed_out);
+  auto in_data =
+    pipeline_details_.still_image_queue->get<dai::ImgFrame>(StillCaptureTimeout, timed_out);
   if (timed_out || !in_data) {
     response->success = false;
     response->message = "Timed out waiting for the still image frame";
