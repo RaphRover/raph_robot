@@ -2,12 +2,13 @@ cmake_minimum_required(VERSION 3.5)
 project(raph_oak)
 
 find_package(ament_cmake REQUIRED)
-find_package(depthai REQUIRED)
-find_package(depthai_bridge REQUIRED)
+find_package(depthai_v3 REQUIRED)
+find_package(depthai_bridge_v3 REQUIRED)
 find_package(generate_parameter_library REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 
 generate_parameter_library(
   oak_wrapper_parameters
@@ -21,11 +22,12 @@ add_library(raph_oak SHARED
   src/pipeline.cpp
 )
 target_link_libraries(raph_oak
-  depthai::core
-  depthai_bridge::depthai_bridge
+  depthai_v3::core
+  depthai_bridge_v3::depthai_bridge_v3
   rclcpp::rclcpp
   rclcpp_components::component
   ${sensor_msgs_TARGETS}
+  ${std_srvs_TARGETS}
   oak_wrapper_parameters
 )
 target_include_directories(raph_oak

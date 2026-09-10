@@ -20,12 +20,51 @@
 
 #pragma once
 
+#include <memory>
+
+#include "depthai/device/Device.hpp"
+#include "depthai/pipeline/InputQueue.hpp"
+#include "depthai/pipeline/MessageQueue.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
+#include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 
 namespace raph_oak
 {
 
-dai::Pipeline create_dai_pipeline(const Params & params);
+struct PipelineDetails
+{
+  std::shared_ptr<dai::Pipeline> pipeline;
+  std::shared_ptr<dai::MessageQueue> rgb_queue;
+  std::shared_ptr<dai::MessageQueue> rgb_compressed_queue;
+  std::shared_ptr<dai::MessageQueue> depth_queue;
+  std::shared_ptr<dai::MessageQueue> left_queue;
+  std::shared_ptr<dai::MessageQueue> left_compressed_queue;
+  std::shared_ptr<dai::MessageQueue> left_rect_queue;
+  std::shared_ptr<dai::MessageQueue> left_rect_compressed_queue;
+  std::shared_ptr<dai::MessageQueue> right_queue;
+  std::shared_ptr<dai::MessageQueue> right_compressed_queue;
+  std::shared_ptr<dai::MessageQueue> right_rect_queue;
+  std::shared_ptr<dai::MessageQueue> right_rect_compressed_queue;
+  std::shared_ptr<dai::MessageQueue> imu_queue;
+  std::shared_ptr<dai::InputQueue> depth_config_queue;
+  std::shared_ptr<dai::MessageQueue> pointcloud_queue;
+  std::shared_ptr<dai::MessageQueue> still_image_queue;
+  std::shared_ptr<dai::InputQueue> still_trigger_queue;
+
+  // Gate control queues for on-demand USB transfer
+  std::shared_ptr<dai::InputQueue> rgb_gate_queue;
+  std::shared_ptr<dai::InputQueue> depth_gate_queue;
+  std::shared_ptr<dai::InputQueue> left_gate_queue;
+  std::shared_ptr<dai::InputQueue> left_rect_gate_queue;
+  std::shared_ptr<dai::InputQueue> right_gate_queue;
+  std::shared_ptr<dai::InputQueue> right_rect_gate_queue;
+  std::shared_ptr<dai::InputQueue> imu_gate_queue;
+  std::shared_ptr<dai::InputQueue> pointcloud_gate_queue;
+
+  dai::StereoDepthConfig depth_config;
+};
+
+PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const Params & params);
 
 }  // namespace raph_oak

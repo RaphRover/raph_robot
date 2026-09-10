@@ -20,24 +20,31 @@
 
 #include "raph_oak/pipeline.hpp"
 
+#include <memory>
+#include <string>
+#include <utility>
+
 // DepthAI
-#include "depthai-shared/common/CameraBoardSocket.hpp"
-#include "depthai-shared/common/CameraImageOrientation.hpp"
-#include "depthai-shared/datatype/RawStereoDepthConfig.hpp"
-#include "depthai-shared/properties/ColorCameraProperties.hpp"
-#include "depthai-shared/properties/IMUProperties.hpp"
-#include "depthai-shared/properties/MonoCameraProperties.hpp"
-#include "depthai-shared/properties/StereoDepthProperties.hpp"
-#include "depthai-shared/properties/VideoEncoderProperties.hpp"
+#include "depthai/capabilities/ImgFrameCapability.hpp"
+#include "depthai/common/CameraBoardSocket.hpp"
+#include "depthai/common/CameraImageOrientation.hpp"
+#include "depthai/common/DepthUnit.hpp"
+#include "depthai/device/Device.hpp"
+#include "depthai/pipeline/Node.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
-#include "depthai/pipeline/node/ColorCamera.hpp"
+#include "depthai/pipeline/datatype/ImgFrame.hpp"
+#include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
+#include "depthai/pipeline/node/Camera.hpp"
+#include "depthai/pipeline/node/Gate.hpp"
 #include "depthai/pipeline/node/IMU.hpp"
 #include "depthai/pipeline/node/ImageManip.hpp"
-#include "depthai/pipeline/node/MonoCamera.hpp"
+#include "depthai/pipeline/node/PointCloud.hpp"
+#include "depthai/pipeline/node/Script.hpp"
 #include "depthai/pipeline/node/StereoDepth.hpp"
 #include "depthai/pipeline/node/VideoEncoder.hpp"
-#include "depthai/pipeline/node/XLinkIn.hpp"
-#include "depthai/pipeline/node/XLinkOut.hpp"
+#include "depthai/properties/IMUProperties.hpp"
+#include "depthai/properties/StereoDepthProperties.hpp"
+#include "depthai/properties/VideoEncoderProperties.hpp"
 
 // ROS
 #include "raph_oak/oak_wrapper_parameters.hpp"
@@ -45,174 +52,228 @@
 
 namespace raph_oak
 {
-dai::Pipeline create_dai_pipeline(const Params & params)
+PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const Params & params)
 {
-  dai::Pipeline pipeline;
+  PipelineDetails details;
+  auto pipeline = std::make_shared<dai::Pipeline>(device);
+  pipeline->setAutoCalibrationMode(dai::Pipeline::AutoCalibrationMode::OFF);
+
+  auto make_gated_output = [&](dai::Node::Output & output, const std::string & name) {
+    auto gate = pipeline->create<dai::node::Gate>();
+    gate->initialConfig->open = false;
+    gate->input.setBlocking(false);
+    output.link(gate->input);
+    auto queue = gate->output.createOutputQueue(1, false);
+    queue->setName(name);
+    auto ctrl_queue = gate->inputControl.createInputQueue(4, false);
+    return std::make_pair(queue, ctrl_queue);
+  };
 
   // Create nodes
-  auto mono_left_node = pipeline.create<dai::node::MonoCamera>();
-  auto mono_right_node = pipeline.create<dai::node::MonoCamera>();
-  auto stereo_depth_node = pipeline.create<dai::node::StereoDepth>();
-  auto left_encoder_node = pipeline.create<dai::node::VideoEncoder>();
-  auto left_rect_encoder_node = pipeline.create<dai::node::VideoEncoder>();
-  auto right_encoder_node = pipeline.create<dai::node::VideoEncoder>();
-  auto right_rect_encoder_node = pipeline.create<dai::node::VideoEncoder>();
-  auto xout_left = pipeline.create<dai::node::XLinkOut>();
-  auto xout_left_compressed = pipeline.create<dai::node::XLinkOut>();
-  auto xout_left_rect = pipeline.create<dai::node::XLinkOut>();
-  auto xout_left_rect_compressed = pipeline.create<dai::node::XLinkOut>();
-  auto xout_right = pipeline.create<dai::node::XLinkOut>();
-  auto xout_right_compressed = pipeline.create<dai::node::XLinkOut>();
-  auto xout_right_rect = pipeline.create<dai::node::XLinkOut>();
-  auto xout_right_rect_compressed = pipeline.create<dai::node::XLinkOut>();
-  auto xout_depth = pipeline.create<dai::node::XLinkOut>();
-  auto xin_depth_config = pipeline.create<dai::node::XLinkIn>();
-  auto rgb_node = pipeline.create<dai::node::ColorCamera>();
-  auto rgb_encoder_node = pipeline.create<dai::node::VideoEncoder>();
-  auto xout_rgb = pipeline.create<dai::node::XLinkOut>();
-  auto xout_rgb_compressed = pipeline.create<dai::node::XLinkOut>();
-  auto imu_node = pipeline.create<dai::node::IMU>();
-  auto xout_imu = pipeline.create<dai::node::XLinkOut>();
-  auto manip_left = pipeline.create<dai::node::ImageManip>();
-  auto manip_right = pipeline.create<dai::node::ImageManip>();
-  auto manip_left_rect = pipeline.create<dai::node::ImageManip>();
-  auto manip_right_rect = pipeline.create<dai::node::ImageManip>();
+  // RGB camera node
+  auto rgb_node = pipeline->create<dai::node::Camera>()->build(dai::CameraBoardSocket::CAM_A);
+  rgb_node->setImageOrientation(dai::CameraImageOrientation::ROTATE_180_DEG);
+  auto * rgb_output = rgb_node->requestOutput(
+    {params.rgb.width, params.rgb.height}, dai::ImgFrame::Type::NV12, dai::ImgResizeMode::CROP,
+    params.rgb.fps);
+  auto [rgb_queue, rgb_gate_queue] = make_gated_output(*rgb_output, "rgb");
 
-  // Configure nodes
-  mono_left_node->setCamera("left");
-  mono_left_node->setResolution(dai::MonoCameraProperties::SensorResolution::THE_800_P);
-  mono_left_node->setFps(params.mono.fps);
+  // RGB compressed
+  auto rgb_encoder_node = pipeline->create<dai::node::VideoEncoder>();
+  rgb_encoder_node->setDefaultProfilePreset(
+    params.rgb.fps, dai::VideoEncoderProperties::Profile::MJPEG);
+  rgb_encoder_node->setQuality(params.rgb_compressed.jpeg_quality);
+  rgb_encoder_node->input.setBlocking(false);
+  rgb_output->link(rgb_encoder_node->input);
+  auto rgb_encoder_queue = rgb_encoder_node->out.createOutputQueue(1, false);
+  rgb_encoder_queue->setName("rgb_compressed");
 
-  mono_right_node->setCamera("right");
-  mono_right_node->setResolution(dai::MonoCameraProperties::SensorResolution::THE_800_P);
-  mono_right_node->setFps(params.mono.fps);
-
+  // Stereo depth
+  auto stereo_depth_node = pipeline->create<dai::node::StereoDepth>()->build(
+    true, dai::node::StereoDepth::PresetMode::ROBOTICS, {params.mono.width, params.mono.height},
+    params.mono.fps);
   stereo_depth_node->setRectifyEdgeFillColor(0);
-  stereo_depth_node->setExtendedDisparity(false);
+  stereo_depth_node->setExtendedDisparity(params.depth.extended_disparity_enabled);
   stereo_depth_node->setRuntimeModeSwitch(true);
 
   // Align to right (which becomes left after 180-degree rotation)
   stereo_depth_node->setDepthAlign(dai::StereoDepthProperties::DepthAlign::RECTIFIED_RIGHT);
+  update_depth_config_from_params(*stereo_depth_node->initialConfig, params);
 
-  dai::RawStereoDepthConfig depth_initial_config;
-  update_depth_config_from_params(depth_initial_config, params);
-  stereo_depth_node->initialConfig.set(depth_initial_config);
+  auto depth_rotate = pipeline->create<dai::node::ImageManip>();
+  // Robotics preset outputs depth at half the input resolution
+  depth_rotate->initialConfig->setOutputSize(params.mono.width / 2, params.mono.height / 2);
+  depth_rotate->initialConfig->addRotateDeg(180.0);
+  depth_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW16);
+  depth_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  depth_rotate->inputImage.setBlocking(false);
+  stereo_depth_node->depth.link(depth_rotate->inputImage);
 
-  manip_left->initialConfig.setRotationDegrees(180);
-  manip_right->initialConfig.setRotationDegrees(180);
+  auto [depth_queue, depth_gate_queue] = make_gated_output(depth_rotate->out, "depth");
 
-  manip_left_rect->initialConfig.setRotationDegrees(180);
-  manip_right_rect->initialConfig.setRotationDegrees(180);
+  auto depth_config_queue = stereo_depth_node->inputConfig.createInputQueue(1, false);
 
-  left_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
+  // Left camera
+  auto left_rotate = pipeline->create<dai::node::ImageManip>();
+  left_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
+  left_rotate->initialConfig->addRotateDeg(180.0);
+  left_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
+  left_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  left_rotate->inputImage.setBlocking(false);
+  // Link the right camera output to the left_rotate input (after 180-degree rotation)
+  stereo_depth_node->syncedRight.link(left_rotate->inputImage);
+  auto [left_queue, left_gate_queue] = make_gated_output(left_rotate->out, "left");
+
+  // Left compressed
+  auto left_encoder_node = pipeline->create<dai::node::VideoEncoder>();
+  left_encoder_node->setDefaultProfilePreset(
+    params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
   left_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+  left_encoder_node->input.setBlocking(false);
+  left_rotate->out.link(left_encoder_node->input);
+  auto left_compressed_queue = left_encoder_node->out.createOutputQueue(1, false);
+  left_compressed_queue->setName("left_compressed");
 
-  right_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
-  right_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+  // Left rectified
+  auto left_rect_rotate = pipeline->create<dai::node::ImageManip>();
+  left_rect_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
+  left_rect_rotate->initialConfig->addRotateDeg(180.0);
+  left_rect_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
+  left_rect_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  left_rect_rotate->inputImage.setBlocking(false);
+  // Link the right camera output to the left_rect_rotate input (after 180-degree rotation)
+  stereo_depth_node->rectifiedRight.link(left_rect_rotate->inputImage);
+  auto [left_rect_queue, left_rect_gate_queue] =
+    make_gated_output(left_rect_rotate->out, "left_rect");
 
-  left_rect_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
+  // Left rectified compressed
+  auto left_rect_encoder_node = pipeline->create<dai::node::VideoEncoder>();
+  left_rect_encoder_node->setDefaultProfilePreset(
+    params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
   left_rect_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+  left_rect_encoder_node->input.setBlocking(false);
+  left_rect_rotate->out.link(left_rect_encoder_node->input);
+  auto left_rect_compressed_queue = left_rect_encoder_node->out.createOutputQueue(1, false);
+  left_rect_compressed_queue->setName("left_rect_compressed");
 
-  right_rect_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
+  // Right camera
+  auto right_rotate = pipeline->create<dai::node::ImageManip>();
+  right_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
+  right_rotate->initialConfig->addRotateDeg(180.0);
+  right_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
+  right_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  right_rotate->inputImage.setBlocking(false);
+  // Link the left camera output to the right_rotate input (after 180-degree rotation)
+  stereo_depth_node->syncedLeft.link(right_rotate->inputImage);
+  auto [right_queue, right_gate_queue] = make_gated_output(right_rotate->out, "right");
+
+  // Right compressed
+  auto right_encoder_node = pipeline->create<dai::node::VideoEncoder>();
+  right_encoder_node->setDefaultProfilePreset(
+    params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
+  right_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+  right_encoder_node->input.setBlocking(false);
+  right_rotate->out.link(right_encoder_node->input);
+  auto right_compressed_queue = right_encoder_node->out.createOutputQueue(1, false);
+  right_compressed_queue->setName("right_compressed");
+
+  // Right rectified
+  auto right_rect_rotate = pipeline->create<dai::node::ImageManip>();
+  right_rect_rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
+  right_rect_rotate->initialConfig->addRotateDeg(180.0);
+  right_rect_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
+  right_rect_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
+  right_rect_rotate->inputImage.setBlocking(false);
+  // Link the left camera output to the right_rect_rotate input (after 180-degree rotation)
+  stereo_depth_node->rectifiedLeft.link(right_rect_rotate->inputImage);
+  auto [right_rect_queue, right_rect_gate_queue] =
+    make_gated_output(right_rect_rotate->out, "right_rect");
+
+  // Right rectified compressed
+  auto right_rect_encoder_node = pipeline->create<dai::node::VideoEncoder>();
+  right_rect_encoder_node->setDefaultProfilePreset(
+    params.mono.fps, dai::VideoEncoderProperties::Profile::MJPEG);
   right_rect_encoder_node->setQuality(params.mono_compressed.jpeg_quality);
+  right_rect_encoder_node->input.setBlocking(false);
+  right_rect_rotate->out.link(right_rect_encoder_node->input);
+  auto right_rect_compressed_queue = right_rect_encoder_node->out.createOutputQueue(1, false);
+  right_rect_compressed_queue->setName("right_rect_compressed");
 
-  xout_left->setStreamName("left");
-  xout_left->input.setQueueSize(1);
-  xout_left->input.setBlocking(false);
-
-  xout_left_compressed->setStreamName("left_compressed");
-  xout_left_compressed->input.setQueueSize(1);
-  xout_left_compressed->input.setBlocking(false);
-
-  xout_left_rect->setStreamName("left_rect");
-  xout_left_rect->input.setQueueSize(1);
-  xout_left_rect->input.setBlocking(false);
-
-  xout_left_rect_compressed->setStreamName("left_rect_compressed");
-  xout_left_rect_compressed->input.setQueueSize(1);
-  xout_left_rect_compressed->input.setBlocking(false);
-
-  xout_right->setStreamName("right");
-  xout_right->input.setQueueSize(1);
-  xout_right->input.setBlocking(false);
-
-  xout_right_compressed->setStreamName("right_compressed");
-  xout_right_compressed->input.setQueueSize(1);
-  xout_right_compressed->input.setBlocking(false);
-
-  xout_right_rect->setStreamName("right_rect");
-  xout_right_rect->input.setQueueSize(1);
-  xout_right_rect->input.setBlocking(false);
-
-  xout_right_rect_compressed->setStreamName("right_rect_compressed");
-  xout_right_rect_compressed->input.setQueueSize(1);
-  xout_right_rect_compressed->input.setBlocking(false);
-
-  xout_depth->setStreamName("depth");
-  xout_depth->input.setQueueSize(1);
-  xout_depth->input.setBlocking(false);
-
-  xin_depth_config->setStreamName("depth_config");
-
-  rgb_node->setBoardSocket(dai::CameraBoardSocket::CAM_A);
-  rgb_node->setResolution(dai::ColorCameraProperties::SensorResolution::THE_12_MP);
-  rgb_node->setIspScale(params.rgb.isp_scale_num, params.rgb.isp_scale_den);
-  rgb_node->setVideoSize(params.rgb.width, params.rgb.height);
-  rgb_node->setFps(params.rgb.fps);
-  rgb_node->setColorOrder(dai::ColorCameraProperties::ColorOrder::BGR);
-  rgb_node->setImageOrientation(dai::CameraImageOrientation::ROTATE_180_DEG);
-
-  rgb_encoder_node->setProfile(dai::VideoEncoderProperties::Profile::MJPEG);
-  rgb_encoder_node->setQuality(params.rgb_compressed.jpeg_quality);
-
-  xout_rgb->setStreamName("rgb");
-  xout_rgb->input.setQueueSize(1);
-  xout_rgb->input.setBlocking(false);
-
-  xout_rgb_compressed->setStreamName("rgb_compressed");
-  xout_rgb_compressed->input.setQueueSize(1);
-  xout_rgb_compressed->input.setBlocking(false);
-
+  // Imu node
+  auto imu_node = pipeline->create<dai::node::IMU>();
   imu_node->enableIMUSensor(dai::IMUSensor::ACCELEROMETER_RAW, 500);
   imu_node->enableIMUSensor(dai::IMUSensor::GYROSCOPE_RAW, 400);
   imu_node->setBatchReportThreshold(5);
   imu_node->setMaxBatchReports(20);
+  auto [imu_queue, imu_gate_queue] = make_gated_output(imu_node->out, "imu");
 
-  xout_imu->setStreamName("imu");
+  // Pointcloud node (gating inputDepth so pointcloud calculations only run when subscribed)
+  auto pc_depth_gate = pipeline->create<dai::node::Gate>();
+  pc_depth_gate->initialConfig->open = false;
+  depth_rotate->out.link(pc_depth_gate->input);
+  auto pointcloud_gate_queue = pc_depth_gate->inputControl.createInputQueue(4, false);
 
-  // Link nodes
-  mono_left_node->out.link(stereo_depth_node->left);
-  mono_left_node->out.link(manip_right->inputImage);
-  mono_right_node->out.link(stereo_depth_node->right);
-  mono_right_node->out.link(manip_left->inputImage);
+  auto pointcloud_node = pipeline->create<dai::node::PointCloud>();
+  pointcloud_node->initialConfig->setOrganized(true);
+  pointcloud_node->initialConfig->setTargetCoordinateSystem(dai::CameraBoardSocket::CAM_C);
+  pointcloud_node->initialConfig->setLengthUnit(dai::LengthUnit::METER);
+  pc_depth_gate->output.link(pointcloud_node->inputDepth);
+  auto pointcloud_queue = pointcloud_node->outputPointCloud.createOutputQueue(1, false);
+  pointcloud_queue->setName("pointcloud");
 
-  stereo_depth_node->rectifiedLeft.link(manip_right_rect->inputImage);
-  stereo_depth_node->rectifiedRight.link(manip_left_rect->inputImage);
+  // Still image
+  auto * still_output = rgb_node->requestFullResolutionOutput(
+    dai::ImgFrame::Type::NV12, static_cast<float>(params.rgb.fps));
 
-  manip_left->out.link(xout_left->input);
-  manip_left->out.link(left_encoder_node->input);
-  manip_right->out.link(xout_right->input);
-  manip_right->out.link(right_encoder_node->input);
+  // Current workaround for OAK4 cameras, as Camera node doesn't yet support "still" frame capture:
+  // a script node continuously consumes the full resolution stream and only forwards a frame to
+  // the host once a trigger message arrives.
+  auto still_script_node = pipeline->create<dai::node::Script>();
+  still_script_node->inputs["in"].setBlocking(false);
+  still_script_node->inputs["in"].setMaxSize(1);
+  still_output->link(still_script_node->inputs["in"]);
 
-  manip_left_rect->out.link(xout_left_rect->input);
-  manip_left_rect->out.link(left_rect_encoder_node->input);
-  manip_right_rect->out.link(xout_right_rect->input);
-  manip_right_rect->out.link(right_rect_encoder_node->input);
+  still_script_node->setScript(
+    R"(
+      while True:
+          message = node.inputs["in"].get()
+          if node.inputs["trigger"].tryGet() is not None:
+              node.io["still"].send(message)
+  )");
 
-  stereo_depth_node->depth.link(xout_depth->input);
+  auto still_image_queue = still_script_node->outputs["still"].createOutputQueue(1, false);
+  still_image_queue->setName("still_image");
+  auto still_trigger_queue = still_script_node->inputs["trigger"].createInputQueue();
 
-  xin_depth_config->out.link(stereo_depth_node->inputConfig);
+  // Create pipeline details
+  details.pipeline = pipeline;
+  details.rgb_queue = rgb_queue;
+  details.rgb_compressed_queue = rgb_encoder_queue;
+  details.depth_queue = depth_queue;
+  details.left_queue = left_queue;
+  details.left_compressed_queue = left_compressed_queue;
+  details.left_rect_queue = left_rect_queue;
+  details.left_rect_compressed_queue = left_rect_compressed_queue;
+  details.right_queue = right_queue;
+  details.right_compressed_queue = right_compressed_queue;
+  details.right_rect_queue = right_rect_queue;
+  details.right_rect_compressed_queue = right_rect_compressed_queue;
+  details.imu_queue = imu_queue;
+  details.depth_config_queue = depth_config_queue;
+  details.depth_config = *stereo_depth_node->initialConfig;
+  details.pointcloud_queue = pointcloud_queue;
+  details.still_image_queue = still_image_queue;
+  details.still_trigger_queue = still_trigger_queue;
 
-  left_encoder_node->bitstream.link(xout_left_compressed->input);
-  right_encoder_node->bitstream.link(xout_right_compressed->input);
-  left_rect_encoder_node->bitstream.link(xout_left_rect_compressed->input);
-  right_rect_encoder_node->bitstream.link(xout_right_rect_compressed->input);
+  details.rgb_gate_queue = rgb_gate_queue;
+  details.depth_gate_queue = depth_gate_queue;
+  details.left_gate_queue = left_gate_queue;
+  details.left_rect_gate_queue = left_rect_gate_queue;
+  details.right_gate_queue = right_gate_queue;
+  details.right_rect_gate_queue = right_rect_gate_queue;
+  details.imu_gate_queue = imu_gate_queue;
+  details.pointcloud_gate_queue = pointcloud_gate_queue;
 
-  rgb_node->video.link(xout_rgb->input);
-  rgb_node->video.link(rgb_encoder_node->input);
-  rgb_encoder_node->bitstream.link(xout_rgb_compressed->input);
-  imu_node->out.link(xout_imu->input);
-
-  return pipeline;
+  return details;
 }
 }  // namespace raph_oak
