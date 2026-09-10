@@ -43,6 +43,7 @@
 #include "depthai/common/UsbSpeed.hpp"
 #include "depthai/device/CalibrationHandler.hpp"
 #include "depthai/device/Device.hpp"
+#include "depthai/pipeline/InputQueue.hpp"
 #include "depthai/pipeline/MessageQueue.hpp"
 #include "depthai/pipeline/datatype/Buffer.hpp"
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
@@ -50,6 +51,7 @@
 #include "depthai/pipeline/datatype/IMUData.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
+#include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai/xlink/XLinkConnection.hpp"
 
 // XLink

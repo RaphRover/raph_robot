@@ -21,6 +21,8 @@
 #include "raph_oak/pipeline.hpp"
 
 #include <memory>
+#include <string>
+#include <utility>
 
 // DepthAI
 #include "depthai/capabilities/ImgFrameCapability.hpp"
@@ -28,8 +30,8 @@
 #include "depthai/common/CameraImageOrientation.hpp"
 #include "depthai/common/DepthUnit.hpp"
 #include "depthai/device/Device.hpp"
+#include "depthai/pipeline/Node.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
-#include "depthai/pipeline/datatype/GateControl.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai/pipeline/node/Camera.hpp"
