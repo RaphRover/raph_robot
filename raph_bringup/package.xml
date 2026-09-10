@@ -24,7 +24,7 @@
   <exec_depend>laser_filters</exec_depend>
   <exec_depend>rosapi</exec_depend>
   <exec_depend>rosbridge_server</exec_depend>
-  <exec_depend>rplidar_ros</exec_depend>
+  <exec_depend>rplidar_driver</exec_depend>
   <exec_depend>web_video_server</exec_depend>
 
   <exec_depend>raph_description</exec_depend>
