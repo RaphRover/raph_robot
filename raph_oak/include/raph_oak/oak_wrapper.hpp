@@ -57,6 +57,7 @@
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "std_msgs/msg/header.hpp"
 #include "std_srvs/srv/trigger.hpp"
+#include "vision_msgs/msg/detection2_d_array.hpp"
 
 namespace raph_oak
 {
@@ -87,6 +88,8 @@ private:
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>> pointcloud_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> still_image_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> still_cam_info_pub_;
+  std::shared_ptr<rclcpp::Publisher<vision_msgs::msg::Detection2DArray>> nn_detections_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> nn_img_pub_;
 
   // ROS Services
   std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> capture_still_srv_;
@@ -123,6 +126,13 @@ private:
   // Last IR laser dot projector intensity sent to the device, empty if unknown
   std::optional<float> laser_intensity_;
 
+  // Consecutive failed pipeline starts with the neural network in the pipeline. Some model problems
+  // (an RVC2 shave count that does not fit, for one) only surface on start, so after
+  // kMaxNnStartAttempts the network is dropped rather than keeping the camera down. A few
+  // attempts are allowed so that a transient failure does not disable the network for good.
+  static constexpr int kMaxNnStartAttempts = 3;
+  int nn_failed_starts_ = 0;
+
   void run_pipeline();
   void create_ros_publishers();
   std::string tf_frame(const std::string & frame) const;
@@ -148,6 +158,8 @@ private:
   void publish_compressed_image(ImageStreamId id, const std::shared_ptr<dai::ADatatype> & message);
   void publish_imu(const std::shared_ptr<dai::ADatatype> & message);
   void publish_pointcloud(const std::shared_ptr<dai::ADatatype> & message);
+  void publish_detections(const std::shared_ptr<dai::ADatatype> & message);
+  void publish_nn_image(const std::shared_ptr<dai::ADatatype> & message);
   void capture_still(
     std_srvs::srv::Trigger::Request::SharedPtr request,
     std_srvs::srv::Trigger::Response::SharedPtr response);

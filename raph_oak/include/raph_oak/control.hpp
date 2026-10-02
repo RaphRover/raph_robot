@@ -72,6 +72,7 @@ public:
     RightRectRaw,
     RightRectEnc,
     Imu,
+    Nn,
     Still,
     CameraB,  // left stereo sensor (CameraControl: start/stop streaming)
     CameraC,  // right stereo sensor (CameraControl: start/stop streaming)
@@ -146,6 +147,8 @@ public:
         return "right_rect compressed";
       case Imu:
         return "imu";
+      case Nn:
+        return "nn";
       case Still:
         return "still image";
       case CameraB:

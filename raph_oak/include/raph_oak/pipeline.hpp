@@ -33,6 +33,7 @@
 #include "raph_oak/control.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/streams.hpp"
+#include "rclcpp/logger.hpp"
 
 namespace raph_oak
 {
@@ -54,6 +55,11 @@ struct PipelineDetails
   std::shared_ptr<dai::MessageQueue> pointcloud_queue;
   std::shared_ptr<dai::MessageQueue> still_image_queue;
 
+  // Neural network. These stay null when the nn.enabled parameter is false or the model could
+  // not be loaded.
+  std::shared_ptr<dai::MessageQueue> nn_queue;
+  std::shared_ptr<dai::MessageQueue> nn_image_queue;
+
   // Control channel (see Control)
   std::shared_ptr<dai::InputQueue> control_queue;
   std::shared_ptr<std::mutex> control_mutex;
@@ -65,6 +71,7 @@ struct PipelineDetails
 void send_control(
   const PipelineDetails & details, Control target, const std::shared_ptr<dai::ADatatype> & message);
 
-PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const Params & params);
+PipelineDetails create_dai_pipeline(
+  std::shared_ptr<dai::Device> & device, const Params & params, const rclcpp::Logger & logger);
 
 }  // namespace raph_oak

@@ -270,6 +270,19 @@ TEST(Demand, ImuDoesNotNeedTheStereoSensors)
   EXPECT_EQ(open_gates(states), 1U);
 }
 
+TEST(Demand, NnDoesNotNeedTheStereoSensors)
+{
+  SubscriberCounts counts;
+  counts.nn = 2;
+  const auto demand = Demand(counts);
+  EXPECT_FALSE(demand.stereo_needed());
+  EXPECT_TRUE(demand.nn());
+
+  const auto states = demand.gate_states();
+  EXPECT_TRUE(gate(states, Control::Nn));
+  EXPECT_EQ(open_gates(states), 1U);
+}
+
 TEST(Demand, EverythingSubscribed)
 {
   SubscriberCounts counts;
@@ -278,11 +291,12 @@ TEST(Demand, EverythingSubscribed)
   }
   counts.pointcloud = 1;
   counts.imu = 1;
+  counts.nn = 1;
   const auto states = Demand(counts).gate_states();
 
   // 6 streams with compressed variant: 2 gates each, the 4 stereo ones also an input gate, plus the
-  // depth input and output, the point cloud and the imu
-  EXPECT_EQ(open_gates(states), 6U * 2U + 4U + 2U + 1U + 1U);
+  // depth input and output, the point cloud, the imu and the neural network
+  EXPECT_EQ(open_gates(states), 6U * 2U + 4U + 2U + 1U + 1U + 1U);
 }
 
 TEST(Demand, TheGatesOfDifferentStreamsAreIndependent)

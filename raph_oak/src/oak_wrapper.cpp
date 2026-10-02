@@ -20,8 +20,10 @@
 
 #include "raph_oak/oak_wrapper.hpp"
 
+#include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -35,6 +37,7 @@
 // OpenCV
 #include <opencv2/core/hal/interface.h>
 
+#include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgproc.hpp>
@@ -50,6 +53,7 @@
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/GateControl.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
+#include "depthai/pipeline/datatype/ImgDetections.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
@@ -78,6 +82,9 @@
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "std_msgs/msg/header.hpp"
 #include "std_srvs/srv/trigger.hpp"
+#include "vision_msgs/msg/detection2_d.hpp"
+#include "vision_msgs/msg/detection2_d_array.hpp"
+#include "vision_msgs/msg/object_hypothesis_with_pose.hpp"
 
 using namespace std::chrono_literals;
 
@@ -141,6 +148,12 @@ void OakWrapper::create_ros_publishers()
     create_publisher<sensor_msgs::msg::Image>("~/rgb_still/image_still", still_qos);
   still_cam_info_pub_ =
     create_publisher<sensor_msgs::msg::CameraInfo>("~/rgb_still/camera_info", still_qos);
+
+  // Neural network
+  if (params_.nn.enabled) {
+    nn_detections_pub_ = create_publisher<vision_msgs::msg::Detection2DArray>("~/nn/detections", 1);
+    nn_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/nn/image_raw", 1);
+  }
 }
 
 void OakWrapper::create_ros_services()
@@ -220,7 +233,12 @@ const sensor_msgs::msg::CameraInfo & OakWrapper::get_still_camera_info(
 
 void OakWrapper::run_pipeline()
 {
-  pipeline_details_ = create_dai_pipeline(device_, params_);
+  Params pipeline_params = params_;
+  if (nn_failed_starts_ >= kMaxNnStartAttempts) {
+    pipeline_params.nn.enabled = false;
+  }
+
+  pipeline_details_ = create_dai_pipeline(device_, pipeline_params, get_logger());
   depth_config_ = pipeline_details_.depth_config;
 
   // Register permanent callbacks on queues
@@ -245,10 +263,45 @@ void OakWrapper::run_pipeline()
   pipeline_details_.pointcloud_queue->addCallback(
     [this](const std::shared_ptr<dai::ADatatype> & message) { publish_pointcloud(message); });
 
+  if (pipeline_details_.nn_queue) {
+    pipeline_details_.nn_queue->addCallback(
+      [this](const std::shared_ptr<dai::ADatatype> & message) { publish_detections(message); });
+  }
+
+  if (pipeline_details_.nn_image_queue) {
+    pipeline_details_.nn_image_queue->addCallback(
+      [this](const std::shared_ptr<dai::ADatatype> & message) { publish_nn_image(message); });
+  }
+
   // All gates start closed and the sensors streaming
   reset_control_state();
 
-  pipeline_details_.pipeline->start();
+  // The network queues are only set when the network made it into the pipeline
+  const bool with_nn = pipeline_details_.nn_queue != nullptr;
+
+  try {
+    pipeline_details_.pipeline->start();
+  } catch (const std::exception & e) {
+    // Some model problems only surface once the device starts the pipeline. After a few attempts
+    // drop the network, so that the camera itself still comes up.
+    if (with_nn) {
+      ++nn_failed_starts_;
+      if (nn_failed_starts_ >= kMaxNnStartAttempts) {
+        RCLCPP_ERROR_STREAM(
+          get_logger(), "Pipeline failed to start with the neural network enabled "
+                          << kMaxNnStartAttempts << " times in a row. Retrying without it.");
+      } else {
+        RCLCPP_ERROR_STREAM(
+          get_logger(), "Pipeline failed to start with the neural network enabled (attempt "
+                          << nn_failed_starts_ << " of " << kMaxNnStartAttempts << ").");
+      }
+    }
+    throw;
+  }
+
+  if (with_nn) {
+    nn_failed_starts_ = 0;
+  }
 }
 
 void OakWrapper::check_timer_callback()
@@ -266,7 +319,11 @@ void OakWrapper::check_timer_callback()
       device_->setIrFloodLightIntensity(params_.device.ir_flood_light_intensity);
     } catch (const std::exception & e) {
       RCLCPP_ERROR(get_logger(), "Failed to connect to device: %s", e.what());
+
+      // The device may be connected while the pipeline failed to start. Release both, so that the
+      // next attempt starts from scratch instead of carrying on with a pipeline that never ran.
       release_device();
+
       rclcpp::sleep_for(5s);
       return;
     }
@@ -382,6 +439,11 @@ SubscriberCounts OakWrapper::count_subscribers() const
   }
   counts.pointcloud = pointcloud_pub_->get_subscription_count();
   counts.imu = imu_pub_->get_subscription_count();
+  // The publishers only exist when nn.enabled is set
+  if (nn_detections_pub_ && nn_img_pub_) {
+    counts.nn =
+      nn_detections_pub_->get_subscription_count() + nn_img_pub_->get_subscription_count();
+  }
   return counts;
 }
 
@@ -399,12 +461,26 @@ void OakWrapper::apply_demand(const Demand & demand)
     set_stereo_streaming(true);
   }
 
-  // The point cloud gate limits the rate of the depth frames fed to the point cloud node
+  // The point cloud gate limits the rate of the depth frames fed to the point cloud node. The
+  // neural network gate limits the inference rate the same way, but only exists when the network
+  // made it into the pipeline (nn.enabled can be true while the model failed to load, see
+  // run_pipeline()).
   const int pointcloud_fps = static_cast<int>(params_.pointcloud.max_rate);
+  const bool nn_in_pipeline = pipeline_details_.nn_queue != nullptr;
   for (const auto gate : Control::all()) {
-    if (gate.follows_demand()) {
-      set_gate(gate, wanted_gates.is_open(gate), gate == Control::PointCloud ? pointcloud_fps : -1);
+    if (gate == Control::Nn && !nn_in_pipeline) {
+      continue;
     }
+    if (!gate.follows_demand()) {
+      continue;
+    }
+    int fps = -1;
+    if (gate == Control::PointCloud) {
+      fps = pointcloud_fps;
+    } else if (gate == Control::Nn) {
+      fps = static_cast<int>(params_.nn.fps);
+    }
+    set_gate(gate, wanted_gates.is_open(gate), fps);
   }
 
   if (sensors == StereoSensorAction::Stop) {
@@ -580,7 +656,33 @@ std::unique_ptr<sensor_msgs::msg::Image> OakWrapper::to_ros_image(
     cv::Mat out_mat(
       cv::Size(in_data->getWidth(), in_data->getHeight()), CV_8UC3, image->data.data());
     cv::cvtColor(in_mat, out_mat, cv::ColorConversionCodes::COLOR_YUV2BGR_NV12);
-  } else if (in_data->getType() == dai::ImgFrame::Type::RAW8) {
+  } else if (
+    in_data->getType() == dai::ImgFrame::Type::BGR888i ||
+    in_data->getType() == dai::ImgFrame::Type::RGB888i) {
+    image->encoding = in_data->getType() == dai::ImgFrame::Type::BGR888i ? "bgr8" : "rgb8";
+    image->step = image->width * 3;
+    image->data.assign(in_data->getData().begin(), in_data->getData().end());
+  } else if (
+    in_data->getType() == dai::ImgFrame::Type::BGR888p ||
+    in_data->getType() == dai::ImgFrame::Type::RGB888p) {
+    // Planar frames (what RVC2 networks take) need the channels interleaved for ROS
+    image->encoding = in_data->getType() == dai::ImgFrame::Type::BGR888p ? "bgr8" : "rgb8";
+    image->step = image->width * 3;
+    image->data.resize(static_cast<size_t>(image->width) * image->height * 3);
+
+    const cv::Size plane_size(static_cast<int>(image->width), static_cast<int>(image->height));
+    const auto plane_bytes = static_cast<size_t>(image->width) * image->height;
+    auto * in_planes = in_data->getData().data();
+
+    const std::array<cv::Mat, 3> planes{
+      cv::Mat(plane_size, CV_8UC1, in_planes),
+      cv::Mat(plane_size, CV_8UC1, in_planes + plane_bytes),
+      cv::Mat(plane_size, CV_8UC1, in_planes + (2 * plane_bytes))};
+    cv::Mat out_mat(plane_size, CV_8UC3, image->data.data());
+    cv::merge(planes.data(), planes.size(), out_mat);
+  } else if (
+    in_data->getType() == dai::ImgFrame::Type::RAW8 ||
+    in_data->getType() == dai::ImgFrame::Type::GRAY8) {
     image->encoding = "mono8";
     image->step = image->width;
     image->data.assign(in_data->getData().begin(), in_data->getData().end());
@@ -658,6 +760,73 @@ void OakWrapper::publish_pointcloud(const std::shared_ptr<dai::ADatatype> & mess
   }
 
   pointcloud_pub_->publish(pointcloud_converter_->convert(*in_data, frame_clock_));
+}
+
+void OakWrapper::publish_detections(const std::shared_ptr<dai::ADatatype> & message)
+{
+  const auto in_data = std::dynamic_pointer_cast<dai::ImgDetections>(message);
+  if (!in_data) {
+    RCLCPP_WARN(get_logger(), "Received a message that is not a set of detections");
+    return;
+  }
+
+  vision_msgs::msg::Detection2DArray msg;
+  msg.header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
+  msg.header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
+
+  // Detections are normalized to the network input frame, which is what ~/nn/image_raw
+  // publishes, so scale them into that frame's pixel coordinates. Note that this frame is a
+  // letterboxed version of the RGB stream, so bounding boxes do not line up with ~/rgb/image_raw
+  // without remapping.
+  double width = 1.0;
+  double height = 1.0;
+  if (in_data->transformation) {
+    const auto size = in_data->transformation->getSize();
+    width = static_cast<double>(size.first);
+    height = static_cast<double>(size.second);
+  }
+
+  msg.detections.reserve(in_data->detections.size());
+  for (const auto & detection : in_data->detections) {
+    vision_msgs::msg::Detection2D ros_detection;
+    ros_detection.header = msg.header;
+    ros_detection.id =
+      detection.labelName.empty() ? std::to_string(detection.label) : detection.labelName;
+
+    vision_msgs::msg::ObjectHypothesisWithPose hypothesis;
+    hypothesis.hypothesis.class_id = ros_detection.id;
+    hypothesis.hypothesis.score = detection.confidence;
+    ros_detection.results.push_back(hypothesis);
+
+    // [xmin, ymin, xmax, ymax]
+    const auto bbox = detection.getOuterBoundingBox();
+    ros_detection.bbox.size_x = (bbox[2] - bbox[0]) * width;
+    ros_detection.bbox.size_y = (bbox[3] - bbox[1]) * height;
+    ros_detection.bbox.center.position.x = (bbox[0] * width) + (ros_detection.bbox.size_x / 2.0);
+    ros_detection.bbox.center.position.y = (bbox[1] * height) + (ros_detection.bbox.size_y / 2.0);
+
+    msg.detections.push_back(ros_detection);
+  }
+
+  nn_detections_pub_->publish(msg);
+}
+
+void OakWrapper::publish_nn_image(const std::shared_ptr<dai::ADatatype> & message)
+{
+  const auto in_data = std::dynamic_pointer_cast<dai::ImgFrame>(message);
+  if (!in_data) {
+    RCLCPP_WARN(get_logger(), "Received a message that is not an image frame");
+    return;
+  }
+
+  std_msgs::msg::Header header;
+  header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
+  header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
+
+  auto image = to_ros_image(in_data, header);
+  if (image) {
+    nn_img_pub_->publish(std::move(image));
+  }
 }
 
 void OakWrapper::capture_still(

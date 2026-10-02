@@ -20,10 +20,15 @@
 
 #include "raph_oak/pipeline.hpp"
 
+#include <algorithm>
 #include <cstdint>
+#include <exception>
+#include <filesystem>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -32,14 +37,21 @@
 #include "depthai/common/CameraBoardSocket.hpp"
 #include "depthai/common/CameraImageOrientation.hpp"
 #include "depthai/common/DepthUnit.hpp"
+#include "depthai/common/ModelType.hpp"
 #include "depthai/device/Device.hpp"
+#include "depthai/device/Platform.hpp"
+#include "depthai/modelzoo/Zoo.hpp"
+#include "depthai/nn_archive/NNArchive.hpp"
+#include "depthai/nn_archive/v1/Config.hpp"
 #include "depthai/pipeline/Node.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/datatype/ADatatype.hpp"
 #include "depthai/pipeline/datatype/Buffer.hpp"
+#include "depthai/pipeline/datatype/ImageManipConfig.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai/pipeline/node/Camera.hpp"
+#include "depthai/pipeline/node/DetectionNetwork.hpp"
 #include "depthai/pipeline/node/Gate.hpp"
 #include "depthai/pipeline/node/IMU.hpp"
 #include "depthai/pipeline/node/ImageManip.hpp"
@@ -56,9 +68,66 @@
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/parameters.hpp"
 #include "raph_oak/streams.hpp"
+#include "rclcpp/logger.hpp"
+#include "rclcpp/logging.hpp"
 
 namespace raph_oak
 {
+namespace
+{
+// Loads the model from a local NNArchive file. If no such file exists, the parameter is treated
+// as a Model Zoo slug, which is downloaded unless it is already present in the zoo cache
+// (see the DEPTHAI_ZOO_CACHE_PATH environment variable).
+dai::NNArchive load_nn_archive(const std::string & model, const std::string & platform)
+{
+  const std::filesystem::path model_path(model);
+  if (std::filesystem::exists(model_path)) {
+    return dai::NNArchive(model_path);
+  }
+
+  dai::NNModelDescription description;
+  description.model = model;
+  description.platform = platform;
+  return dai::NNArchive(dai::getModelFromZoo(description, true));
+}
+
+// The frame type the network expects. Few archives declare it outright, so fall back to the
+// input layout (most do declare that) and finally to what the platform's inference backend uses.
+dai::ImgFrame::Type get_nn_frame_type(const dai::NNArchive & archive, dai::Platform platform)
+{
+  static const std::map<std::string, dai::ImgFrame::Type> frame_types{
+    {"BGR888i", dai::ImgFrame::Type::BGR888i}, {"BGR888p", dai::ImgFrame::Type::BGR888p},
+    {"RGB888i", dai::ImgFrame::Type::RGB888i}, {"RGB888p", dai::ImgFrame::Type::RGB888p},
+    {"GRAY8", dai::ImgFrame::Type::GRAY8},     {"NV12", dai::ImgFrame::Type::NV12},
+  };
+
+  const auto & inputs = archive.getConfig<dai::nn_archive::v1::Config>().model.inputs;
+  if (!inputs.empty()) {
+    const auto & input = inputs.front();
+
+    if (input.preprocessing.daiType) {
+      const auto frame_type = frame_types.find(*input.preprocessing.daiType);
+      if (frame_type != frame_types.end()) {
+        return frame_type->second;
+      }
+    }
+
+    // NCHW keeps the channels in separate planes, NHWC interleaves them
+    if (input.layout) {
+      if (*input.layout == "NCHW") {
+        return dai::ImgFrame::Type::BGR888p;
+      }
+      if (*input.layout == "NHWC") {
+        return dai::ImgFrame::Type::BGR888i;
+      }
+    }
+  }
+
+  // RVC2 runs planar inputs, RVC4 interleaved ones
+  return platform == dai::Platform::RVC2 ? dai::ImgFrame::Type::BGR888p
+                                         : dai::ImgFrame::Type::BGR888i;
+}
+}  // namespace
 
 void send_control(
   const PipelineDetails & details, Control target, const std::shared_ptr<dai::ADatatype> & message)
@@ -77,7 +146,10 @@ void send_control(
   details.control_queue->send(message);
 }
 
-PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const Params & params)
+// Recurses at most once, to rebuild the pipeline with the neural network disabled
+// NOLINTNEXTLINE(misc-no-recursion)
+PipelineDetails create_dai_pipeline(
+  std::shared_ptr<dai::Device> & device, const Params & params, const rclcpp::Logger & logger)
 {
   PipelineDetails details;
   details.control_mutex = std::make_shared<std::mutex>();
@@ -264,6 +336,77 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto * still_output = rgb_node->requestFullResolutionOutput(
     dai::ImgFrame::Type::NV12, static_cast<float>(params.rgb.fps));
   details.still_image_queue = make_raw_queue(*still_output, Control::Still, "still_image");
+
+  // Neural network. A failure here rebuilds the pipeline without it, so that a missing or broken
+  // model never keeps the camera itself from coming up.
+  if (params.nn.enabled) {
+    try {
+      if (params.nn.model.empty()) {
+        throw std::runtime_error("The nn.model parameter is empty");
+      }
+
+      const auto archive = load_nn_archive(params.nn.model, device->getPlatformAsString());
+
+      const auto platforms = archive.getSupportedPlatforms();
+      if (std::find(platforms.begin(), platforms.end(), device->getPlatform()) == platforms.end()) {
+        throw std::runtime_error(
+          "The model does not support the " + device->getPlatformAsString() + " platform");
+      }
+
+      const auto input_size = archive.getInputSize();
+      if (!input_size) {
+        throw std::runtime_error("The model does not declare its input size");
+      }
+
+      // Gate the RGB stream before resizing, so that neither the resize nor the inference runs
+      // while nobody is subscribed. The network is fed from the existing RGB output rather than
+      // a separate camera output, which RVC2 devices do not have the resources for. The gate also
+      // limits the inference rate, as it is opened with nn.fps (see OakWrapper::check_publishers).
+      auto nn_gate = make_gate(*rgb_output, Control::Nn);
+
+      // Letterboxing keeps the full RGB field of view, at the cost of padding the frame
+      auto nn_resize = pipeline->create<dai::node::ImageManip>();
+      nn_resize->initialConfig->setOutputSize(
+        input_size->first, input_size->second, dai::ImageManipConfig::ResizeMode::LETTERBOX);
+      nn_resize->initialConfig->setFrameType(get_nn_frame_type(archive, device->getPlatform()));
+      nn_resize->setMaxOutputFrameSize(
+        static_cast<int>(input_size->first * input_size->second * 3));
+      nn_resize->inputImage.setBlocking(false);
+      nn_gate->output.link(nn_resize->inputImage);
+
+      auto nn_node =
+        pipeline->create<dai::node::DetectionNetwork>()->build(nn_resize->out, archive);
+
+      // RVC2 models ship as a superblob that has to be compiled for a specific number of SHAVE
+      // cores. The default does not fit next to the rest of the pipeline, so ask for the
+      // configured count instead.
+      if (archive.getModelType() == dai::model::ModelType::SUPERBLOB) {
+        nn_node->setNNArchive(archive, params.nn.num_shaves);
+      }
+
+      nn_node->setConfidenceThreshold(static_cast<float>(params.nn.confidence_threshold));
+
+      details.nn_queue = nn_node->out.createOutputQueue(1, false);
+      details.nn_queue->setName("nn");
+      details.nn_image_queue = nn_node->passthrough.createOutputQueue(1, false);
+      details.nn_image_queue->setName("nn_image");
+
+      RCLCPP_INFO_STREAM(
+        logger, "Loaded neural network \"" << params.nn.model << "\" (" << input_size->first << "x"
+                                           << input_size->second << " input)");
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR_STREAM(
+        logger,
+        "Failed to set up the neural network: " << e.what() << ". Continuing without detections.");
+
+      // The nodes created before the failure are already linked into the pipeline (and a network
+      // that got its model would still claim device resources on start), so start over instead
+      // of trying to take them out.
+      Params params_without_nn = params;
+      params_without_nn.nn.enabled = false;
+      return create_dai_pipeline(device, params_without_nn, logger);
+    }
+  }
 
   // Create pipeline details
   details.pipeline = pipeline;

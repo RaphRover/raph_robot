@@ -50,6 +50,8 @@ struct SubscriberCounts
   std::array<ImageSubscriberCounts, ImageStreamCount> images{};
   std::size_t pointcloud{0};
   std::size_t imu{0};
+  /// Subscribers of ~/nn/detections and ~/nn/image_raw combined, 0 when nn.enabled is false
+  std::size_t nn{0};
 };
 
 /// Which gates are open. Only the gates that follow the demand are meaningful, see
@@ -96,6 +98,7 @@ public:
   }
   bool pointcloud() const { return pointcloud_; }
   bool imu() const { return imu_; }
+  bool nn() const { return nn_; }
 
   /// The depth is needed for the depth image and for the point cloud
   bool depth_needed() const;
@@ -110,6 +113,7 @@ private:
   std::array<ImageDemand, ImageStreamCount> images_{};
   bool pointcloud_{false};
   bool imu_{false};
+  bool nn_{false};
 };
 
 enum class StereoSensorAction

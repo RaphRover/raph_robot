@@ -42,7 +42,7 @@ ImageDemand::ImageDemand(const ImageSubscriberCounts & subscribers, bool has_com
 }
 
 Demand::Demand(const SubscriberCounts & counts)
-: pointcloud_(counts.pointcloud > 0), imu_(counts.imu > 0)
+: pointcloud_(counts.pointcloud > 0), imu_(counts.imu > 0), nn_(counts.nn > 0)
 {
   for (const auto & spec : ImageStreamSpecs) {
     const auto index = get_image_index(spec.id);
@@ -81,6 +81,7 @@ GateStates Demand::gate_states() const
   states.set(Control::DepthIn, depth_needed());
   states.set(Control::PointCloud, pointcloud_);
   states.set(Control::Imu, imu_);
+  states.set(Control::Nn, nn_);
   return states;
 }
 
