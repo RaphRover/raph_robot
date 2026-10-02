@@ -1,5 +1,9 @@
 <launch version="0.1.1">
 
+  <arg name="nn_overlay"
+    default="false"
+    description="Whether to draw the neural network detections on the passthrough frame and publish them on ~/nn/detections_overlay. Keeps the network running continuously, so it is meant for debugging rather than normal operation." />
+
   <node_container namespace=""
     name="oak_container"
     pkg="rclcpp_components"
@@ -30,6 +34,15 @@
       <remap from="image_rect/compressed" to="rgb_rect/image_rect/compressed" />
       <param name="image_rect.enable_pub_plugins"
         value="['image_transport/raw','image_transport/compressed']" />
+    </composable_node>
+    <composable_node namespace="oak"
+      name="detection_overlay"
+      pkg="depthai_filters_v3"
+      plugin="depthai_filters::Detection2DOverlay"
+      if="$(var nn_overlay)">
+      <extra_arg name="use_intra_process_comms" value="true" />
+      <remap from="nn/passthrough/image_raw" to="nn/image_raw" />
+      <remap from="overlay" to="nn/detections_overlay" />
     </composable_node>
   </node_container>
 

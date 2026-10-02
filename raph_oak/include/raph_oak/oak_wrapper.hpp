@@ -51,6 +51,7 @@
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "std_msgs/msg/header.hpp"
 #include "std_srvs/srv/trigger.hpp"
+#include "vision_msgs/msg/detection2_d_array.hpp"
 
 namespace raph_oak
 {
@@ -86,6 +87,8 @@ private:
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>> pointcloud_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> still_image_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> still_cam_info_pub_;
+  std::shared_ptr<rclcpp::Publisher<vision_msgs::msg::Detection2DArray>> nn_detections_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> nn_img_pub_;
 
   // ROS Services
   std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> capture_still_srv_;
@@ -102,6 +105,7 @@ private:
   bool depth_gate_open_{false};
   bool imu_gate_open_{false};
   bool pointcloud_gate_open_{false};
+  bool nn_gate_open_{false};
 
   // Camera info for callbacks
   sensor_msgs::msg::CameraInfo rgb_camera_info_;
@@ -128,6 +132,13 @@ private:
 
   bool laser_dot_projector_active_ = false;
 
+  // Consecutive failed pipeline starts with the neural network in the pipeline. Some model problems
+  // (an RVC2 shave count that does not fit, for one) only surface on start, so after
+  // kMaxNnStartAttempts the network is dropped rather than keeping the camera down. A few
+  // attempts are allowed so that a transient failure does not disable the network for good.
+  static constexpr int kMaxNnStartAttempts = 3;
+  int nn_failed_starts_ = 0;
+
   void run_pipeline();
   void create_ros_publishers();
   void create_ros_services();
@@ -138,7 +149,7 @@ private:
   void check_publishers();
   void manage_gate(
     int subscription_count, const std::string & stream_name,
-    std::shared_ptr<dai::InputQueue> gate_queue, bool & is_open);
+    std::shared_ptr<dai::InputQueue> gate_queue, bool & is_open, int fps = -1);
   void post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters);
   void update_parameters();
   void send_parameters() const;
@@ -153,6 +164,7 @@ private:
     const std::string & frame_id, std::shared_ptr<dai::MessageQueue> queue);
   void publish_imu();
   void publish_pointcloud();
+  void publish_detections();
   void capture_still(
     const std_srvs::srv::Trigger::Request::SharedPtr request,
     std_srvs::srv::Trigger::Response::SharedPtr response);

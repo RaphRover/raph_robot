@@ -19,6 +19,7 @@
   <exec_depend>compressed_image_transport</exec_depend>
   <exec_depend>compressed_depth_image_transport</exec_depend>
   <exec_depend>depth_image_proc</exec_depend>
+  <exec_depend>depthai_filters_v3</exec_depend>
   <exec_depend>image_proc</exec_depend>
   <exec_depend>image_transport</exec_depend>
   <exec_depend>laser_filters</exec_depend>

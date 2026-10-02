@@ -69,6 +69,38 @@ raph_oak:
       description: Maximal distance in meters
       validation:
         bounds<>: [0.0, 60.0]
+  nn:
+    enabled:
+      type: bool
+      default_value: false
+      description: Run a neural network on the RGB stream and publish detections
+      read_only: true
+    model:
+      type: string
+      default_value: ""
+      description: Path to a local NNArchive file (.tar.xz) or, if no such file exists, a Luxonis Model Zoo slug (e.g. luxonis/yolov6-nano:r2-coco-512x288). A zoo slug requires internet access on the first run.
+      read_only: true
+    fps:
+      type: int
+      default_value: 5
+      description: Neural network inference rate. Frames are dropped on the device to reach it, so it cannot exceed rgb.fps.
+      validation:
+        bounds<>: [1, 30]
+      read_only: true
+    confidence_threshold:
+      type: double
+      default_value: 0.5
+      description: Detections with a lower confidence are discarded on the device
+      validation:
+        bounds<>: [0.0, 1.0]
+      read_only: true
+    num_shaves:
+      type: int
+      default_value: 3
+      description: Number of SHAVE cores the network is compiled for. Only applies to RVC2 devices, where the cores left over by the rest of the pipeline limit this - the device names the available count when the pipeline fails to start.
+      validation:
+        bounds<>: [1, 16]
+      read_only: true
   mono:
     width:
       type: int

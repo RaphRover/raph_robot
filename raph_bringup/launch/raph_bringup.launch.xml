@@ -16,6 +16,10 @@
     default=""
     description="Absolute path to the yaml file with parameters to be overridden for all nodes" />
 
+  <arg name="nn_overlay"
+    default="false"
+    description="Whether to publish the neural network detections drawn on the passthrough frame" />
+
   <!-- Load default parameter files globally so a later override file (param_overrides_yaml_file) can take precedence. -->
   <set_parameters_from_file filename="$(find-pkg-share raph_bringup)/config/oak.yaml" />
   <set_parameters_from_file filename="$(find-pkg-share raph_bringup)/config/rplidar.yaml" />
@@ -35,7 +39,9 @@
     <param name="tf_frame_prefix" value="$(var tf_frame_prefix)" />
   </node>
 
-  <include file="$(find-pkg-share raph_bringup)/launch/oak.launch.xml" />
+  <include file="$(find-pkg-share raph_bringup)/launch/oak.launch.xml">
+    <arg name="nn_overlay" value="$(var nn_overlay)" />
+  </include>
 
   <include file="$(find-pkg-share raph_bringup)/launch/rplidar.launch.xml">
     <arg name="tf_frame_prefix" value="$(var tf_frame_prefix)" />

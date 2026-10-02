@@ -28,6 +28,7 @@
 #include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
+#include "rclcpp/logger.hpp"
 
 namespace raph_oak
 {
@@ -52,6 +53,11 @@ struct PipelineDetails
   std::shared_ptr<dai::MessageQueue> still_image_queue;
   std::shared_ptr<dai::InputQueue> still_trigger_queue;
 
+  // Neural network. These stay null when the nn.enabled parameter is false or the model
+  // could not be loaded.
+  std::shared_ptr<dai::MessageQueue> nn_queue;
+  std::shared_ptr<dai::MessageQueue> nn_image_queue;
+
   // Gate control queues for on-demand USB transfer
   std::shared_ptr<dai::InputQueue> rgb_gate_queue;
   std::shared_ptr<dai::InputQueue> depth_gate_queue;
@@ -61,10 +67,12 @@ struct PipelineDetails
   std::shared_ptr<dai::InputQueue> right_rect_gate_queue;
   std::shared_ptr<dai::InputQueue> imu_gate_queue;
   std::shared_ptr<dai::InputQueue> pointcloud_gate_queue;
+  std::shared_ptr<dai::InputQueue> nn_gate_queue;
 
   dai::StereoDepthConfig depth_config;
 };
 
-PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const Params & params);
+PipelineDetails create_dai_pipeline(
+  std::shared_ptr<dai::Device> & device, const Params & params, const rclcpp::Logger & logger);
 
 }  // namespace raph_oak
