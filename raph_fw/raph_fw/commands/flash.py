@@ -24,10 +24,6 @@ import time
 from pathlib import Path
 from typing import Protocol
 
-import rclpy
-from rclpy.node import Node
-from std_srvs.srv import Trigger
-
 from raph_fw.console import (
     get_choice_prompt,
     get_confirmation_prompt,
@@ -35,16 +31,17 @@ from raph_fw.console import (
     get_progress,
     log_step,
 )
+from raph_fw.controller import SERVICE_TIMEOUT, ControllerClient
 from raph_fw.resolve import resolve_raphcore_name
 from raph_fw.tftp import ServerRole, TFTPError, discover_server, write_binary
 from raph_fw.versions import get_bootloader_version, get_firmware_version
 
-SOFT_REBOOT_SERVICE = "controller/soft_reboot"
-SERVICE_TIMEOUT = 5.0
 # Maximum time for the device to reboot, apply the staged image and start the firmware again
 RESTART_TIMEOUT = 60.0
 RESTART_POLL_TIMEOUT = 1.0
 RESTART_POLL_INTERVAL = 0.2
+# Maximum time for the controller services to respond after the firmware restarts
+RESTART_SERVICE_TIMEOUT = 30.0
 
 
 class FlashCommand:
@@ -112,12 +109,17 @@ class FlashCommand:
         self._validate_binary_path()
         self._check_binary_version_and_size()
         self._resolve_device_address()
-        # TODO: Check the version of the currently running firmware/bootloader on the device when
-        # this feature is implemented
         self._discover_flashing_server()
+        if self.server_role == ServerRole.FIRMWARE:
+            self._show_current_versions()
         self._perform_flash()
         if self.server_role == ServerRole.FIRMWARE:
             self._apply_staged_update()
+
+    @property
+    def _image_kind(self) -> str:
+        """Human-readable name of the image type being flashed."""
+        return "bootloader" if self.args.bootloader else "firmware"
 
     def _validate_binary_path(self) -> None:
         """Validate that the binary path exists and is a file."""
@@ -217,6 +219,44 @@ class FlashCommand:
                     "bootloader on the next boot.",
                 )
 
+    def _show_current_versions(self) -> None:
+        """Retrieve and log the bootloader and firmware versions currently running on the device."""
+        try:
+            current_version = self._retrieve_current_version(
+                "Retrieving current versions from the controller",
+            )
+        except TimeoutError:
+            self.logger.warning(
+                "Failed to retrieve current versions from the controller.",
+                exc_info=True,
+            )
+            return
+
+        if current_version == self.version:
+            self.logger.info(
+                f"The device is already running {self._image_kind} version {self.version}.",
+            )
+
+    def _retrieve_current_version(
+        self,
+        label: str,
+        timeout: float = SERVICE_TIMEOUT,
+    ) -> str:
+        """
+        Retrieve and log the versions running on the device through the controller ROS service.
+
+        :param label: The description text shown while the step is in progress.
+        :param timeout: Maximum time in seconds to wait for a response from the controller.
+        :returns: The running version of the image type being flashed.
+        :raises TimeoutError: If the service is not available or does not respond in time.
+        """
+        with log_step(label), ControllerClient() as controller:
+            info = controller.get_controller_info(timeout=timeout)
+
+        self.logger.info(f"Current bootloader version: {info.bootloader_version}")
+        self.logger.info(f"Current firmware version: {info.firmware_version}")
+        return str(info.bootloader_version if self.args.bootloader else info.firmware_version)
+
     def _perform_flash(self) -> None:
         """Perform the actual flashing process."""
         if not get_confirmation_prompt(
@@ -278,8 +318,8 @@ class FlashCommand:
             return
 
         try:
-            with log_step("Requesting controller reboot"):
-                self._request_soft_reboot()
+            with log_step("Requesting controller reboot"), ControllerClient() as controller:
+                controller.soft_reboot()
         except (TimeoutError, RuntimeError):
             self.logger.exception(
                 "Failed to request controller reboot. "
@@ -304,40 +344,31 @@ class FlashCommand:
             )
             sys.exit(1)
 
-        self.logger.info("Update applied successfully.")
+        self._verify_updated_version()
 
-    def _request_soft_reboot(self) -> None:
-        """
-        Request a soft reboot of the controller through its ROS service.
-
-        :raises TimeoutError: If the service is not available or does not respond in time.
-        :raises RuntimeError: If the controller rejects the reboot request.
-        """
-        rclpy.init(args=None)
+    def _verify_updated_version(self) -> None:
+        """Verify that the device runs the flashed version after the update has been applied."""
         try:
-            node = Node("raph_fw_flasher")
-            try:
-                client = node.create_client(Trigger, SOFT_REBOOT_SERVICE)
-                if not client.wait_for_service(timeout_sec=SERVICE_TIMEOUT):
-                    msg = (
-                        f"{SOFT_REBOOT_SERVICE} service not available. "
-                        "Check ROS and controller node visibility."
-                    )
-                    raise TimeoutError(msg)
+            current_version = self._retrieve_current_version(
+                "Retrieving versions from the controller",
+                timeout=RESTART_SERVICE_TIMEOUT,
+            )
+        except TimeoutError:
+            self.logger.warning(
+                "The device restarted, but its versions could not be retrieved to confirm the "
+                "update.",
+                exc_info=True,
+            )
+            return
 
-                future = client.call_async(Trigger.Request())
-                rclpy.spin_until_future_complete(node, future, timeout_sec=SERVICE_TIMEOUT)
-                response = future.result() if future.done() else None
-                if response is None:
-                    msg = f"{SOFT_REBOOT_SERVICE} service did not respond in time."
-                    raise TimeoutError(msg)
-                if not response.success:
-                    msg = f"Controller rejected the reboot request: {response.message}"
-                    raise RuntimeError(msg)
-            finally:
-                node.destroy_node()
-        finally:
-            rclpy.try_shutdown()
+        if current_version != self.version:
+            self.logger.critical(
+                f"Version mismatch after the update: expected {self.version}, "
+                f"device reports {current_version}.",
+            )
+            sys.exit(1)
+
+        self.logger.info("Update applied successfully.")
 
     def _wait_for_device_restart(self) -> ServerRole:
         """
