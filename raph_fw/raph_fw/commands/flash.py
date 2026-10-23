@@ -44,6 +44,10 @@ RESTART_POLL_INTERVAL = 0.2
 RESTART_SERVICE_TIMEOUT = 30.0
 
 
+class RestartNotDetectedError(Exception):
+    """Raised when the device stays reachable, but no restart is detected after a reboot request."""
+
+
 class FlashCommand:
     """Command to flash firmware onto the RaphCore device."""
 
@@ -337,6 +341,13 @@ class FlashCommand:
                 "Please check the device state and power cycle it if necessary.",
             )
             sys.exit(1)
+        except RestartNotDetectedError:
+            # The restart may have happened between two probes, so the running version decides
+            self.logger.warning(
+                "Could not confirm that the device restarted. "
+                "Checking the running version to determine whether the update was applied.",
+            )
+            role = ServerRole.FIRMWARE
 
         if role == ServerRole.BOOTLOADER:
             self.logger.critical(
@@ -373,22 +384,33 @@ class FlashCommand:
 
     def _wait_for_device_restart(self) -> ServerRole:
         """
-        Wait for the flashing server to go offline and come back after a reboot.
+        Wait for the device to restart and its flashing server to come back online.
+
+        The restart is detected from the flashing server going offline between probes or changing
+        its role. A downtime shorter than a single probe can be missed, in which case the device
+        stays reachable as firmware for the whole timeout.
 
         :return: The role of the flashing server once the device is back online.
-        :raises TimeoutError: If the device does not restart within the timeout period.
+        :raises TimeoutError: If the device is unreachable when the timeout expires.
+        :raises RestartNotDetectedError: If the device stayed reachable, but no restart was
+            detected within the timeout.
         """
         deadline = time.monotonic() + RESTART_TIMEOUT
         went_offline = False
+        reachable = False
         while time.monotonic() < deadline:
             try:
                 role = discover_server(self.address, timeout=RESTART_POLL_TIMEOUT)
             except OSError:
                 # TimeoutError is a subclass of OSError; the server is not responding
                 went_offline = True
+                reachable = False
                 continue
-            if went_offline:
+            reachable = True
+            if went_offline or role != ServerRole.FIRMWARE:
                 return role
             # The firmware is still running; the reboot has not happened yet
             time.sleep(RESTART_POLL_INTERVAL)
+        if reachable:
+            raise RestartNotDetectedError
         raise TimeoutError
