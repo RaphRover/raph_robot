@@ -20,6 +20,7 @@
 
 import argparse
 import sys
+import time
 from pathlib import Path
 from typing import Protocol
 
@@ -30,9 +31,21 @@ from raph_fw.console import (
     get_progress,
     log_step,
 )
+from raph_fw.controller import SERVICE_TIMEOUT, ControllerClient, MultipleControllersError
 from raph_fw.resolve import resolve_raphcore_name
-from raph_fw.tftp import TFTPError, check_server_alive, write_binary
+from raph_fw.tftp import ServerRole, TFTPError, discover_server, write_binary
 from raph_fw.versions import get_bootloader_version, get_firmware_version
+
+# Maximum time for the device to reboot, apply the staged image and start the firmware again
+RESTART_TIMEOUT = 60.0
+RESTART_POLL_TIMEOUT = 1.0
+RESTART_POLL_INTERVAL = 0.2
+# Maximum time for the controller services to respond after the firmware restarts
+RESTART_SERVICE_TIMEOUT = 30.0
+
+
+class RestartNotDetectedError(Exception):
+    """Raised when the device stays reachable, but no restart is detected after a reboot request."""
 
 
 class FlashCommand:
@@ -100,10 +113,17 @@ class FlashCommand:
         self._validate_binary_path()
         self._check_binary_version_and_size()
         self._resolve_device_address()
-        # TODO: Check the version of the currently running firmware/bootloader on the device when
-        # this feature is implemented
         self._discover_flashing_server()
+        if self.server_role == ServerRole.FIRMWARE:
+            self._show_current_versions()
         self._perform_flash()
+        if self.server_role == ServerRole.FIRMWARE:
+            self._apply_staged_update()
+
+    @property
+    def _image_kind(self) -> str:
+        """Human-readable name of the image type being flashed."""
+        return "bootloader" if self.args.bootloader else "firmware"
 
     def _validate_binary_path(self) -> None:
         """Validate that the binary path exists and is a file."""
@@ -171,15 +191,17 @@ class FlashCommand:
             self.logger.info(f"Using provided address: {self.address}")
 
     def _discover_flashing_server(self) -> None:
-        """Check whether the flashing server is reachable on the target device."""
+        """Discover the flashing server on the target device and determine its role."""
+        self.server_role: ServerRole | None = None
         try:
-            with log_step("Checking flashing server availability"):
-                check_server_alive(self.address)
+            with log_step("Discovering flashing server"):
+                self.server_role = discover_server(self.address)
         except TimeoutError:
             self.logger.warning(
                 "Failed to discover flashing server on the device. "
-                "The robot is either not in recovery mode or the bootloader is too old to support "
-                "flashing protocol discovery. ",
+                "The device is either unreachable, running a firmware without a flashing server "
+                "(in which case it needs to be put into recovery mode) or running a bootloader "
+                "too old to support flashing server discovery.",
             )
             if not get_confirmation_prompt(
                 "Do you want to proceed with flashing anyway? "
@@ -188,47 +210,207 @@ class FlashCommand:
             ):
                 self.logger.info("Aborting flash command.")
                 sys.exit(0)
+        else:
+            if self.server_role == ServerRole.BOOTLOADER:
+                self.logger.info(
+                    "Flashing server is running on the bootloader (recovery mode). "
+                    "The image will be written directly to the target memory region.",
+                )
+            else:
+                self.logger.info(
+                    "Flashing server is running on the firmware. "
+                    "The image will be stored in the backup flash bank and applied by the "
+                    "bootloader on the next boot.",
+                )
+
+    def _show_current_versions(self) -> None:
+        """Retrieve and log the bootloader and firmware versions currently running on the device."""
+        try:
+            current_version = self._retrieve_current_version(
+                "Retrieving current versions from the controller",
+            )
+        except (TimeoutError, MultipleControllersError):
+            self.logger.warning(
+                "Failed to retrieve current versions from the controller.",
+                exc_info=True,
+            )
+            return
+
+        if current_version == self.version:
+            self.logger.info(
+                f"The device is already running {self._image_kind} version {self.version}.",
+            )
+
+    def _retrieve_current_version(
+        self,
+        label: str,
+        timeout: float = SERVICE_TIMEOUT,
+    ) -> str:
+        """
+        Retrieve and log the versions running on the device through the controller ROS service.
+
+        :param label: The description text shown while the step is in progress.
+        :param timeout: Maximum time in seconds to wait for a response from the controller.
+        :returns: The running version of the image type being flashed.
+        :raises TimeoutError: If the service is not available or does not respond in time.
+        :raises MultipleControllersError: If more than one controller provides the service.
+        """
+        with log_step(label), ControllerClient() as controller:
+            info = controller.get_controller_info(timeout=timeout)
+
+        self.logger.info(f"Current bootloader version: {info.bootloader_version}")
+        self.logger.info(f"Current firmware version: {info.firmware_version}")
+        return str(info.bootloader_version if self.args.bootloader else info.firmware_version)
 
     def _perform_flash(self) -> None:
         """Perform the actual flashing process."""
-        if get_confirmation_prompt(
+        if not get_confirmation_prompt(
             f"Ready to flash {'bootloader' if self.args.bootloader else 'firmware'} version "
             f"{self.version} to device at {self.address}. Do you want to proceed?",
             default=True,
         ):
-            self.logger.info("Starting flashing process...")
+            self.logger.info("Aborting flash command.")
+            sys.exit(0)
+
+        self.logger.info("Starting flashing process...")
+        try:
+            with get_progress() as progress:
+                task = progress.add_task("Flashing", total=None)
+
+                def _on_progress(bytes_sent: int, total_bytes: int) -> None:
+                    progress.update(task, total=total_bytes, completed=bytes_sent, refresh=True)
+
+                write_binary(
+                    self.address,
+                    self.binary_path,
+                    is_bootloader=self.args.bootloader,
+                    progress_callback=_on_progress,
+                )
+        except TFTPError:
+            self.logger.critical("Flashing failed with a TFTP error.", exc_info=True)
+            sys.exit(1)
+        except TimeoutError:
+            self.logger.critical(
+                "Flashing failed due to a timeout. "
+                "The device may have become unresponsive during the flashing process.",
+                exc_info=True,
+            )
+            sys.exit(1)
+        except OSError:
+            self.logger.critical(
+                "Flashing failed due to an OS error. "
+                "This may indicate a network issue or a problem with the TFTP client.",
+                exc_info=True,
+            )
+            sys.exit(1)
+
+        if self.server_role == ServerRole.FIRMWARE:
+            self.logger.info("Image uploaded successfully.")
+        else:
+            self.logger.info(
+                "Flashing completed successfully. "
+                "Please power cycle the device to apply the update.",
+            )
+
+    def _apply_staged_update(self) -> None:
+        """Reboot the device so that the bootloader applies the image staged by the firmware."""
+        if not get_confirmation_prompt(
+            "The update will be applied by the bootloader on the next boot. "
+            "Do you want to reboot the controller now?",
+            default=True,
+        ):
+            self.logger.info("The update will be applied on the next power cycle of the device.")
+            return
+
+        try:
+            with log_step("Requesting controller reboot"), ControllerClient() as controller:
+                controller.soft_reboot()
+        except (TimeoutError, RuntimeError):
+            self.logger.exception(
+                "Failed to request controller reboot. "
+                "Please power cycle the device to apply the update.",
+            )
+            sys.exit(1)
+
+        try:
+            with log_step("Waiting for the device to apply the update and restart"):
+                role = self._wait_for_device_restart()
+        except TimeoutError:
+            self.logger.critical(
+                f"The device did not come back online within {RESTART_TIMEOUT:.0f} seconds. "
+                "Please check the device state and power cycle it if necessary.",
+            )
+            sys.exit(1)
+        except RestartNotDetectedError:
+            # The restart may have happened between two probes, so the running version decides
+            self.logger.warning(
+                "Could not confirm that the device restarted. "
+                "Checking the running version to determine whether the update was applied.",
+            )
+            role = ServerRole.FIRMWARE
+
+        if role == ServerRole.BOOTLOADER:
+            self.logger.critical(
+                "The device stayed in recovery mode after the reboot, which indicates that the "
+                "bootloader failed to apply the update. Please try flashing the image again.",
+            )
+            sys.exit(1)
+
+        self._verify_updated_version()
+
+    def _verify_updated_version(self) -> None:
+        """Verify that the device runs the flashed version after the update has been applied."""
+        try:
+            current_version = self._retrieve_current_version(
+                "Retrieving versions from the controller",
+                timeout=RESTART_SERVICE_TIMEOUT,
+            )
+        except (TimeoutError, MultipleControllersError):
+            self.logger.warning(
+                "The device restarted, but its versions could not be retrieved to confirm the "
+                "update.",
+                exc_info=True,
+            )
+            return
+
+        if current_version != self.version:
+            self.logger.critical(
+                f"Version mismatch after the update: expected {self.version}, "
+                f"device reports {current_version}.",
+            )
+            sys.exit(1)
+
+        self.logger.info("Update applied successfully.")
+
+    def _wait_for_device_restart(self) -> ServerRole:
+        """
+        Wait for the device to restart and its flashing server to come back online.
+
+        The restart is detected from the flashing server going offline between probes or changing
+        its role. A downtime shorter than a single probe can be missed, in which case the device
+        stays reachable as firmware for the whole timeout.
+
+        :return: The role of the flashing server once the device is back online.
+        :raises TimeoutError: If the device is unreachable when the timeout expires.
+        :raises RestartNotDetectedError: If the device stayed reachable, but no restart was
+            detected within the timeout.
+        """
+        deadline = time.monotonic() + RESTART_TIMEOUT
+        went_offline = False
+        reachable = False
+        while time.monotonic() < deadline:
             try:
-                with get_progress() as progress:
-                    task = progress.add_task("Flashing", total=None)
-
-                    def _on_progress(bytes_sent: int, total_bytes: int) -> None:
-                        progress.update(task, total=total_bytes, completed=bytes_sent, refresh=True)
-
-                    write_binary(
-                        self.address,
-                        self.binary_path,
-                        is_bootloader=self.args.bootloader,
-                        progress_callback=_on_progress,
-                    )
-            except TFTPError:
-                self.logger.critical("Flashing failed with a TFTP error.", exc_info=True)
-                sys.exit(1)
-            except TimeoutError:
-                self.logger.critical(
-                    "Flashing failed due to a timeout. "
-                    "The device may have become unresponsive during the flashing process.",
-                    exc_info=True,
-                )
-                sys.exit(1)
+                role = discover_server(self.address, timeout=RESTART_POLL_TIMEOUT)
             except OSError:
-                self.logger.critical(
-                    "Flashing failed due to an OS error. "
-                    "This may indicate a network issue or a problem with the TFTP client.",
-                    exc_info=True,
-                )
-                sys.exit(1)
-            else:
-                self.logger.info(
-                    "Flashing completed successfully. "
-                    "Please power cycle the device to apply the update.",
-                )
+                # TimeoutError is a subclass of OSError; the server is not responding
+                went_offline = True
+                reachable = False
+                continue
+            reachable = True
+            if went_offline or role != ServerRole.FIRMWARE:
+                return role
+            # The firmware is still running; the reboot has not happened yet
+            time.sleep(RESTART_POLL_INTERVAL)
+        if reachable:
+            raise RestartNotDetectedError
+        raise TimeoutError
