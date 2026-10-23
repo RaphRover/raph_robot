@@ -31,7 +31,7 @@ from raph_fw.console import (
     get_progress,
     log_step,
 )
-from raph_fw.controller import SERVICE_TIMEOUT, ControllerClient
+from raph_fw.controller import SERVICE_TIMEOUT, ControllerClient, MultipleControllersError
 from raph_fw.resolve import resolve_raphcore_name
 from raph_fw.tftp import ServerRole, TFTPError, discover_server, write_binary
 from raph_fw.versions import get_bootloader_version, get_firmware_version
@@ -225,7 +225,7 @@ class FlashCommand:
             current_version = self._retrieve_current_version(
                 "Retrieving current versions from the controller",
             )
-        except TimeoutError:
+        except (TimeoutError, MultipleControllersError):
             self.logger.warning(
                 "Failed to retrieve current versions from the controller.",
                 exc_info=True,
@@ -249,6 +249,7 @@ class FlashCommand:
         :param timeout: Maximum time in seconds to wait for a response from the controller.
         :returns: The running version of the image type being flashed.
         :raises TimeoutError: If the service is not available or does not respond in time.
+        :raises MultipleControllersError: If more than one controller provides the service.
         """
         with log_step(label), ControllerClient() as controller:
             info = controller.get_controller_info(timeout=timeout)
@@ -353,7 +354,7 @@ class FlashCommand:
                 "Retrieving versions from the controller",
                 timeout=RESTART_SERVICE_TIMEOUT,
             )
-        except TimeoutError:
+        except (TimeoutError, MultipleControllersError):
             self.logger.warning(
                 "The device restarted, but its versions could not be retrieved to confirm the "
                 "update.",

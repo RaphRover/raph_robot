@@ -38,6 +38,13 @@ SOFT_REBOOT_SERVICE = "controller/soft_reboot"
 SERVICE_TIMEOUT = 5.0
 # Maximum time to wait for a single response when retrying a request
 RETRY_CALL_TIMEOUT = 2.0
+# Time to let graph discovery settle after the first server is found, so that servers from other
+# controllers are also discovered before counting them
+SERVER_DISCOVERY_SETTLE_TIME = 0.5
+
+
+class MultipleControllersError(RuntimeError):
+    """Raised when a service is provided by more than one controller visible in the ROS graph."""
 
 
 class ControllerClient:
@@ -86,6 +93,7 @@ class ControllerClient:
         :param timeout: Maximum time in seconds to wait for a response.
         :returns: The ``GetControllerInfo`` response.
         :raises TimeoutError: If no response is received within the timeout.
+        :raises MultipleControllersError: If more than one controller provides the service.
         """
         return self._call(
             GetControllerInfo,
@@ -100,6 +108,7 @@ class ControllerClient:
         Request a soft reboot of the controller.
 
         :raises TimeoutError: If the service is not available or does not respond in time.
+        :raises MultipleControllersError: If more than one controller provides the service.
         :raises RuntimeError: If the controller rejects the reboot request.
         """
         response = self._call(Trigger, SOFT_REBOOT_SERVICE, Trigger.Request(), SERVICE_TIMEOUT)
@@ -124,9 +133,12 @@ class ControllerClient:
         :param retry: Whether to resend the request if no response is received, until the timeout
             expires. Only use for idempotent requests.
         :raises TimeoutError: If the service is not available or does not respond in time.
+        :raises MultipleControllersError: If more than one controller provides the service, in which
+            case the request is not sent, since it would reach all of them.
         """
         deadline = time.monotonic() + timeout
         client = self._node.create_client(srv_type, srv_name)
+        settled = False
         try:
             while True:
                 remaining = max(deadline - time.monotonic(), 0.0)
@@ -136,6 +148,17 @@ class ControllerClient:
                         "Check ROS and controller node visibility."
                     )
                     raise TimeoutError(msg)
+
+                if not settled:
+                    time.sleep(SERVER_DISCOVERY_SETTLE_TIME)
+                    settled = True
+                server_count = self._node.count_services(srv_name)
+                if server_count > 1:
+                    msg = (
+                        f"{srv_name} service is provided by {server_count} controllers. "
+                        "Cannot determine which one is the target device."
+                    )
+                    raise MultipleControllersError(msg)
 
                 call_timeout = SERVICE_TIMEOUT
                 if retry:
