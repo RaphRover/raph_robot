@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import socket
 import struct
+import time
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -42,8 +43,11 @@ class OpCode(Enum):
     ACK = 4
     ERROR = 5
 
-    # Custom opcode for discovering the TFTP server; not part of the standard TFTP protocol
-    DISCOVER = 0x8000
+    # Custom opcodes for discovering the TFTP server; not part of the standard TFTP protocol.
+    # Older bootloaders respond to DISCOVER_REQUEST by echoing the same opcode back, while newer
+    # bootloaders and firmware respond with DISCOVER_RESPONSE followed by the server role.
+    DISCOVER_REQUEST = 0x8000
+    DISCOVER_RESPONSE = 0x8001
 
 
 class ErrorCode(Enum):
@@ -53,6 +57,17 @@ class ErrorCode(Enum):
     FILE_NOT_FOUND = 1
     DISK_FULL = 3
     ILLEGAL_OPERATION = 4
+
+
+class ServerRole(Enum):
+    """Role of the device software that runs the TFTP server."""
+
+    # The server runs in the bootloader (recovery mode). Written images overwrite the target
+    # memory region as the transfer progresses.
+    BOOTLOADER = 0
+    # The server runs in the firmware. Written images are stored in the backup flash bank and
+    # applied by the bootloader on the next boot.
+    FIRMWARE = 1
 
 
 class TFTPError(Exception):
@@ -67,7 +82,7 @@ class TFTPError(Exception):
 
 def _build_discover_request() -> bytes:
     """Build a TFTP discover request packet."""
-    return struct.pack("!H", OpCode.DISCOVER.value)
+    return struct.pack("!H", OpCode.DISCOVER_REQUEST.value)
 
 
 def _build_read_request(filename: str) -> bytes:
@@ -124,13 +139,46 @@ def _send_packet_and_wait_for_ack(
     return 0
 
 
-def check_server_alive(address: str, timeout: float = 5.0, port: int = 69) -> None:
-    """Check whether the TFTP server is reachable on the target device."""
+def _parse_discover_response(data: bytes) -> ServerRole | None:
+    """
+    Parse a response to the discover request.
+
+    :return: The server role, or None if the packet is not a valid discover response.
+    """
+    if len(data) < 2:
+        return None
+    opcode = struct.unpack("!H", data[:2])[0]
+    if opcode == OpCode.DISCOVER_REQUEST.value:
+        # Legacy response; only the bootloader implemented the TFTP server at that time
+        return ServerRole.BOOTLOADER
+    if opcode == OpCode.DISCOVER_RESPONSE.value and len(data) >= 4:
+        role = struct.unpack("!H", data[2:4])[0]
+        try:
+            return ServerRole(role)
+        except ValueError:
+            return None
+    return None
+
+
+def discover_server(address: str, timeout: float = 5.0, port: int = 69) -> ServerRole:
+    """
+    Discover the TFTP server on the target device and determine its role.
+
+    :return: The role of the device software running the TFTP server.
+    :raises TimeoutError: If no valid discover response is received within the timeout period.
+    """
+    deadline = time.monotonic() + timeout
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.settimeout(timeout)
-    s.sendto(_build_discover_request(), (address, port))
     try:
-        s.recvfrom(512)
+        s.sendto(_build_discover_request(), (address, port))
+        while (remaining := deadline - time.monotonic()) > 0:
+            s.settimeout(remaining)
+            data, _ = s.recvfrom(512)
+            role = _parse_discover_response(data)
+            if role is not None:
+                return role
+            # Ignore unexpected packets and keep waiting
+        raise TimeoutError
     finally:
         s.close()
 
