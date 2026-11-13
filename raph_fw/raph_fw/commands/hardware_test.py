@@ -34,7 +34,11 @@ from std_srvs.srv import Trigger
 
 from raph_fw.console import get_logger, log_step
 from raph_fw.resolve import resolve_raphcore_name
-from raph_fw.versions import get_bootloader_version, get_firmware_version
+from raph_fw.versions import (
+    get_bootloader_version,
+    get_firmware_version,
+    get_packaged_firmware_path,
+)
 
 MESSAGE_TIMEOUT = 5.0
 SERVICE_TIMEOUT = 5.0
@@ -48,7 +52,6 @@ BATTERY_MAX_VOLTAGE = 25.2
 MOTOR_DIAGNOSTIC_SAMPLES = 10
 MOTOR_DIAGNOSTIC_TIMEOUT = 10.0
 BOOTLOADER_BINARY_NAME = "raphcore_bootloader_latest.bin"
-FIRMWARE_BINARY_NAME = "raphcore_firmware_latest.bin"
 EXPECTED_RAPH_OS_VERSION = "1.0.0"
 EXPECTED_MOTOR_FIRMWARE = "hw34 sw3.3 24.06.03"
 MOTOR_NAMES = (
@@ -457,7 +460,7 @@ class HardwareTestCommand:
         """
         share_dir = Path(get_package_share_directory("raph_fw"))
         bootloader_bin = share_dir / "data" / "bootloader" / BOOTLOADER_BINARY_NAME
-        firmware_bin = share_dir / "data" / "firmware" / FIRMWARE_BINARY_NAME
+        firmware_bin = get_packaged_firmware_path()
         return (
             get_bootloader_version(bootloader_bin),
             get_firmware_version(firmware_bin),
