@@ -127,7 +127,8 @@ private:
 
   dai::StereoDepthConfig depth_config_;
 
-  bool laser_dot_projector_active_ = false;
+  // Last IR laser dot projector intensity sent to the device, empty if unknown
+  std::optional<float> laser_intensity_;
 
   void run_pipeline();
   void create_ros_publishers();

@@ -375,9 +375,6 @@ void OakWrapper::check_timer_callback()
       auto calibration_handler = device_->readCalibration();
       this->fill_camera_info(calibration_handler);
 
-      if (!params_.device.ir_laser_dot_projector_lazy) {
-        device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
-      }
       device_->setIrFloodLightIntensity(params_.device.ir_flood_light_intensity);
     } catch (const std::exception & e) {
       RCLCPP_ERROR(get_logger(), "Failed to connect to device: %s", e.what());
@@ -410,7 +407,7 @@ void OakWrapper::release_device()
   device_.reset();
 
   // A new device starts with the laser off and every gate closed
-  laser_dot_projector_active_ = false;
+  laser_intensity_.reset();
   reset_control_state();
 }
 
@@ -569,13 +566,16 @@ void OakWrapper::check_publishers()
     set_stereo_streaming(false);
   }
 
-  if (params_.device.ir_laser_dot_projector_lazy && !device_->isClosed()) {
-    if (depth_needed && !laser_dot_projector_active_) {
-      device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
-      laser_dot_projector_active_ = true;
-    } else if (!depth_needed && laser_dot_projector_active_) {
-      device_->setIrLaserDotProjectorIntensity(0.0);
-      laser_dot_projector_active_ = false;
+  // The IR laser dot projector follows the parameters at runtime: it is always on, or with the lazy
+  // parameter only while depth is needed. The intensity is applied whenever it differs from what
+  // the device was last given, so a changed intensity takes effect while the projector is on.
+  if (!device_->isClosed()) {
+    const auto intensity = !params_.device.ir_laser_dot_projector_lazy || depth_needed
+                             ? static_cast<float>(params_.device.ir_laser_dot_projector_intensity)
+                             : 0.0F;
+    if (laser_intensity_ != intensity) {
+      device_->setIrLaserDotProjectorIntensity(intensity);
+      laser_intensity_ = intensity;
     }
   }
 }
@@ -665,9 +665,7 @@ void OakWrapper::send_parameters() const
       std::make_shared<dai::StereoDepthConfig>(depth_config_));
   }
 
-  if (!params_.device.ir_laser_dot_projector_lazy) {
-    device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
-  }
+  // The IR laser dot projector is updated by the periodic check, see check_publishers()
   device_->setIrFloodLightIntensity(params_.device.ir_flood_light_intensity);
 }
 
