@@ -268,6 +268,7 @@ const sensor_msgs::msg::CameraInfo & OakWrapper::get_still_camera_info(
 void OakWrapper::run_pipeline()
 {
   pipeline_details_ = create_dai_pipeline(device_, params_);
+  depth_config_ = pipeline_details_.depth_config;
 
   // Register permanent callbacks on queues
   pipeline_details_.rgb_queue->addCallback([this](const std::shared_ptr<dai::ADatatype> & message) {
