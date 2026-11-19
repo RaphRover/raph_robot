@@ -1,0 +1,206 @@
+// DepthAI pipeline of raph_oak (src/pipeline.cpp), hand-maintained.
+//
+// Render:   dot -Tsvg doc/pipeline.dot -o pipeline.svg      (or -Tpng)
+// Preview:  xdot doc/pipeline.dot
+//
+// Reading the graph
+//   solid edge        message flow between device nodes (no USB transfer)
+//   purple dashed     XLink stream over USB (host <-> device), 16 in total:
+//                     14 device -> host (one per host queue below, the point cloud one carries
+//                     the synced depth) and 2 host -> device (control, depth_config)
+//   "ctrl: <Name>"    node is controlled through Control::<Name> (include/raph_oak/pipeline.hpp)
+//                     by the control multiplexer, see the optional edges at the bottom
+//
+// Keep it in sync with pipeline.cpp: adding an output means adding one node + one XLink edge.
+
+digraph raph_oak_pipeline {
+  rankdir=LR;
+  newrank=true;
+  compound=true;
+  nodesep=0.25;
+  ranksep=0.7;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", margin="0.12,0.06"];
+  edge [fontname="Helvetica", fontsize=9, color="#64748b", arrowsize=0.7];
+
+  // ---------------------------------------------------------------------------------------------
+  // Host: sends control messages to the device
+  // ---------------------------------------------------------------------------------------------
+  subgraph cluster_host_in {
+    label="Host -> device"; style="dashed"; color="#16a34a"; fontcolor="#16a34a";
+    node [fillcolor="#dcfce7", color="#16a34a"];
+
+    ctrl_queue         [label="InputQueue\ngate / camera control"];
+    depth_config_queue [label="InputQueue\nStereoDepthConfig"];
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Device (OAK-D Pro W, RVC2)
+  // ---------------------------------------------------------------------------------------------
+  subgraph cluster_device {
+    label="Device"; style="dashed"; color="#3b82f6"; fontcolor="#3b82f6";
+
+    // --- sources
+    node [fillcolor="#dbeafe", color="#3b82f6"];
+    cam_a [label="Camera CAM_A\nrotate 180°\nctrl: -"];
+    cam_b [label="Camera CAM_B\n(created by StereoDepth)\nctrl: CameraB"];
+    cam_c [label="Camera CAM_C\n(created by StereoDepth)\nctrl: CameraC"];
+    imu   [label="IMU\naccel 500 Hz, gyro 400 Hz"];
+
+    // --- processing
+    node [fillcolor="#e2e8f0", color="#64748b"];
+    control_script [label="Control multiplexer (Script)\nroutes GateControl / CameraControl\nto the nodes marked ctrl:"];
+    stereo         [label="StereoDepth\nROBOTICS preset, aligned to RECTIFIED_RIGHT"];
+
+    manip_depth      [label="ImageManip\n↻180°, RAW16, half resolution"];
+    manip_left       [label="ImageManip\n↻180°, RAW8"];
+    manip_left_rect  [label="ImageManip\n↻180°, RAW8"];
+    manip_right      [label="ImageManip\n↻180°, RAW8"];
+    manip_right_rect [label="ImageManip\n↻180°, RAW8"];
+
+    enc_rgb        [label="VideoEncoder MJPEG"];
+    enc_left       [label="VideoEncoder MJPEG"];
+    enc_left_rect  [label="VideoEncoder MJPEG"];
+    enc_right      [label="VideoEncoder MJPEG"];
+    enc_right_rect [label="VideoEncoder MJPEG"];
+
+    pc_sync [label="Sync\n(inside the PointCloud node)"];
+
+    // --- gates (all start closed)
+    // compute gates: in front of an ImageManip, a closed gate keeps everything behind it idle
+    // raw / enc gates: in front of the raw XLink output / the JPEG encoder
+    node [fillcolor="#fef3c7", color="#f59e0b"];
+    g_rgb_raw      [label="Gate\nctrl: RgbRaw"];
+    g_rgb_enc      [label="Gate\nctrl: RgbEnc"];
+    g_still        [label="Gate (still)\nctrl: Still\nopenGate(1) passes one frame"];
+    g_depth_in     [label="Gate (compute)\nctrl: DepthIn"];
+    g_depth_raw    [label="Gate\nctrl: DepthRaw"];
+    g_pc           [label="Gate\nctrl: PointCloud"];
+    g_left_in      [label="Gate (compute)\nctrl: LeftIn"];
+    g_left_raw     [label="Gate\nctrl: LeftRaw"];
+    g_left_enc     [label="Gate\nctrl: LeftEnc"];
+    g_left_rect_in [label="Gate (compute)\nctrl: LeftRectIn"];
+    g_left_rect_raw [label="Gate\nctrl: LeftRectRaw"];
+    g_left_rect_enc [label="Gate\nctrl: LeftRectEnc"];
+    g_right_in     [label="Gate (compute)\nctrl: RightIn"];
+    g_right_raw    [label="Gate\nctrl: RightRaw"];
+    g_right_enc    [label="Gate\nctrl: RightEnc"];
+    g_right_rect_in  [label="Gate (compute)\nctrl: RightRectIn"];
+    g_right_rect_raw [label="Gate\nctrl: RightRectRaw"];
+    g_right_rect_enc [label="Gate\nctrl: RightRectEnc"];
+    g_imu          [label="Gate\nctrl: Imu"];
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Host: receives the streams and publishes ROS topics
+  // ---------------------------------------------------------------------------------------------
+  subgraph cluster_host_out {
+    label="Device -> host"; style="dashed"; color="#16a34a"; fontcolor="#16a34a";
+    node [fillcolor="#dcfce7", color="#16a34a"];
+
+    q_rgb                 [label="rgb"];
+    q_rgb_compressed      [label="rgb_compressed"];
+    q_still_image         [label="still_image"];
+    q_depth               [label="depth"];
+    q_left                [label="left"];
+    q_left_compressed     [label="left_compressed"];
+    q_left_rect           [label="left_rect"];
+    q_left_rect_compressed [label="left_rect_compressed"];
+    q_right               [label="right"];
+    q_right_compressed    [label="right_compressed"];
+    q_right_rect          [label="right_rect"];
+    q_right_rect_compressed [label="right_rect_compressed"];
+    q_imu                 [label="imu"];
+
+    pointcloud_node [label="PointCloud (host)\norganized, CAM_C frame, metres"];
+    q_pointcloud    [label="pointcloud\n(host queue, no XLink)", style="rounded,filled,dashed"];
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Edges inside the device
+  // ---------------------------------------------------------------------------------------------
+  // RGB
+  cam_a -> g_rgb_raw;
+  cam_a -> g_rgb_enc;
+  g_rgb_enc -> enc_rgb;
+  // still: second (full resolution, 4000x3000 NV12) output of the same camera
+  cam_a -> g_still [label="full res"];
+
+  // stereo inputs
+  cam_b -> stereo [label="left"];
+  cam_c -> stereo [label="right"];
+
+  // depth and point cloud
+  stereo -> g_depth_in [label="depth"];
+  g_depth_in -> manip_depth;
+  manip_depth -> g_depth_raw;
+  manip_depth -> g_pc;
+  g_pc -> pc_sync;
+
+  // left (physically the right camera, rotated by 180°)
+  stereo -> g_left_in [label="syncedRight"];
+  g_left_in -> manip_left;
+  manip_left -> g_left_raw;
+  manip_left -> g_left_enc;
+  g_left_enc -> enc_left;
+
+  stereo -> g_left_rect_in [label="rectifiedRight"];
+  g_left_rect_in -> manip_left_rect;
+  manip_left_rect -> g_left_rect_raw;
+  manip_left_rect -> g_left_rect_enc;
+  g_left_rect_enc -> enc_left_rect;
+
+  // right (physically the left camera, rotated by 180°)
+  stereo -> g_right_in [label="syncedLeft"];
+  g_right_in -> manip_right;
+  manip_right -> g_right_raw;
+  manip_right -> g_right_enc;
+  g_right_enc -> enc_right;
+
+  stereo -> g_right_rect_in [label="rectifiedLeft"];
+  g_right_rect_in -> manip_right_rect;
+  manip_right_rect -> g_right_rect_raw;
+  manip_right_rect -> g_right_rect_enc;
+  g_right_rect_enc -> enc_right_rect;
+
+  // imu
+  imu -> g_imu;
+
+  // ---------------------------------------------------------------------------------------------
+  // XLink streams over USB (purple dashed)
+  // ---------------------------------------------------------------------------------------------
+  edge [style=dashed, color="#9333ea", penwidth=1.6, fontcolor="#9333ea"];
+
+  // host -> device
+  ctrl_queue         -> control_script;
+  depth_config_queue -> stereo [label="inputConfig"];
+
+  // device -> host
+  g_rgb_raw        -> q_rgb;
+  enc_rgb          -> q_rgb_compressed;
+  g_still          -> q_still_image;
+  g_depth_raw      -> q_depth;
+  g_left_raw       -> q_left;
+  enc_left         -> q_left_compressed;
+  g_left_rect_raw  -> q_left_rect;
+  enc_left_rect    -> q_left_rect_compressed;
+  g_right_raw      -> q_right;
+  enc_right        -> q_right_compressed;
+  g_right_rect_raw -> q_right_rect;
+  enc_right_rect   -> q_right_rect_compressed;
+  g_imu            -> q_imu;
+  pc_sync          -> pointcloud_node [label="synced depth"];
+
+  // host only
+  edge [style=solid, color="#64748b", penwidth=1, fontcolor="#000000"];
+  pointcloud_node -> q_pointcloud;
+
+  // ---------------------------------------------------------------------------------------------
+  // Optional: control edges. 21 targets make the graph noisy, uncomment to draw them.
+  // ---------------------------------------------------------------------------------------------
+  // edge [style=dotted, color="#9333ea", penwidth=1, constraint=false, arrowsize=0.5];
+  // control_script -> { cam_b cam_c g_rgb_raw g_rgb_enc g_still g_depth_in g_depth_raw g_pc
+  //                     g_left_in g_left_raw g_left_enc g_left_rect_in g_left_rect_raw
+  //                     g_left_rect_enc g_right_in g_right_raw g_right_enc g_right_rect_in
+  //                     g_right_rect_raw g_right_rect_enc g_imu };
+}
