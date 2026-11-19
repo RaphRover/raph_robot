@@ -22,13 +22,15 @@ add_library(raph_oak SHARED
   src/pipeline.cpp
 )
 target_link_libraries(raph_oak
-  depthai_v3::core
   depthai_bridge_v3::depthai_bridge_v3
   rclcpp::rclcpp
   rclcpp_components::component
   ${sensor_msgs_TARGETS}
   ${std_srvs_TARGETS}
   oak_wrapper_parameters
+  # depthai_v3::core adds /opt/ros/<distro>/include (non-package-prefixed path) so it must be
+  # linked last to avoid include conflicts
+  depthai_v3::core 
 )
 target_include_directories(raph_oak
   PRIVATE
