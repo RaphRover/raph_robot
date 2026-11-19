@@ -258,72 +258,76 @@ void OakWrapper::run_pipeline()
   pipeline_details_ = create_dai_pipeline(device_, params_);
 
   // Register permanent callbacks on queues
-  pipeline_details_.rgb_queue->addCallback([this]() {
-    publish_image(rgb_img_pub_, rgb_cam_info_pub_, rgb_camera_info_, pipeline_details_.rgb_queue);
+  pipeline_details_.rgb_queue->addCallback([this](const std::shared_ptr<dai::ADatatype> & message) {
+    publish_image(rgb_img_pub_, rgb_cam_info_pub_, rgb_camera_info_, message);
   });
 
-  pipeline_details_.rgb_compressed_queue->addCallback([this]() {
-    publish_compressed_image(
-      rgb_compressed_pub_, rgb_cam_info_pub_, rgb_camera_info_, Control::RgbRaw,
-      "oak_rgb_camera_optical_frame", pipeline_details_.rgb_compressed_queue);
-  });
+  pipeline_details_.rgb_compressed_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) {
+      publish_compressed_image(
+        rgb_compressed_pub_, rgb_cam_info_pub_, rgb_camera_info_, Control::RgbRaw,
+        "oak_rgb_camera_optical_frame", message);
+    });
 
-  pipeline_details_.depth_queue->addCallback([this]() {
-    publish_image(
-      stereo_depth_pub_, stereo_cam_info_pub_, stereo_camera_info_, pipeline_details_.depth_queue);
-  });
+  pipeline_details_.depth_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) {
+      publish_image(stereo_depth_pub_, stereo_cam_info_pub_, stereo_camera_info_, message);
+    });
 
-  pipeline_details_.left_queue->addCallback([this]() {
-    publish_image(
-      left_img_pub_, left_cam_info_pub_, left_camera_info_, pipeline_details_.left_queue);
-  });
+  pipeline_details_.left_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) {
+      publish_image(left_img_pub_, left_cam_info_pub_, left_camera_info_, message);
+    });
 
-  pipeline_details_.left_compressed_queue->addCallback([this]() {
-    publish_compressed_image(
-      left_compressed_pub_, left_cam_info_pub_, left_camera_info_, Control::LeftRaw,
-      "oak_left_camera_optical_frame", pipeline_details_.left_compressed_queue);
-  });
+  pipeline_details_.left_compressed_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) {
+      publish_compressed_image(
+        left_compressed_pub_, left_cam_info_pub_, left_camera_info_, Control::LeftRaw,
+        "oak_left_camera_optical_frame", message);
+    });
 
-  pipeline_details_.left_rect_queue->addCallback([this]() {
-    publish_image(
-      left_rect_img_pub_, left_rect_cam_info_pub_, left_rect_camera_info_,
-      pipeline_details_.left_rect_queue);
-  });
+  pipeline_details_.left_rect_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) {
+      publish_image(left_rect_img_pub_, left_rect_cam_info_pub_, left_rect_camera_info_, message);
+    });
 
-  pipeline_details_.left_rect_compressed_queue->addCallback([this]() {
-    publish_compressed_image(
-      left_rect_compressed_pub_, left_rect_cam_info_pub_, left_rect_camera_info_,
-      Control::LeftRectRaw, "oak_left_camera_optical_frame",
-      pipeline_details_.left_rect_compressed_queue);
-  });
+  pipeline_details_.left_rect_compressed_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) {
+      publish_compressed_image(
+        left_rect_compressed_pub_, left_rect_cam_info_pub_, left_rect_camera_info_,
+        Control::LeftRectRaw, "oak_left_camera_optical_frame", message);
+    });
 
-  pipeline_details_.right_queue->addCallback([this]() {
-    publish_image(
-      right_img_pub_, right_cam_info_pub_, right_camera_info_, pipeline_details_.right_queue);
-  });
+  pipeline_details_.right_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) {
+      publish_image(right_img_pub_, right_cam_info_pub_, right_camera_info_, message);
+    });
 
-  pipeline_details_.right_compressed_queue->addCallback([this]() {
-    publish_compressed_image(
-      right_compressed_pub_, right_cam_info_pub_, right_camera_info_, Control::RightRaw,
-      "oak_right_camera_optical_frame", pipeline_details_.right_compressed_queue);
-  });
+  pipeline_details_.right_compressed_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) {
+      publish_compressed_image(
+        right_compressed_pub_, right_cam_info_pub_, right_camera_info_, Control::RightRaw,
+        "oak_right_camera_optical_frame", message);
+    });
 
-  pipeline_details_.right_rect_queue->addCallback([this]() {
-    publish_image(
-      right_rect_img_pub_, right_rect_cam_info_pub_, right_rect_camera_info_,
-      pipeline_details_.right_rect_queue);
-  });
+  pipeline_details_.right_rect_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) {
+      publish_image(
+        right_rect_img_pub_, right_rect_cam_info_pub_, right_rect_camera_info_, message);
+    });
 
-  pipeline_details_.right_rect_compressed_queue->addCallback([this]() {
-    publish_compressed_image(
-      right_rect_compressed_pub_, right_rect_cam_info_pub_, right_rect_camera_info_,
-      Control::RightRectRaw, "oak_right_camera_optical_frame",
-      pipeline_details_.right_rect_compressed_queue);
-  });
+  pipeline_details_.right_rect_compressed_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) {
+      publish_compressed_image(
+        right_rect_compressed_pub_, right_rect_cam_info_pub_, right_rect_camera_info_,
+        Control::RightRectRaw, "oak_right_camera_optical_frame", message);
+    });
 
-  pipeline_details_.imu_queue->addCallback([this]() { publish_imu(); });
+  pipeline_details_.imu_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) { publish_imu(message); });
 
-  pipeline_details_.pointcloud_queue->addCallback([this]() { publish_pointcloud(); });
+  pipeline_details_.pointcloud_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) { publish_pointcloud(message); });
 
   // All gates start closed and the sensors streaming
   reset_control_state();
@@ -624,12 +628,11 @@ void OakWrapper::send_parameters() const
 void OakWrapper::publish_image(
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> img_pub,
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
-  sensor_msgs::msg::CameraInfo cam_info, std::shared_ptr<dai::MessageQueue> queue)
+  sensor_msgs::msg::CameraInfo cam_info, const std::shared_ptr<dai::ADatatype> & message)
 {
-  auto in_data = queue->tryGet<dai::ImgFrame>();
+  const auto in_data = std::dynamic_pointer_cast<dai::ImgFrame>(message);
   if (!in_data) {
-    RCLCPP_WARN_STREAM(
-      get_logger(), "Failed to get data from \"" << queue->getName() << "\" queue");
+    RCLCPP_WARN(get_logger(), "Received a message that is not an image frame");
     return;
   }
 
@@ -688,12 +691,11 @@ void OakWrapper::publish_compressed_image(
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
   sensor_msgs::msg::CameraInfo cam_info, Control raw_gate, const std::string & frame_id,
-  std::shared_ptr<dai::MessageQueue> queue)
+  const std::shared_ptr<dai::ADatatype> & message)
 {
-  auto in_data = queue->tryGet<dai::EncodedFrame>();
+  const auto in_data = std::dynamic_pointer_cast<dai::EncodedFrame>(message);
   if (!in_data) {
-    RCLCPP_WARN_STREAM(
-      get_logger(), "Failed to get data from \"" << queue->getName() << "\" queue");
+    RCLCPP_WARN(get_logger(), "Received a message that is not an encoded frame");
     return;
   }
 
@@ -720,13 +722,11 @@ void OakWrapper::publish_compressed_image(
   img_pub->publish(std::move(image));
 }
 
-void OakWrapper::publish_imu()
+void OakWrapper::publish_imu(const std::shared_ptr<dai::ADatatype> & message)
 {
-  auto in_data = pipeline_details_.imu_queue->tryGet<dai::IMUData>();
+  auto in_data = std::dynamic_pointer_cast<dai::IMUData>(message);
   if (!in_data) {
-    RCLCPP_WARN_STREAM(
-      get_logger(),
-      "Failed to get data from \"" << pipeline_details_.imu_queue->getName() << "\" queue");
+    RCLCPP_WARN(get_logger(), "Received a message that is not IMU data");
     return;
   }
 
@@ -744,14 +744,11 @@ void OakWrapper::publish_imu()
   }
 }
 
-void OakWrapper::publish_pointcloud()
+void OakWrapper::publish_pointcloud(const std::shared_ptr<dai::ADatatype> & message)
 {
-  auto in_data = pipeline_details_.pointcloud_queue->tryGet<dai::PointCloudData>();
-
+  auto in_data = std::dynamic_pointer_cast<dai::PointCloudData>(message);
   if (!in_data) {
-    RCLCPP_WARN_STREAM(
-      get_logger(),
-      "Failed to get data from \"" << pipeline_details_.pointcloud_queue->getName() << "\" queue");
+    RCLCPP_WARN(get_logger(), "Received a message that is not point cloud data");
     return;
   }
 

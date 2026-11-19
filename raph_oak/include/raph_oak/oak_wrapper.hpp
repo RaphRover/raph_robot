@@ -144,16 +144,16 @@ private:
   void publish_image(
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> img_pub,
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
-    sensor_msgs::msg::CameraInfo cam_info, std::shared_ptr<dai::MessageQueue> queue);
+    sensor_msgs::msg::CameraInfo cam_info, const std::shared_ptr<dai::ADatatype> & message);
   std::unique_ptr<sensor_msgs::msg::Image> to_ros_image(
     const std::shared_ptr<dai::ImgFrame> & in_data, const std_msgs::msg::Header & header) const;
   void publish_compressed_image(
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
     sensor_msgs::msg::CameraInfo cam_info, Control raw_gate, const std::string & frame_id,
-    std::shared_ptr<dai::MessageQueue> queue);
-  void publish_imu();
-  void publish_pointcloud();
+    const std::shared_ptr<dai::ADatatype> & message);
+  void publish_imu(const std::shared_ptr<dai::ADatatype> & message);
+  void publish_pointcloud(const std::shared_ptr<dai::ADatatype> & message);
   void capture_still(
     const std_srvs::srv::Trigger::Request::SharedPtr request,
     std_srvs::srv::Trigger::Response::SharedPtr response);
