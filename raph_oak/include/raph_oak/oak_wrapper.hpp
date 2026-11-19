@@ -20,6 +20,8 @@
 
 #pragma once
 
+#include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -93,15 +95,11 @@ private:
   std::shared_ptr<depthai_bridge::ImuConverter> imu_converter_;
   std::shared_ptr<depthai_bridge::PointCloudConverter> pointcloud_converter_;
 
-  // Gate states for lazy activation
-  bool rgb_gate_open_{false};
-  bool left_gate_open_{false};
-  bool left_rect_gate_open_{false};
-  bool right_gate_open_{false};
-  bool right_rect_gate_open_{false};
-  bool depth_gate_open_{false};
-  bool imu_gate_open_{false};
-  bool pointcloud_gate_open_{false};
+  // Last state sent to each control target (true = gate open), written by the check timer and read
+  // by the queue callbacks
+  std::array<std::atomic<bool>, kControlCount> control_state_{};
+  // The stereo sensors are paused while no stereo output is needed
+  bool stereo_streaming_{true};
 
   // Camera info for callbacks
   sensor_msgs::msg::CameraInfo rgb_camera_info_;
@@ -136,9 +134,10 @@ private:
   void check_timer_callback();
   std::shared_ptr<dai::Device> connect_to_device();
   void check_publishers();
-  void manage_gate(
-    int subscription_count, const std::string & stream_name,
-    std::shared_ptr<dai::InputQueue> gate_queue, bool & is_open);
+  void reset_control_state();
+  void set_gate(Control gate, bool should_be_open, const std::string & stream_name, bool quiet);
+  void set_stereo_streaming(bool streaming);
+  bool is_gate_open(Control gate) const;
   void post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters);
   void update_parameters();
   void send_parameters() const;
@@ -150,7 +149,9 @@ private:
     const std::shared_ptr<dai::ImgFrame> & in_data, const std_msgs::msg::Header & header) const;
   void publish_compressed_image(
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
-    const std::string & frame_id, std::shared_ptr<dai::MessageQueue> queue);
+    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
+    sensor_msgs::msg::CameraInfo cam_info, Control raw_gate, const std::string & frame_id,
+    std::shared_ptr<dai::MessageQueue> queue);
   void publish_imu();
   void publish_pointcloud();
   void capture_still(

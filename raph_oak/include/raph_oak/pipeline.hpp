@@ -20,7 +20,9 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
+#include <mutex>
 
 #include "depthai/device/Device.hpp"
 #include "depthai/pipeline/InputQueue.hpp"
@@ -31,6 +33,48 @@
 
 namespace raph_oak
 {
+
+/**
+ * Targets of the single device control channel.
+ *
+ * All Gate nodes and the stereo cameras are controlled through one XLink input stream: the host
+ * sends the target id as a one byte dai::Buffer immediately followed by the actual control message
+ * (dai::GateControl or dai::CameraControl), and a Script node forwards the message to the target.
+ *
+ * Gates come in up to three stages per image, so that nothing is computed or transferred unless it
+ * is needed:
+ *  - *In gates sit in front of the (rotation) ImageManip, so a closed gate keeps the ImageManip and
+ *    everything behind it idle,
+ *  - *Raw gates sit in front of the XLinkOut of the raw image,
+ *  - *Enc gates sit in front of the JPEG encoder.
+ */
+enum class Control : uint8_t
+{
+  RgbRaw,
+  RgbEnc,
+  DepthIn,
+  DepthRaw,
+  PointCloud,
+  LeftIn,
+  LeftRaw,
+  LeftEnc,
+  LeftRectIn,
+  LeftRectRaw,
+  LeftRectEnc,
+  RightIn,
+  RightRaw,
+  RightEnc,
+  RightRectIn,
+  RightRectRaw,
+  RightRectEnc,
+  Imu,
+  Still,
+  CameraB,  // left stereo sensor (CameraControl: start/stop streaming)
+  CameraC,  // right stereo sensor (CameraControl: start/stop streaming)
+  Count
+};
+
+constexpr std::size_t kControlCount = static_cast<std::size_t>(Control::Count);
 
 struct PipelineDetails
 {
@@ -50,19 +94,15 @@ struct PipelineDetails
   std::shared_ptr<dai::InputQueue> depth_config_queue;
   std::shared_ptr<dai::MessageQueue> pointcloud_queue;
   std::shared_ptr<dai::MessageQueue> still_image_queue;
-  std::shared_ptr<dai::InputQueue> still_trigger_queue;
 
-  // Gate control queues for on-demand USB transfer
-  std::shared_ptr<dai::InputQueue> rgb_gate_queue;
-  std::shared_ptr<dai::InputQueue> depth_gate_queue;
-  std::shared_ptr<dai::InputQueue> left_gate_queue;
-  std::shared_ptr<dai::InputQueue> left_rect_gate_queue;
-  std::shared_ptr<dai::InputQueue> right_gate_queue;
-  std::shared_ptr<dai::InputQueue> right_rect_gate_queue;
-  std::shared_ptr<dai::InputQueue> imu_gate_queue;
-  std::shared_ptr<dai::InputQueue> pointcloud_gate_queue;
+  // Control channel (see Control)
+  std::shared_ptr<dai::InputQueue> control_queue;
+  std::shared_ptr<std::mutex> control_mutex;
 
   dai::StereoDepthConfig depth_config;
+
+  /// Send a dai::GateControl or dai::CameraControl message to the given control target.
+  void send_control(Control target, const std::shared_ptr<dai::ADatatype> & message) const;
 };
 
 PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const Params & params);

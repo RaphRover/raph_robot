@@ -46,6 +46,7 @@
 #include "depthai/pipeline/InputQueue.hpp"
 #include "depthai/pipeline/MessageQueue.hpp"
 #include "depthai/pipeline/datatype/Buffer.hpp"
+#include "depthai/pipeline/datatype/CameraControl.hpp"
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/GateControl.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
@@ -263,7 +264,8 @@ void OakWrapper::run_pipeline()
 
   pipeline_details_.rgb_compressed_queue->addCallback([this]() {
     publish_compressed_image(
-      rgb_compressed_pub_, "oak_rgb_camera_optical_frame", pipeline_details_.rgb_compressed_queue);
+      rgb_compressed_pub_, rgb_cam_info_pub_, rgb_camera_info_, Control::RgbRaw,
+      "oak_rgb_camera_optical_frame", pipeline_details_.rgb_compressed_queue);
   });
 
   pipeline_details_.depth_queue->addCallback([this]() {
@@ -278,8 +280,8 @@ void OakWrapper::run_pipeline()
 
   pipeline_details_.left_compressed_queue->addCallback([this]() {
     publish_compressed_image(
-      left_compressed_pub_, "oak_left_camera_optical_frame",
-      pipeline_details_.left_compressed_queue);
+      left_compressed_pub_, left_cam_info_pub_, left_camera_info_, Control::LeftRaw,
+      "oak_left_camera_optical_frame", pipeline_details_.left_compressed_queue);
   });
 
   pipeline_details_.left_rect_queue->addCallback([this]() {
@@ -290,7 +292,8 @@ void OakWrapper::run_pipeline()
 
   pipeline_details_.left_rect_compressed_queue->addCallback([this]() {
     publish_compressed_image(
-      left_rect_compressed_pub_, "oak_left_camera_optical_frame",
+      left_rect_compressed_pub_, left_rect_cam_info_pub_, left_rect_camera_info_,
+      Control::LeftRectRaw, "oak_left_camera_optical_frame",
       pipeline_details_.left_rect_compressed_queue);
   });
 
@@ -301,8 +304,8 @@ void OakWrapper::run_pipeline()
 
   pipeline_details_.right_compressed_queue->addCallback([this]() {
     publish_compressed_image(
-      right_compressed_pub_, "oak_right_camera_optical_frame",
-      pipeline_details_.right_compressed_queue);
+      right_compressed_pub_, right_cam_info_pub_, right_camera_info_, Control::RightRaw,
+      "oak_right_camera_optical_frame", pipeline_details_.right_compressed_queue);
   });
 
   pipeline_details_.right_rect_queue->addCallback([this]() {
@@ -313,7 +316,8 @@ void OakWrapper::run_pipeline()
 
   pipeline_details_.right_rect_compressed_queue->addCallback([this]() {
     publish_compressed_image(
-      right_rect_compressed_pub_, "oak_right_camera_optical_frame",
+      right_rect_compressed_pub_, right_rect_cam_info_pub_, right_rect_camera_info_,
+      Control::RightRectRaw, "oak_right_camera_optical_frame",
       pipeline_details_.right_rect_compressed_queue);
   });
 
@@ -321,15 +325,8 @@ void OakWrapper::run_pipeline()
 
   pipeline_details_.pointcloud_queue->addCallback([this]() { publish_pointcloud(); });
 
-  // Initialize gate state flags to closed
-  rgb_gate_open_ = false;
-  left_gate_open_ = false;
-  left_rect_gate_open_ = false;
-  right_gate_open_ = false;
-  right_rect_gate_open_ = false;
-  depth_gate_open_ = false;
-  imu_gate_open_ = false;
-  pointcloud_gate_open_ = false;
+  // All gates start closed and the sensors streaming
+  reset_control_state();
 
   pipeline_details_.pipeline->start();
 }
@@ -366,15 +363,7 @@ void OakWrapper::check_timer_callback()
 
     device_.reset();
 
-    // Reset gate states
-    rgb_gate_open_ = false;
-    left_gate_open_ = false;
-    left_rect_gate_open_ = false;
-    right_gate_open_ = false;
-    right_rect_gate_open_ = false;
-    depth_gate_open_ = false;
-    imu_gate_open_ = false;
-    pointcloud_gate_open_ = false;
+    reset_control_state();
 
     return;
   }
@@ -453,72 +442,148 @@ std::shared_ptr<dai::Device> OakWrapper::connect_to_device()
 
 void OakWrapper::check_publishers()
 {
-  manage_gate(
-    rgb_img_pub_->get_subscription_count() + rgb_cam_info_pub_->get_subscription_count(), "rgb",
-    pipeline_details_.rgb_gate_queue, rgb_gate_open_);
+  // What a family of image topics (raw image, compressed image, camera info) needs from the device
+  struct ImageDemand
+  {
+    bool raw;
+    bool encoded;
+  };
+  const auto image_demand = [](size_t raw_subs, size_t compressed_subs, size_t info_subs) {
+    const bool raw = raw_subs > 0;
+    // camera info alone is served from the compressed stream, which is much cheaper to transfer
+    const bool encoded = compressed_subs > 0 || (info_subs > 0 && !raw);
+    return ImageDemand{raw, encoded};
+  };
 
-  manage_gate(
-    stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count(),
-    "depth", pipeline_details_.depth_gate_queue, depth_gate_open_);
+  const auto rgb = image_demand(
+    rgb_img_pub_->get_subscription_count(), rgb_compressed_pub_->get_subscription_count(),
+    rgb_cam_info_pub_->get_subscription_count());
+  const auto left = image_demand(
+    left_img_pub_->get_subscription_count(), left_compressed_pub_->get_subscription_count(),
+    left_cam_info_pub_->get_subscription_count());
+  const auto left_rect = image_demand(
+    left_rect_img_pub_->get_subscription_count(),
+    left_rect_compressed_pub_->get_subscription_count(),
+    left_rect_cam_info_pub_->get_subscription_count());
+  const auto right = image_demand(
+    right_img_pub_->get_subscription_count(), right_compressed_pub_->get_subscription_count(),
+    right_cam_info_pub_->get_subscription_count());
+  const auto right_rect = image_demand(
+    right_rect_img_pub_->get_subscription_count(),
+    right_rect_compressed_pub_->get_subscription_count(),
+    right_rect_cam_info_pub_->get_subscription_count());
+  const bool depth =
+    stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count() >
+    0;
+  const bool pointcloud = pointcloud_pub_->get_subscription_count() > 0;
+  const bool imu = imu_pub_->get_subscription_count() > 0;
 
-  manage_gate(
-    left_img_pub_->get_subscription_count() + left_cam_info_pub_->get_subscription_count(), "left",
-    pipeline_details_.left_gate_queue, left_gate_open_);
+  const bool depth_needed = depth || pointcloud;
+  const bool stereo_needed = depth_needed || left.raw || left.encoded || left_rect.raw ||
+                             left_rect.encoded || right.raw || right.encoded || right_rect.raw ||
+                             right_rect.encoded;
 
-  manage_gate(
-    left_rect_img_pub_->get_subscription_count() +
-      left_rect_cam_info_pub_->get_subscription_count(),
-    "left_rect", pipeline_details_.left_rect_gate_queue, left_rect_gate_open_);
+  // Wake the sensors up before opening anything that depends on them...
+  if (stereo_needed) {
+    set_stereo_streaming(true);
+  }
 
-  manage_gate(
-    right_img_pub_->get_subscription_count() + right_cam_info_pub_->get_subscription_count(),
-    "right", pipeline_details_.right_gate_queue, right_gate_open_);
+  set_gate(Control::RgbRaw, rgb.raw, "rgb", false);
+  set_gate(Control::RgbEnc, rgb.encoded, "rgb compressed", false);
 
-  manage_gate(
-    right_rect_img_pub_->get_subscription_count() +
-      right_rect_cam_info_pub_->get_subscription_count(),
-    "right_rect", pipeline_details_.right_rect_gate_queue, right_rect_gate_open_);
+  // The "in" gates keep the ImageManip nodes behind them idle, so they are open as long as any
+  // output behind them is
+  set_gate(Control::DepthIn, depth_needed, "depth input", true);
+  set_gate(Control::DepthRaw, depth, "depth", false);
+  set_gate(Control::PointCloud, pointcloud, "pointcloud", false);
 
-  manage_gate(
-    imu_pub_->get_subscription_count(), "imu", pipeline_details_.imu_gate_queue, imu_gate_open_);
+  set_gate(Control::LeftIn, left.raw || left.encoded, "left input", true);
+  set_gate(Control::LeftRaw, left.raw, "left", false);
+  set_gate(Control::LeftEnc, left.encoded, "left compressed", false);
 
-  manage_gate(
-    pointcloud_pub_->get_subscription_count(), "pointcloud",
-    pipeline_details_.pointcloud_gate_queue, pointcloud_gate_open_);
+  set_gate(Control::LeftRectIn, left_rect.raw || left_rect.encoded, "left_rect input", true);
+  set_gate(Control::LeftRectRaw, left_rect.raw, "left_rect", false);
+  set_gate(Control::LeftRectEnc, left_rect.encoded, "left_rect compressed", false);
+
+  set_gate(Control::RightIn, right.raw || right.encoded, "right input", true);
+  set_gate(Control::RightRaw, right.raw, "right", false);
+  set_gate(Control::RightEnc, right.encoded, "right compressed", false);
+
+  set_gate(Control::RightRectIn, right_rect.raw || right_rect.encoded, "right_rect input", true);
+  set_gate(Control::RightRectRaw, right_rect.raw, "right_rect", false);
+  set_gate(Control::RightRectEnc, right_rect.encoded, "right_rect compressed", false);
+
+  set_gate(Control::Imu, imu, "imu", false);
+
+  // ...and put them to sleep after everything depending on them was closed
+  if (!stereo_needed) {
+    set_stereo_streaming(false);
+  }
 
   if (params_.device.ir_laser_dot_projector_lazy && !device_->isClosed()) {
-    const bool should_be_active =
-      stereo_depth_pub_->get_subscription_count() + stereo_cam_info_pub_->get_subscription_count() >
-      0;
-    if (should_be_active && !laser_dot_projector_active_) {
+    if (depth_needed && !laser_dot_projector_active_) {
       device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
       laser_dot_projector_active_ = true;
-    } else if (!should_be_active && laser_dot_projector_active_) {
+    } else if (!depth_needed && laser_dot_projector_active_) {
       device_->setIrLaserDotProjectorIntensity(0.0);
       laser_dot_projector_active_ = false;
     }
   }
 }
 
-void OakWrapper::manage_gate(
-  int subscription_count, const std::string & stream_name,
-  std::shared_ptr<dai::InputQueue> gate_queue, bool & is_open)
+void OakWrapper::reset_control_state()
 {
-  const bool should_be_open = subscription_count > 0;
-
-  if (should_be_open && !is_open) {
-    RCLCPP_INFO_STREAM(get_logger(), "Opening gate for \"" << stream_name << "\" stream");
-    if (gate_queue) {
-      gate_queue->send(dai::GateControl::openGate());
-    }
-    is_open = true;
-  } else if (!should_be_open && is_open) {
-    RCLCPP_INFO_STREAM(get_logger(), "Closing gate for \"" << stream_name << "\" stream");
-    if (gate_queue) {
-      gate_queue->send(dai::GateControl::closeGate());
-    }
-    is_open = false;
+  for (auto & state : control_state_) {
+    state = false;
   }
+  // The stereo sensors stream after the pipeline was started
+  stereo_streaming_ = true;
+}
+
+bool OakWrapper::is_gate_open(Control gate) const
+{
+  return control_state_[static_cast<std::size_t>(gate)];
+}
+
+void OakWrapper::set_gate(
+  Control gate, bool should_be_open, const std::string & stream_name, bool quiet)
+{
+  auto & is_open = control_state_[static_cast<std::size_t>(gate)];
+  if (should_be_open == is_open) {
+    return;
+  }
+
+  const std::string action = should_be_open ? "Opening" : "Closing";
+  if (quiet) {
+    RCLCPP_DEBUG_STREAM(get_logger(), action << " gate for \"" << stream_name << "\" stream");
+  } else {
+    RCLCPP_INFO_STREAM(get_logger(), action << " gate for \"" << stream_name << "\" stream");
+  }
+
+  pipeline_details_.send_control(
+    gate, should_be_open ? dai::GateControl::openGate() : dai::GateControl::closeGate());
+  is_open = should_be_open;
+}
+
+void OakWrapper::set_stereo_streaming(bool streaming)
+{
+  if (streaming == stereo_streaming_) {
+    return;
+  }
+
+  RCLCPP_INFO_STREAM(
+    get_logger(), (streaming ? "Starting" : "Stopping") << " the stereo camera sensors");
+
+  for (const auto sensor : {Control::CameraB, Control::CameraC}) {
+    auto control = std::make_shared<dai::CameraControl>();
+    if (streaming) {
+      control->setStartStreaming();
+    } else {
+      control->setStopStreaming();
+    }
+    pipeline_details_.send_control(sensor, control);
+  }
+  stereo_streaming_ = streaming;
 }
 
 void OakWrapper::post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters)
@@ -621,7 +686,9 @@ std::unique_ptr<sensor_msgs::msg::Image> OakWrapper::to_ros_image(
 
 void OakWrapper::publish_compressed_image(
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
-  const std::string & frame_id, std::shared_ptr<dai::MessageQueue> queue)
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
+  sensor_msgs::msg::CameraInfo cam_info, Control raw_gate, const std::string & frame_id,
+  std::shared_ptr<dai::MessageQueue> queue)
 {
   auto in_data = queue->tryGet<dai::EncodedFrame>();
   if (!in_data) {
@@ -630,9 +697,22 @@ void OakWrapper::publish_compressed_image(
     return;
   }
 
-  auto image = std::make_unique<sensor_msgs::msg::CompressedImage>();
-  image->header.stamp =
+  const auto stamp =
     depthai_bridge::getFrameTime(ros_base_time_, steady_base_time_, in_data->getTimestamp());
+
+  // The raw image callback publishes the camera info while the raw gate is open. Otherwise the
+  // compressed stream (which is also opened for camera info subscribers) takes over.
+  if (!is_gate_open(raw_gate) && cam_info_pub->get_subscription_count() > 0) {
+    cam_info.header.stamp = stamp;
+    cam_info_pub->publish(cam_info);
+  }
+
+  if (img_pub->get_subscription_count() == 0) {
+    return;
+  }
+
+  auto image = std::make_unique<sensor_msgs::msg::CompressedImage>();
+  image->header.stamp = stamp;
   image->header.frame_id = frame_id;
   image->format = "jpeg";
   image->data.assign(in_data->getData().begin(), in_data->getData().end());
@@ -691,7 +771,7 @@ void OakWrapper::capture_still(
   std_srvs::srv::Trigger::Response::SharedPtr response)
 {
   if (
-    !device_ || device_->isClosed() || !pipeline_details_.still_trigger_queue ||
+    !device_ || device_->isClosed() || !pipeline_details_.control_queue ||
     !pipeline_details_.still_image_queue || !calibration_handler_) {
     response->success = false;
     response->message = "Device is not connected";
@@ -701,7 +781,7 @@ void OakWrapper::capture_still(
 
   // Drop anything left over from a previous, timed out capture
   pipeline_details_.still_image_queue->tryGetAll();
-  pipeline_details_.still_trigger_queue->send(std::make_shared<dai::Buffer>());
+  pipeline_details_.send_control(Control::Still, dai::GateControl::openGate(1));
 
   bool timed_out = false;
   auto in_data =
