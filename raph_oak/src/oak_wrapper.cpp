@@ -21,6 +21,7 @@
 #include "raph_oak/oak_wrapper.hpp"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <exception>
@@ -43,8 +44,7 @@
 #include "depthai/common/UsbSpeed.hpp"
 #include "depthai/device/CalibrationHandler.hpp"
 #include "depthai/device/Device.hpp"
-#include "depthai/pipeline/InputQueue.hpp"
-#include "depthai/pipeline/MessageQueue.hpp"
+#include "depthai/pipeline/datatype/ADatatype.hpp"
 #include "depthai/pipeline/datatype/Buffer.hpp"
 #include "depthai/pipeline/datatype/CameraControl.hpp"
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
@@ -480,12 +480,13 @@ void OakWrapper::check_publishers()
     bool raw;
     bool encoded;
   };
-  const auto image_demand = [](size_t raw_subs, size_t compressed_subs, size_t info_subs) {
-    const bool raw = raw_subs > 0;
-    // camera info alone is served from the compressed stream, which is much cheaper to transfer
-    const bool encoded = compressed_subs > 0 || (info_subs > 0 && !raw);
-    return ImageDemand{raw, encoded};
-  };
+  const auto image_demand =
+    [](std::size_t raw_subs, std::size_t compressed_subs, std::size_t info_subs) {
+      const bool raw = raw_subs > 0;
+      // camera info alone is served from the compressed stream, which is much cheaper to transfer
+      const bool encoded = compressed_subs > 0 || (info_subs > 0 && !raw);
+      return ImageDemand{raw, encoded};
+    };
 
   const auto rgb = image_demand(
     rgb_img_pub_->get_subscription_count(), rgb_compressed_pub_->get_subscription_count(),
@@ -597,8 +598,9 @@ void OakWrapper::set_gate(
     RCLCPP_INFO_STREAM(get_logger(), action << " gate for \"" << stream_name << "\" stream");
   }
 
-  pipeline_details_.send_control(
-    gate, should_be_open ? dai::GateControl::openGate() : dai::GateControl::closeGate());
+  send_control(
+    pipeline_details_, gate,
+    should_be_open ? dai::GateControl::openGate() : dai::GateControl::closeGate());
   is_open = should_be_open;
 }
 
@@ -618,7 +620,7 @@ void OakWrapper::set_stereo_streaming(bool streaming)
     } else {
       control->setStopStreaming();
     }
-    pipeline_details_.send_control(sensor, control);
+    send_control(pipeline_details_, sensor, control);
   }
   stereo_streaming_ = streaming;
 }
@@ -845,7 +847,7 @@ void OakWrapper::capture_still(
 
   // Drop anything left over from a previous, timed out capture
   pipeline_details_.still_image_queue->tryGetAll();
-  pipeline_details_.send_control(Control::Still, dai::GateControl::openGate(1));
+  send_control(pipeline_details_, Control::Still, dai::GateControl::openGate(1));
 
   bool timed_out = false;
   auto in_data =

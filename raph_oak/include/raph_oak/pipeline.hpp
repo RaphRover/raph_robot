@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -76,7 +77,7 @@ enum class Control : uint8_t
   Count
 };
 
-constexpr std::size_t kControlCount = static_cast<std::size_t>(Control::Count);
+constexpr std::size_t ControlCount = static_cast<std::size_t>(Control::Count);
 
 struct PipelineDetails
 {
@@ -104,10 +105,11 @@ struct PipelineDetails
   std::shared_ptr<std::mutex> control_mutex;
 
   dai::StereoDepthConfig depth_config;
-
-  /// Send a dai::GateControl or dai::CameraControl message to the given control target.
-  void send_control(Control target, const std::shared_ptr<dai::ADatatype> & message) const;
 };
+
+/// Send a dai::GateControl or dai::CameraControl message to the given control target.
+void send_control(
+  const PipelineDetails & details, Control target, const std::shared_ptr<dai::ADatatype> & message);
 
 PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const Params & params);
 

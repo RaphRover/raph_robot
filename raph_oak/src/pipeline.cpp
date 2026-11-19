@@ -20,7 +20,9 @@
 
 #include "raph_oak/pipeline.hpp"
 
+#include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -31,8 +33,10 @@
 #include "depthai/common/CameraImageOrientation.hpp"
 #include "depthai/common/DepthUnit.hpp"
 #include "depthai/device/Device.hpp"
+#include "depthai/pipeline/MessageQueue.hpp"
 #include "depthai/pipeline/Node.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
+#include "depthai/pipeline/datatype/ADatatype.hpp"
 #include "depthai/pipeline/datatype/Buffer.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
@@ -55,10 +59,10 @@
 namespace raph_oak
 {
 
-void PipelineDetails::send_control(
-  Control target, const std::shared_ptr<dai::ADatatype> & message) const
+void send_control(
+  const PipelineDetails & details, Control target, const std::shared_ptr<dai::ADatatype> & message)
 {
-  if (!control_queue || !control_mutex) {
+  if (!details.control_queue || !details.control_mutex) {
     return;
   }
 
@@ -67,9 +71,9 @@ void PipelineDetails::send_control(
   auto header = std::make_shared<dai::Buffer>();
   header->setData(std::vector<std::uint8_t>{static_cast<std::uint8_t>(target)});
 
-  std::lock_guard<std::mutex> lock(*control_mutex);
-  control_queue->send(header);
-  control_queue->send(message);
+  const std::lock_guard<std::mutex> lock(*details.control_mutex);
+  details.control_queue->send(header);
+  details.control_queue->send(message);
 }
 
 PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const Params & params)

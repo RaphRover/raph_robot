@@ -100,7 +100,7 @@ private:
 
   // Last state sent to each control target (true = gate open), written by the check timer and read
   // by the queue callbacks
-  std::array<std::atomic<bool>, kControlCount> control_state_{};
+  std::array<std::atomic<bool>, ControlCount> control_state_{};
   // The stereo sensors are paused while no stereo output is needed
   bool stereo_streaming_{true};
 
@@ -168,7 +168,7 @@ private:
   void publish_imu(const std::shared_ptr<dai::ADatatype> & message);
   void publish_pointcloud(const std::shared_ptr<dai::ADatatype> & message);
   void capture_still(
-    const std_srvs::srv::Trigger::Request::SharedPtr request,
+    std_srvs::srv::Trigger::Request::SharedPtr request,
     std_srvs::srv::Trigger::Response::SharedPtr response);
 };
 
