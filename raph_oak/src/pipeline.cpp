@@ -90,7 +90,10 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
           message = node.inputs["control"].get()
           node.io["c%d" % header.getData()[0]].send(message)
   )");
-  details.control_queue = control_script->inputs["control"].createInputQueue();
+  // Blocking, because a dropped message would misalign the header/message pairs. The default
+  // (16 messages, dropping) is overrun by a burst of control commands, e.g. when several topics
+  // get subscribed at once.
+  details.control_queue = control_script->inputs["control"].createInputQueue(256, true);
 
   auto control_output = [&](Control target) -> dai::Node::Output & {
     return control_script->outputs["c" + std::to_string(static_cast<int>(target))];
