@@ -135,6 +135,7 @@ private:
   void fill_camera_info(const dai::CalibrationHandler & calibration_handler);
   const sensor_msgs::msg::CameraInfo & get_still_camera_info(uint32_t width, uint32_t height);
   void check_timer_callback();
+  void release_device();
   std::shared_ptr<dai::Device> connect_to_device();
   void check_publishers();
   void reset_control_state();

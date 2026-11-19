@@ -366,41 +366,52 @@ void OakWrapper::run_pipeline()
 void OakWrapper::check_timer_callback()
 {
   if (!device_) {
-    // Connect to device
+    // Connect to device and start the pipeline. A failure at any step leaves a half initialized
+    // device and pipeline behind, so everything is released to let the next call start over.
     try {
       device_ = this->connect_to_device();
       this->run_pipeline();
+
+      auto calibration_handler = device_->readCalibration();
+      this->fill_camera_info(calibration_handler);
+
+      if (!params_.device.ir_laser_dot_projector_lazy) {
+        device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
+      }
+      device_->setIrFloodLightIntensity(params_.device.ir_flood_light_intensity);
     } catch (const std::exception & e) {
       RCLCPP_ERROR(get_logger(), "Failed to connect to device: %s", e.what());
+      release_device();
       rclcpp::sleep_for(5s);
       return;
     }
-
-    auto calibration_handler = device_->readCalibration();
-    this->fill_camera_info(calibration_handler);
-
-    if (!params_.device.ir_laser_dot_projector_lazy) {
-      device_->setIrLaserDotProjectorIntensity(params_.device.ir_laser_dot_projector_intensity);
-    }
-    device_->setIrFloodLightIntensity(params_.device.ir_flood_light_intensity);
   }
 
   if (device_->isClosed()) {
     RCLCPP_ERROR(get_logger(), "Device disconnected. Freeing resources...");
-
-    if (pipeline_details_.pipeline) {
-      pipeline_details_.pipeline->stop();
-    }
-    pipeline_details_ = PipelineDetails{};
-
-    device_.reset();
-
-    reset_control_state();
-
+    release_device();
     return;
   }
 
   this->check_publishers();
+}
+
+void OakWrapper::release_device()
+{
+  if (pipeline_details_.pipeline) {
+    try {
+      pipeline_details_.pipeline->stop();
+    } catch (const std::exception & e) {
+      RCLCPP_WARN(get_logger(), "Failed to stop the pipeline: %s", e.what());
+    }
+  }
+  pipeline_details_ = PipelineDetails{};
+
+  device_.reset();
+
+  // A new device starts with the laser off and every gate closed
+  laser_dot_projector_active_ = false;
+  reset_control_state();
 }
 
 std::shared_ptr<dai::Device> OakWrapper::connect_to_device()
