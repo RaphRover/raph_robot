@@ -21,6 +21,7 @@
 #include "raph_oak/pipeline.hpp"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -163,6 +164,20 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   details.rgb_compressed_queue = make_compressed_queue(
     *rgb_output, Control::RgbEnc, params.rgb.fps, params.rgb_compressed.jpeg_quality,
     "rgb_compressed");
+
+  // Undistorted RGB image, computed on the camera from its calibration. It is a second output of
+  // the same sensor, so it shares CAM_A's rotation, and has its own raw and encoder gates.
+  std::optional<float> rect_alpha_scaling;
+  if (params.rgb.rect_alpha_scaling >= 0.0) {
+    rect_alpha_scaling = static_cast<float>(params.rgb.rect_alpha_scaling);
+  }
+  auto * rgb_rect_output = rgb_node->requestOutput(
+    {params.rgb.width, params.rgb.height}, dai::ImgFrame::Type::NV12, dai::ImgResizeMode::CROP,
+    params.rgb.fps, true, rect_alpha_scaling);
+  details.rgb_rect_queue = make_raw_queue(*rgb_rect_output, Control::RgbRectRaw, "rgb_rect");
+  details.rgb_rect_compressed_queue = make_compressed_queue(
+    *rgb_rect_output, Control::RgbRectEnc, params.rgb.fps, params.rgb_compressed.jpeg_quality,
+    "rgb_rect_compressed");
 
   // Stereo depth
   auto stereo_depth_node = pipeline->create<dai::node::StereoDepth>()->build(

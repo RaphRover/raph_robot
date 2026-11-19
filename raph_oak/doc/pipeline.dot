@@ -5,8 +5,8 @@
 //
 // Reading the graph
 //   solid edge        message flow between device nodes (no USB transfer)
-//   purple dashed     XLink stream over USB (host <-> device), 16 in total:
-//                     14 device -> host (one per host queue below, the point cloud one carries
+//   purple dashed     XLink stream over USB (host <-> device), 18 in total:
+//                     16 device -> host (one per host queue below, the point cloud one carries
 //                     the synced depth) and 2 host -> device (control, depth_config)
 //   "ctrl: <Name>"    node is controlled through Control::<Name> (include/raph_oak/pipeline.hpp)
 //                     by the control multiplexer, see the optional edges at the bottom
@@ -59,6 +59,7 @@ digraph raph_oak_pipeline {
     manip_right_rect [label="ImageManip\n↻180°, RAW8"];
 
     enc_rgb        [label="VideoEncoder MJPEG"];
+    enc_rgb_rect   [label="VideoEncoder MJPEG"];
     enc_left       [label="VideoEncoder MJPEG"];
     enc_left_rect  [label="VideoEncoder MJPEG"];
     enc_right      [label="VideoEncoder MJPEG"];
@@ -72,6 +73,8 @@ digraph raph_oak_pipeline {
     node [fillcolor="#fef3c7", color="#f59e0b"];
     g_rgb_raw      [label="Gate\nctrl: RgbRaw"];
     g_rgb_enc      [label="Gate\nctrl: RgbEnc"];
+    g_rgb_rect_raw [label="Gate\nctrl: RgbRectRaw"];
+    g_rgb_rect_enc [label="Gate\nctrl: RgbRectEnc"];
     g_still        [label="Gate (still)\nctrl: Still\nopenGate(1) passes one frame"];
     g_depth_in     [label="Gate (compute)\nctrl: DepthIn"];
     g_depth_raw    [label="Gate\nctrl: DepthRaw"];
@@ -100,6 +103,8 @@ digraph raph_oak_pipeline {
 
     q_rgb                 [label="rgb"];
     q_rgb_compressed      [label="rgb_compressed"];
+    q_rgb_rect            [label="rgb_rect"];
+    q_rgb_rect_compressed [label="rgb_rect_compressed"];
     q_still_image         [label="still_image"];
     q_depth               [label="depth"];
     q_left                [label="left"];
@@ -123,6 +128,10 @@ digraph raph_oak_pipeline {
   cam_a -> g_rgb_raw;
   cam_a -> g_rgb_enc;
   g_rgb_enc -> enc_rgb;
+  // undistorted on the camera: a second output of the same camera
+  cam_a -> g_rgb_rect_raw [label="undistorted"];
+  cam_a -> g_rgb_rect_enc [label="undistorted"];
+  g_rgb_rect_enc -> enc_rgb_rect;
   // still: second (full resolution, 4000x3000 NV12) output of the same camera
   cam_a -> g_still [label="full res"];
 
@@ -178,6 +187,8 @@ digraph raph_oak_pipeline {
   // device -> host
   g_rgb_raw        -> q_rgb;
   enc_rgb          -> q_rgb_compressed;
+  g_rgb_rect_raw   -> q_rgb_rect;
+  enc_rgb_rect     -> q_rgb_rect_compressed;
   g_still          -> q_still_image;
   g_depth_raw      -> q_depth;
   g_left_raw       -> q_left;

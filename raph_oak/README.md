@@ -22,6 +22,7 @@ Names are relative to the node (`~/`).
 | Topic | Type | Notes |
 |---|---|---|
 | `rgb/image_raw`, `rgb/image_raw/compressed`, `rgb/camera_info` | Image, CompressedImage, CameraInfo | 1344×1008, 15 fps by default (bgr8) |
+| `rgb_rect/image_rect`, `rgb_rect/image_rect/compressed`, `rgb_rect/camera_info` | | undistorted on the camera, same size and rate as `rgb` |
 | `left/image_raw`, `left/image_raw/compressed`, `left/camera_info` | | mono8, 1280×800, 10 fps |
 | `left_rect/image_rect`, `left_rect/image_rect/compressed`, `left_rect/camera_info` | | rectified |
 | `right/…`, `right_rect/…` | | same as left |
@@ -48,7 +49,7 @@ and need a restart.
 | `device` | `id`, `usb_port_id` (read only), `ir_laser_dot_projector_intensity`, `ir_laser_dot_projector_lazy`, `ir_flood_light_intensity` |
 | `depth` | `confidence_threshold`, `lr_check_*`, `subpixel_*`, `extended_disparity_enabled`, `min_distance`, `max_distance` (not read only, changeable at runtime) |
 | `mono`, `mono_compressed` | resolution, fps, JPEG quality (read only) |
-| `rgb`, `rgb_compressed` | resolution, fps, JPEG quality (read only) |
+| `rgb`, `rgb_compressed` | resolution, fps, JPEG quality, `rect_alpha_scaling` of the undistorted image (read only) |
 
 The robot configuration is in `raph_bringup/config/oak.yaml`, the node is started by
 `raph_bringup/launch/oak.launch.xml`.
@@ -68,6 +69,31 @@ the rotation).
 **Rotation.** `ImageManip` nodes rotate the mono images and the depth by 180° on the camera.
 The RGB camera is rotated at the sensor.
 
+**Rectified RGB.** `rgb_rect` is a second output of CAM_A requested with
+`enableUndistortion=true`, so the camera undistorts the image with its calibration, and it has its
+own raw and encoder gates. `rgb_rect/camera_info` is built from the intrinsic matrix DepthAI
+attaches to each frame (`ImgFrame::getTransformation()`), because it depends on the alpha scaling
+(`rgb.rect_alpha_scaling`); the distortion coefficients are zero and the projection matrix is the
+intrinsic matrix. If a frame carries no valid transformation, the rotated `rgb/camera_info` is used
+with its distortion removed. Do not run `image_proc::RectifyNode` on `rgb/image_raw` next to it,
+both would publish `rgb_rect/image_rect`.
+
+**Camera info of rectified images.** The intrinsics of a rectified or undistorted image are only
+known to DepthAI, not to the factory calibration, so `K` and `P` of `rgb_rect`, `left_rect`,
+`right_rect` and `stereo` (depth) are taken from every frame
+(`getTransformation().getIntrinsicMatrix()`) and the distortion is zero. DepthAI describes the
+180° rotation done by an `ImageManip` with negated focal lengths and a principal point flipped as
+`w - cx`; both are converted to the convention of the other camera infos (positive focal
+lengths, `w - 1 - cx`). The rotation done by the CAM_A sensor is not part of the transformation,
+so the principal point of `rgb_rect` is flipped here. The rectification rotation `R` and the
+baseline come from the calibration. `R` is conjugated with the 180° rotation (the terms coupling x
+or y with z change sign), and the baseline is kept in metres, so `P[3]` of `right_rect` is
+`-fx * baseline` with the `fx` of that frame and `P[3]` of `left_rect` is zero. `left_rect` and
+`right_rect` share `K`: DepthAI rectifies both onto the intrinsics of the sensor behind `left`. For
+depth, which is aligned to that sensor at half the mono resolution, `R` is the identity and `P[3]`
+is zero. If a frame carries no valid transformation, the calibration based camera info is used
+instead (for depth: the `left_rect` one scaled to the depth resolution).
+
 **Three kinds of gates.** Every Gate starts closed and is opened by the host only while someone
 needs the data behind it:
 
@@ -81,7 +107,7 @@ needs the data behind it:
 XLink input stream. The host sends a one byte target id followed by the control message
 (`GateControl` or `CameraControl`) and a `Script` node routes it to the target. The control queue
 is blocking: a dropped message would misalign the header/message pairs. This keeps the
-pipeline at **16 XLink streams** (14 device→host, 2 host→device: control and `StereoDepthConfig`),
+pipeline at **18 XLink streams** (16 device→host, 2 host→device: control and `StereoDepthConfig`),
 well below the XLink limit of 32 streams. Two things do not work on RVC2 and are
 the reason for the separate header message: the sequence number of a message is not preserved on
 its way to the script, and building a `GateControl` inside the script crashes the device.
@@ -104,9 +130,9 @@ The node checks the subscriber counts every 100 ms.
 
 | Subscribed to | Opened on the camera |
 |---|---|
-| `*/image_raw`, `*/image_rect`, `rgb/image_raw` | the raw gate (and the compute gate for stereo images) |
+| `*/image_raw`, `*/image_rect`, `rgb/image_raw`, `rgb_rect/image_rect` | the raw gate (and the compute gate for stereo images) |
 | `*/image_raw/compressed`, `*/image_rect/compressed` | the encoder gate (and the compute gate) |
-| only `rgb`, `left`, `right`, `left_rect` or `right_rect` `*/camera_info` | the encoder gate: camera info is published from the compressed stream, which is cheaper to transfer than the raw image |
+| only `rgb`, `rgb_rect`, `left`, `right`, `left_rect` or `right_rect` `*/camera_info` | the encoder gate: camera info is published from the compressed stream, which is cheaper to transfer than the raw image |
 | `stereo/camera_info` | the depth gates, like `stereo/image_raw` |
 | `stereo/image_raw` or `points` | depth compute gate; the depth raw gate and/or the point cloud gate; the IR laser dot projector (if `ir_laser_dot_projector_lazy`) |
 | `imu/data_raw` | the IMU gate |
@@ -117,7 +143,10 @@ The node checks the subscriber counts every 100 ms.
 Measured on one OAK-D Pro W with the default parameters. "Payload" is what the host receives per
 second through the XLink queues (wire level USB traffic was not measured); the load is the camera's
 own LEON CSS / MSS usage from the `SystemLogger` node. The reference for "no lazy activation" is
-every gate open, which is what a driver without on-camera activation does all the time.
+every gate open, which is what a driver without on-camera activation does all the time. All
+numbers below were measured before the `rgb_rect` streams existed, so the reference covers 13
+streams. The two `rgb_rect` streams have the same size as `rgb` and `rgb_compressed` and would add
+about 33 MB/s to it (not measured).
 
 Payload of a single stream:
 

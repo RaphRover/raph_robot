@@ -125,6 +125,15 @@ void OakWrapper::create_ros_publishers()
   rgb_compressed_pub_ =
     create_publisher<sensor_msgs::msg::CompressedImage>("~/rgb/image_raw/compressed", 1);
 
+  // RGB Rect (undistorted on the camera)
+  rgb_rect_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/rgb_rect/image_rect", 1);
+  rgb_rect_cam_info_pub_ =
+    create_publisher<sensor_msgs::msg::CameraInfo>("~/rgb_rect/camera_info", 1);
+
+  // RGB Rect Compressed
+  rgb_rect_compressed_pub_ =
+    create_publisher<sensor_msgs::msg::CompressedImage>("~/rgb_rect/image_rect/compressed", 1);
+
   // Left
   left_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/left/image_raw", 1);
   left_cam_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("~/left/camera_info", 1);
@@ -227,11 +236,14 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
     true);
   right_rect_camera_info_.header.frame_id = "oak_right_camera_optical_frame";
 
-  // Depth
-  stereo_camera_info_ = img_converter.calibrationToCameraInfo(
-    calibration_handler, calibration_handler.getStereoRightCameraId(), params_.mono.width,
-    params_.mono.height);
+  // Depth: aligned to the rectified right sensor, which is the left image after the rotation, at
+  // half the mono resolution. Only a fallback: the camera info of every depth frame is built from
+  // the intrinsics DepthAI attaches to it.
+  stereo_camera_info_ =
+    get_scaled_camera_info(left_rect_camera_info_, params_.mono.width / 2, params_.mono.height / 2);
   stereo_camera_info_.header.frame_id = "oak_stereo_camera_optical_frame";
+  stereo_camera_info_.r = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+  stereo_camera_info_.p[3] = 0.0;
 }
 
 const sensor_msgs::msg::CameraInfo & OakWrapper::get_still_camera_info(
@@ -269,9 +281,23 @@ void OakWrapper::run_pipeline()
         "oak_rgb_camera_optical_frame", message);
     });
 
+  pipeline_details_.rgb_rect_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) {
+      publish_rectified_image(
+        rgb_rect_img_pub_, rgb_rect_cam_info_pub_, rgb_camera_info_, true, message);
+    });
+
+  pipeline_details_.rgb_rect_compressed_queue->addCallback(
+    [this](const std::shared_ptr<dai::ADatatype> & message) {
+      publish_rectified_compressed_image(
+        rgb_rect_compressed_pub_, rgb_rect_cam_info_pub_, rgb_camera_info_, true,
+        Control::RgbRectRaw, "oak_rgb_camera_optical_frame", message);
+    });
+
   pipeline_details_.depth_queue->addCallback(
     [this](const std::shared_ptr<dai::ADatatype> & message) {
-      publish_image(stereo_depth_pub_, stereo_cam_info_pub_, stereo_camera_info_, message);
+      publish_rectified_image(
+        stereo_depth_pub_, stereo_cam_info_pub_, stereo_camera_info_, false, message);
     });
 
   pipeline_details_.left_queue->addCallback(
@@ -288,13 +314,14 @@ void OakWrapper::run_pipeline()
 
   pipeline_details_.left_rect_queue->addCallback(
     [this](const std::shared_ptr<dai::ADatatype> & message) {
-      publish_image(left_rect_img_pub_, left_rect_cam_info_pub_, left_rect_camera_info_, message);
+      publish_rectified_image(
+        left_rect_img_pub_, left_rect_cam_info_pub_, left_rect_camera_info_, false, message);
     });
 
   pipeline_details_.left_rect_compressed_queue->addCallback(
     [this](const std::shared_ptr<dai::ADatatype> & message) {
-      publish_compressed_image(
-        left_rect_compressed_pub_, left_rect_cam_info_pub_, left_rect_camera_info_,
+      publish_rectified_compressed_image(
+        left_rect_compressed_pub_, left_rect_cam_info_pub_, left_rect_camera_info_, false,
         Control::LeftRectRaw, "oak_left_camera_optical_frame", message);
     });
 
@@ -312,14 +339,14 @@ void OakWrapper::run_pipeline()
 
   pipeline_details_.right_rect_queue->addCallback(
     [this](const std::shared_ptr<dai::ADatatype> & message) {
-      publish_image(
-        right_rect_img_pub_, right_rect_cam_info_pub_, right_rect_camera_info_, message);
+      publish_rectified_image(
+        right_rect_img_pub_, right_rect_cam_info_pub_, right_rect_camera_info_, false, message);
     });
 
   pipeline_details_.right_rect_compressed_queue->addCallback(
     [this](const std::shared_ptr<dai::ADatatype> & message) {
-      publish_compressed_image(
-        right_rect_compressed_pub_, right_rect_cam_info_pub_, right_rect_camera_info_,
+      publish_rectified_compressed_image(
+        right_rect_compressed_pub_, right_rect_cam_info_pub_, right_rect_camera_info_, false,
         Control::RightRectRaw, "oak_right_camera_optical_frame", message);
     });
 
@@ -462,6 +489,9 @@ void OakWrapper::check_publishers()
   const auto rgb = image_demand(
     rgb_img_pub_->get_subscription_count(), rgb_compressed_pub_->get_subscription_count(),
     rgb_cam_info_pub_->get_subscription_count());
+  const auto rgb_rect = image_demand(
+    rgb_rect_img_pub_->get_subscription_count(), rgb_rect_compressed_pub_->get_subscription_count(),
+    rgb_rect_cam_info_pub_->get_subscription_count());
   const auto left = image_demand(
     left_img_pub_->get_subscription_count(), left_compressed_pub_->get_subscription_count(),
     left_cam_info_pub_->get_subscription_count());
@@ -494,6 +524,8 @@ void OakWrapper::check_publishers()
 
   set_gate(Control::RgbRaw, rgb.raw, "rgb", false);
   set_gate(Control::RgbEnc, rgb.encoded, "rgb compressed", false);
+  set_gate(Control::RgbRectRaw, rgb_rect.raw, "rgb_rect", false);
+  set_gate(Control::RgbRectEnc, rgb_rect.encoded, "rgb_rect compressed", false);
 
   // The "in" gates keep the ImageManip nodes behind them idle, so they are open as long as any
   // output behind them is
@@ -720,6 +752,40 @@ void OakWrapper::publish_compressed_image(
   image->data.assign(in_data->getData().begin(), in_data->getData().end());
 
   img_pub->publish(std::move(image));
+}
+
+void OakWrapper::publish_rectified_image(
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> img_pub,
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
+  const sensor_msgs::msg::CameraInfo & calibration_info, bool rotated_at_sensor,
+  const std::shared_ptr<dai::ADatatype> & message)
+{
+  // The intrinsics of a rectified or undistorted image are only known to DepthAI, so the camera
+  // info is built from the frame
+  const auto frame = std::dynamic_pointer_cast<dai::ImgFrame>(message);
+  publish_image(
+    img_pub, cam_info_pub,
+    frame ? get_rectified_camera_info(
+              frame->getTransformation(), frame->getWidth(), frame->getHeight(), calibration_info,
+              rotated_at_sensor)
+          : calibration_info,
+    message);
+}
+
+void OakWrapper::publish_rectified_compressed_image(
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
+  const sensor_msgs::msg::CameraInfo & calibration_info, bool rotated_at_sensor, Control raw_gate,
+  const std::string & frame_id, const std::shared_ptr<dai::ADatatype> & message)
+{
+  const auto frame = std::dynamic_pointer_cast<dai::EncodedFrame>(message);
+  publish_compressed_image(
+    img_pub, cam_info_pub,
+    frame ? get_rectified_camera_info(
+              frame->transformation, frame->getWidth(), frame->getHeight(), calibration_info,
+              rotated_at_sensor)
+          : calibration_info,
+    raw_gate, frame_id, message);
 }
 
 void OakWrapper::publish_imu(const std::shared_ptr<dai::ADatatype> & message)

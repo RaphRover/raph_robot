@@ -121,6 +121,13 @@ raph_oak:
       validation:
         bounds<>: [0.1, 30.0]
       read_only: true
+    rect_alpha_scaling:
+      type: double
+      default_value: -1.0
+      description: Free scaling parameter of the undistorted RGB image (rgb_rect) computed on the camera. 0 keeps only valid pixels, 1 keeps all source pixels, -1 uses the DepthAI default
+      validation:
+        bounds<>: [-1.0, 1.0]
+      read_only: true
   rgb_compressed:
     jpeg_quality:
       type: int

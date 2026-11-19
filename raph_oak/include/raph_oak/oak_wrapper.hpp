@@ -70,6 +70,9 @@ private:
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> rgb_img_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> rgb_cam_info_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> rgb_compressed_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> rgb_rect_img_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> rgb_rect_cam_info_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> rgb_rect_compressed_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> left_img_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> left_cam_info_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> left_compressed_pub_;
@@ -152,6 +155,16 @@ private:
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
     sensor_msgs::msg::CameraInfo cam_info, Control raw_gate, const std::string & frame_id,
     const std::shared_ptr<dai::ADatatype> & message);
+  void publish_rectified_image(
+    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> img_pub,
+    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
+    const sensor_msgs::msg::CameraInfo & calibration_info, bool rotated_at_sensor,
+    const std::shared_ptr<dai::ADatatype> & message);
+  void publish_rectified_compressed_image(
+    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
+    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
+    const sensor_msgs::msg::CameraInfo & calibration_info, bool rotated_at_sensor, Control raw_gate,
+    const std::string & frame_id, const std::shared_ptr<dai::ADatatype> & message);
   void publish_imu(const std::shared_ptr<dai::ADatatype> & message);
   void publish_pointcloud(const std::shared_ptr<dai::ADatatype> & message);
   void capture_still(
