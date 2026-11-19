@@ -30,7 +30,7 @@ target_link_libraries(raph_oak
   oak_wrapper_parameters
   # depthai_v3::core adds /opt/ros/<distro>/include (non-package-prefixed path) so it must be
   # linked last to avoid include conflicts
-  depthai_v3::core 
+  depthai_v3::core
 )
 target_include_directories(raph_oak
   PRIVATE
