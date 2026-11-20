@@ -621,10 +621,9 @@ void OakWrapper::set_gate(
     RCLCPP_INFO_STREAM(get_logger(), action << " gate for \"" << stream_name << "\" stream");
   }
 
-  send_control(
-    pipeline_details_, gate,
-    should_be_open ? (fps > 0 ? dai::GateControl::openGate(-1, fps) : dai::GateControl::openGate())
-                   : dai::GateControl::closeGate());
+  auto gate_control = std::make_shared<dai::GateControl>(should_be_open, -1, fps);
+  send_control(pipeline_details_, gate, gate_control);
+
   is_open = should_be_open;
 }
 
