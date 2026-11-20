@@ -94,6 +94,10 @@ static const std::vector<std::string> UsbStrings = {"UNKNOWN", "LOW",   "FULL",
 // How long the ~/capture_still service waits for the triggered frame to arrive from the device
 static constexpr std::chrono::milliseconds StillCaptureTimeout{2000};
 
+// Minimum time between stopping the stereo sensors and starting them again. A start sent shortly
+// after a stop is ignored by the camera and the stereo streams stay silent.
+static constexpr std::chrono::milliseconds StereoRestartDelay{3000};
+
 OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 : Node("oak_wrapper", options),
   steady_base_time_(std::chrono::steady_clock::now()),
@@ -633,6 +637,11 @@ void OakWrapper::set_stereo_streaming(bool streaming)
     return;
   }
 
+  // Too early to start again: stay stopped, the next periodic check tries again
+  if (streaming && std::chrono::steady_clock::now() - stereo_stopped_at_ < StereoRestartDelay) {
+    return;
+  }
+
   RCLCPP_INFO_STREAM(
     get_logger(), (streaming ? "Starting" : "Stopping") << " the stereo camera sensors");
 
@@ -646,6 +655,9 @@ void OakWrapper::set_stereo_streaming(bool streaming)
     send_control(pipeline_details_, sensor, control);
   }
   stereo_streaming_ = streaming;
+  if (!streaming) {
+    stereo_stopped_at_ = std::chrono::steady_clock::now();
+  }
 }
 
 void OakWrapper::post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters)

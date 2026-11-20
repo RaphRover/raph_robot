@@ -103,6 +103,8 @@ private:
   std::array<std::atomic<bool>, ControlCount> control_state_{};
   // The stereo sensors are paused while no stereo output is needed
   bool stereo_streaming_{true};
+  // When the stereo sensors were last stopped, a start right after is lost by the camera
+  std::chrono::steady_clock::time_point stereo_stopped_at_;
 
   // Camera info for callbacks
   sensor_msgs::msg::CameraInfo rgb_camera_info_;
