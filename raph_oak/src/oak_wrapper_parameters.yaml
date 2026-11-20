@@ -1,9 +1,9 @@
 raph_oak:
   device:
-    mx_id:
+    id:
       type: string
       default_value: ""
-      description: Device MX ID to connect to.
+      description: Device ID to connect to.
       read_only: true
     usb_port_id:
       type: string
@@ -29,7 +29,7 @@ raph_oak:
   depth:
     confidence_threshold:
       type: int
-      default_value: 110
+      default_value: 15
       description: Depth images will only contain pixels where depth confidence is below the confidence threshold (lower the confidence value means better depth accuracy)
       validation:
         bounds<>: [0, 255]
@@ -39,7 +39,7 @@ raph_oak:
       description: Computes and combines disparities in both L-R and R-L directions, and combine them
     lr_check_threshold:
       type: int
-      default_value: 5
+      default_value: 10
       description: Disparity is considered for the output when the difference between LR and RL disparities is smaller than the LR check threshold
       validation:
         bounds<>: [0, 255]
@@ -53,6 +53,10 @@ raph_oak:
       description: Number of fractional bits for subpixel mode
       validation:
         bounds<>: [3, 5]
+    extended_disparity_enabled:
+      type: bool
+      default_value: false
+      description: Extends the disparity range from 95 to 190 by combining full resolution and downscaled images. Suitable for short range objects
     min_distance:
       type: double
       default_value: 0.0
@@ -65,6 +69,13 @@ raph_oak:
       description: Maximal distance in meters
       validation:
         bounds<>: [0.0, 60.0]
+  pointcloud:
+    fps:
+      type: double
+      default_value: 5.0
+      description: Maximum point cloud rate in frames per second, rounded to whole frames. The depth frames feeding the point cloud are limited to this rate, so less is computed on the host and nothing above it is published. Values above the depth rate have no effect
+      validation:
+        bounds<>: [1.0, 60.0]
   mono:
     width:
       type: int
@@ -79,20 +90,6 @@ raph_oak:
       description: Mono camera image height
       validation:
         bounds<>: [1, 800]
-      read_only: true
-    isp_scale_num:
-      type: int
-      default_value: 1
-      description: ISP scale numerator
-      validation:
-        bounds<>: [1, 16]
-      read_only: true
-    isp_scale_den:
-      type: int
-      default_value: 1
-      description: ISP scale denominator
-      validation:
-        bounds<>: [1, 63]
       read_only: true
     fps:
       type: double
@@ -124,26 +121,19 @@ raph_oak:
       validation:
         bounds<>: [1, 2160]
       read_only: true
-    isp_scale_num:
-      type: int
-      default_value: 1
-      description: ISP scale numerator
-      validation:
-        bounds<>: [1, 16]
-      read_only: true
-    isp_scale_den:
-      type: int
-      default_value: 3
-      description: ISP scale denominator
-      validation:
-        bounds<>: [1, 63]
-      read_only: true
     fps:
       type: double
       default_value: 15.0
       description: RGB camera frames per second
       validation:
         bounds<>: [0.1, 30.0]
+      read_only: true
+    rect_alpha_scaling:
+      type: double
+      default_value: -1.0
+      description: Free scaling parameter of the undistorted RGB image (rgb_rect) computed on the camera. 0 keeps only valid pixels, 1 keeps all source pixels, -1 uses the DepthAI default
+      validation:
+        bounds<>: [-1.0, 1.0]
       read_only: true
   rgb_compressed:
     jpeg_quality:
