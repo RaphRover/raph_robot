@@ -20,7 +20,9 @@
 
 #include "raph_oak/oak_wrapper.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -408,6 +410,7 @@ void OakWrapper::release_device()
 
   // A new device starts with the laser off and every gate closed
   laser_intensity_.reset();
+  pointcloud_fps_ = -1;
   reset_control_state();
 }
 
@@ -541,7 +544,16 @@ void OakWrapper::check_publishers()
   // output behind them is
   set_gate(Control::DepthIn, depth_needed, "depth input", true);
   set_gate(Control::DepthRaw, depth, "depth", false);
-  set_gate(Control::PointCloud, pointcloud, "pointcloud", false);
+
+  // The point cloud gate limits the rate of the depth frames fed to the point cloud node. A changed
+  // rate is applied by opening the already open gate again.
+  const int pointcloud_fps = std::max(1, static_cast<int>(std::lround(params_.pointcloud.fps)));
+  if (pointcloud && is_gate_open(Control::PointCloud) && pointcloud_fps != pointcloud_fps_) {
+    send_control(
+      pipeline_details_, Control::PointCloud, dai::GateControl::openGate(-1, pointcloud_fps));
+  }
+  set_gate(Control::PointCloud, pointcloud, "pointcloud", false, pointcloud_fps);
+  pointcloud_fps_ = pointcloud_fps;
 
   set_gate(Control::LeftIn, left.raw || left.encoded, "left input", true);
   set_gate(Control::LeftRaw, left.raw, "left", false);
@@ -595,7 +607,7 @@ bool OakWrapper::is_gate_open(Control gate) const
 }
 
 void OakWrapper::set_gate(
-  Control gate, bool should_be_open, const std::string & stream_name, bool quiet)
+  Control gate, bool should_be_open, const std::string & stream_name, bool quiet, int fps)
 {
   auto & is_open = control_state_[static_cast<std::size_t>(gate)];
   if (should_be_open == is_open) {
@@ -611,7 +623,8 @@ void OakWrapper::set_gate(
 
   send_control(
     pipeline_details_, gate,
-    should_be_open ? dai::GateControl::openGate() : dai::GateControl::closeGate());
+    should_be_open ? (fps > 0 ? dai::GateControl::openGate(-1, fps) : dai::GateControl::openGate())
+                   : dai::GateControl::closeGate());
   is_open = should_be_open;
 }
 

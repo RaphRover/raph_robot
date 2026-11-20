@@ -69,6 +69,13 @@ raph_oak:
       description: Maximal distance in meters
       validation:
         bounds<>: [0.0, 60.0]
+  pointcloud:
+    fps:
+      type: double
+      default_value: 5.0
+      description: Maximum point cloud rate in frames per second, rounded to whole frames. The depth frames feeding the point cloud are limited to this rate, so less is computed on the host and nothing above it is published. Values above the depth rate have no effect
+      validation:
+        bounds<>: [1.0, 60.0]
   mono:
     width:
       type: int

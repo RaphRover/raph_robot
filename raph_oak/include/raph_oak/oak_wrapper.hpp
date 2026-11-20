@@ -129,6 +129,8 @@ private:
 
   // Last IR laser dot projector intensity sent to the device, empty if unknown
   std::optional<float> laser_intensity_;
+  // Rate limit last sent to the point cloud gate, -1 if none
+  int pointcloud_fps_{-1};
 
   void run_pipeline();
   void create_ros_publishers();
@@ -140,7 +142,8 @@ private:
   std::shared_ptr<dai::Device> connect_to_device();
   void check_publishers();
   void reset_control_state();
-  void set_gate(Control gate, bool should_be_open, const std::string & stream_name, bool quiet);
+  void set_gate(
+    Control gate, bool should_be_open, const std::string & stream_name, bool quiet, int fps = -1);
   void set_stereo_streaming(bool streaming);
   bool is_gate_open(Control gate) const;
   void post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters);

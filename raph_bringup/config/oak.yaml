@@ -13,6 +13,8 @@
       subpixel_fractional_bits: 3
       min_distance: 0.0
       max_distance: 10.0
+    pointcloud:
+      fps: 5.0
     mono:
       width: 1280
       height: 800
