@@ -39,7 +39,7 @@ using Clock = std::chrono::steady_clock;
 SubscriberCounts subscribers(ImageStreamId id, ImageSubscriberCounts counts)
 {
   SubscriberCounts result;
-  result.images[image_index(id)] = counts;
+  result.images[get_image_index(id)] = counts;
   return result;
 }
 
@@ -59,7 +59,7 @@ std::size_t open_gates(const GateStates & states)
 TEST(StreamTable, IsIndexedById)
 {
   for (std::size_t i = 0; i < ImageStreamCount; ++i) {
-    EXPECT_EQ(image_index(ImageStreamSpecs[i].id), i);
+    EXPECT_EQ(get_image_index(ImageStreamSpecs[i].id), i);
   }
 }
 

@@ -141,13 +141,13 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
 
   // The queues of an image stream: the raw image and, if the stream has one, the JPEG compressed
   // one, both behind the gates of the stream
-  auto make_image_queues =
+  auto make_image_queue_set =
     [&](dai::Node::Output & source, ImageStreamId id, float fps, int jpeg_quality) {
       const auto & spec = get_image_stream_spec(id);
-      auto & queues = details.images[image_index(id)];
-      queues.raw = make_raw_queue(source, spec.raw_gate, spec.name);
+      auto & queue_set = details.image_queue_sets[get_image_index(id)];
+      queue_set.raw_queue = make_raw_queue(source, spec.raw_gate, spec.name);
       if (spec.has_compressed()) {
-        queues.compressed = make_compressed_queue(
+        queue_set.compressed_queue = make_compressed_queue(
           source, spec.enc_gate, fps, jpeg_quality, std::string(spec.name) + "_compressed");
       }
     };
@@ -172,7 +172,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto make_rotated_mono = [&](dai::Node::Output & stereo_output, ImageStreamId id) {
     auto & rotated = make_rotation(
       stereo_output, id, params.mono.width, params.mono.height, dai::ImgFrame::Type::RAW8);
-    make_image_queues(rotated, id, params.mono.fps, params.mono_compressed.jpeg_quality);
+    make_image_queue_set(rotated, id, params.mono.fps, params.mono_compressed.jpeg_quality);
   };
 
   // RGB camera node
@@ -181,7 +181,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto * rgb_output = rgb_node->requestOutput(
     {params.rgb.width, params.rgb.height}, dai::ImgFrame::Type::NV12, dai::ImgResizeMode::CROP,
     params.rgb.fps);
-  make_image_queues(
+  make_image_queue_set(
     *rgb_output, ImageStreamId::Rgb, params.rgb.fps, params.rgb_compressed.jpeg_quality);
 
   // Undistorted RGB image, computed on the camera from its calibration. It is a second output of
@@ -193,7 +193,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto * rgb_rect_output = rgb_node->requestOutput(
     {params.rgb.width, params.rgb.height}, dai::ImgFrame::Type::NV12, dai::ImgResizeMode::CROP,
     params.rgb.fps, true, rect_alpha_scaling);
-  make_image_queues(
+  make_image_queue_set(
     *rgb_rect_output, ImageStreamId::RgbRect, params.rgb.fps, params.rgb_compressed.jpeg_quality);
 
   // Stereo depth
@@ -228,7 +228,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto & depth_rotated = make_rotation(
     stereo_depth_node->depth, ImageStreamId::Depth, params.mono.width / 2, params.mono.height / 2,
     dai::ImgFrame::Type::RAW16);
-  make_image_queues(depth_rotated, ImageStreamId::Depth, params.mono.fps, 0);
+  make_image_queue_set(depth_rotated, ImageStreamId::Depth, params.mono.fps, 0);
 
   auto depth_config_queue = stereo_depth_node->inputConfig.createInputQueue(1, false);
 

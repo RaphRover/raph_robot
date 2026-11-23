@@ -38,17 +38,17 @@ namespace raph_oak
 {
 
 /// The queues of one image stream, see ImageStreamSpecs
-struct ImageQueues
+struct ImageQueueSet
 {
-  std::shared_ptr<dai::MessageQueue> raw;
+  std::shared_ptr<dai::MessageQueue> raw_queue;
   /// Empty if the stream has no compressed variant
-  std::shared_ptr<dai::MessageQueue> compressed;
+  std::shared_ptr<dai::MessageQueue> compressed_queue;
 };
 
 struct PipelineDetails
 {
   std::shared_ptr<dai::Pipeline> pipeline;
-  std::array<ImageQueues, ImageStreamCount> images;
+  std::array<ImageQueueSet, ImageStreamCount> image_queue_sets;
   std::shared_ptr<dai::MessageQueue> imu_queue;
   std::shared_ptr<dai::InputQueue> depth_config_queue;
   std::shared_ptr<dai::MessageQueue> pointcloud_queue;

@@ -90,7 +90,7 @@ public:
   Demand() = default;
   explicit Demand(const SubscriberCounts & counts);
 
-  const ImageDemand & image(ImageStreamId id) const { return images_[image_index(id)]; }
+  const ImageDemand & image(ImageStreamId id) const { return images_[get_image_index(id)]; }
   bool pointcloud() const { return pointcloud_; }
   bool imu() const { return imu_; }
 

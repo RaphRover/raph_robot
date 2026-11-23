@@ -51,7 +51,7 @@ enum class ImageStreamId : uint8_t
 
 constexpr std::size_t ImageStreamCount = static_cast<std::size_t>(ImageStreamId::Count);
 
-constexpr std::size_t image_index(ImageStreamId id) { return static_cast<std::size_t>(id); }
+constexpr std::size_t get_image_index(ImageStreamId id) { return static_cast<std::size_t>(id); }
 
 struct ImageStreamSpec
 {
@@ -111,7 +111,7 @@ inline constexpr std::array<ImageStreamSpec, ImageStreamCount> ImageStreamSpecs{
 
 constexpr const ImageStreamSpec & get_image_stream_spec(ImageStreamId id)
 {
-  return ImageStreamSpecs[image_index(id)];
+  return ImageStreamSpecs[get_image_index(id)];
 }
 
 }  // namespace raph_oak

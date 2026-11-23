@@ -47,7 +47,7 @@ Demand::Demand(const SubscriberCounts & counts)
 : pointcloud_(counts.pointcloud > 0), imu_(counts.imu > 0)
 {
   for (const auto & spec : ImageStreamSpecs) {
-    const auto index = image_index(spec.id);
+    const auto index = get_image_index(spec.id);
     images_[index] = ImageDemand(counts.images[index], spec.has_compressed());
   }
 }
@@ -68,14 +68,14 @@ GateStates Demand::gate_states() const
 {
   GateStates states;
   for (const auto & spec : ImageStreamSpecs) {
-    const auto & stream = image(spec.id);
-    states.set(spec.raw_gate, stream.raw());
+    const auto & image_demand = image(spec.id);
+    states.set(spec.raw_gate, image_demand.raw());
     if (!spec.enc_gate.is_none()) {
-      states.set(spec.enc_gate, stream.encoded());
+      states.set(spec.enc_gate, image_demand.encoded());
     }
     // The rotation, and the encoder behind it, only run while one of its outputs is wanted
     if (!spec.in_gate.is_none()) {
-      states.set(spec.in_gate, stream.any());
+      states.set(spec.in_gate, image_demand.any());
     }
   }
 

@@ -125,14 +125,14 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 void OakWrapper::create_ros_publishers()
 {
   for (const auto & spec : ImageStreamSpecs) {
-    auto & stream = image_publisher_sets_[image_index(spec.id)];
+    auto & publisher_set = image_publisher_sets_[get_image_index(spec.id)];
     const std::string topic = std::string("~/") + spec.topic;
-    stream.image_pub = create_publisher<sensor_msgs::msg::Image>(topic, 1);
+    publisher_set.image_pub = create_publisher<sensor_msgs::msg::Image>(topic, 1);
     if (spec.has_compressed()) {
-      stream.compressed_pub =
+      publisher_set.compressed_pub =
         create_publisher<sensor_msgs::msg::CompressedImage>(topic + "/compressed", 1);
     }
-    stream.camera_info_pub =
+    publisher_set.camera_info_pub =
       create_publisher<sensor_msgs::msg::CameraInfo>(std::string("~/") + spec.info_topic, 1);
   }
 
@@ -167,8 +167,9 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   const auto camera_info = [&](dai::CameraBoardSocket socket, int width, int height) {
     return img_converter.calibrationToCameraInfo(calibration_handler, socket, width, height);
   };
-  const auto stream_info = [this](ImageStreamId id) -> sensor_msgs::msg::CameraInfo & {
-    return image_publisher_sets_[image_index(id)].calibration_info;
+  const auto publisher_calibration_info =
+    [this](ImageStreamId id) -> sensor_msgs::msg::CameraInfo & {
+    return image_publisher_sets_[get_image_index(id)].calibration_info;
   };
 
   // The camera is mounted upside down, so the images are rotated by 180 degrees and the physically
@@ -178,32 +179,34 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   const int mono_width = static_cast<int>(params_.mono.width);
   const int mono_height = static_cast<int>(params_.mono.height);
 
-  stream_info(ImageStreamId::Rgb) = get_rotated_camera_info(camera_info(
+  publisher_calibration_info(ImageStreamId::Rgb) = get_rotated_camera_info(camera_info(
     dai::CameraBoardSocket::CAM_A, static_cast<int>(params_.rgb.width),
     static_cast<int>(params_.rgb.height)));
-  stream_info(ImageStreamId::Left) =
+  publisher_calibration_info(ImageStreamId::Left) =
     get_rotated_camera_info(camera_info(left_socket, mono_width, mono_height));
-  stream_info(ImageStreamId::LeftRect) =
+  publisher_calibration_info(ImageStreamId::LeftRect) =
     get_rotated_camera_info(camera_info(left_socket, mono_width, mono_height), true);
-  stream_info(ImageStreamId::Right) =
+  publisher_calibration_info(ImageStreamId::Right) =
     get_rotated_camera_info(camera_info(right_socket, mono_width, mono_height));
-  stream_info(ImageStreamId::RightRect) =
+  publisher_calibration_info(ImageStreamId::RightRect) =
     get_rotated_camera_info(camera_info(right_socket, mono_width, mono_height), true);
 
   // The undistorted RGB image has the pose of the RGB camera
-  stream_info(ImageStreamId::RgbRect) = stream_info(ImageStreamId::Rgb);
+  publisher_calibration_info(ImageStreamId::RgbRect) =
+    publisher_calibration_info(ImageStreamId::Rgb);
 
   // Depth: aligned to the rectified right sensor, which is the left image after the rotation, at
   // half the mono resolution. Only a fallback: the camera info of every depth frame is built from
   // the intrinsics DepthAI attaches to it.
-  auto & depth_info = stream_info(ImageStreamId::Depth);
+  auto & depth_info = publisher_calibration_info(ImageStreamId::Depth);
   depth_info = get_scaled_camera_info(
-    stream_info(ImageStreamId::LeftRect), params_.mono.width / 2, params_.mono.height / 2);
+    publisher_calibration_info(ImageStreamId::LeftRect), params_.mono.width / 2,
+    params_.mono.height / 2);
   depth_info.r = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
   depth_info.p[3] = 0.0;
 
   for (const auto & spec : ImageStreamSpecs) {
-    stream_info(spec.id).header.frame_id = spec.frame_id;
+    publisher_calibration_info(spec.id).header.frame_id = spec.frame_id;
   }
 
   // Invalidate the cached still image camera info, it is rebuilt on the next capture
@@ -237,13 +240,14 @@ void OakWrapper::run_pipeline()
   // Register permanent callbacks on queues
   for (const auto & spec : ImageStreamSpecs) {
     const auto id = spec.id;
-    const auto & queues = pipeline_details_.images[image_index(id)];
-    queues.raw->addCallback(
+    const auto & queue_set = pipeline_details_.image_queue_sets[get_image_index(id)];
+    queue_set.raw_queue->addCallback(
       [this, id](const std::shared_ptr<dai::ADatatype> & message) { publish_image(id, message); });
-    if (queues.compressed) {
-      queues.compressed->addCallback([this, id](const std::shared_ptr<dai::ADatatype> & message) {
-        publish_compressed_image(id, message);
-      });
+    if (queue_set.compressed_queue) {
+      queue_set.compressed_queue->addCallback(
+        [this, id](const std::shared_ptr<dai::ADatatype> & message) {
+          publish_compressed_image(id, message);
+        });
     }
   }
 
@@ -382,11 +386,11 @@ SubscriberCounts OakWrapper::count_subscribers() const
 {
   SubscriberCounts counts;
   for (const auto & spec : ImageStreamSpecs) {
-    const auto & stream = image_publisher_sets_[image_index(spec.id)];
-    counts.images[image_index(spec.id)] = {
-      stream.image_pub->get_subscription_count(),
-      stream.compressed_pub ? stream.compressed_pub->get_subscription_count() : 0,
-      stream.camera_info_pub->get_subscription_count()};
+    const auto & publisher_set = image_publisher_sets_[get_image_index(spec.id)];
+    counts.images[get_image_index(spec.id)] = {
+      publisher_set.image_pub->get_subscription_count(),
+      publisher_set.compressed_pub ? publisher_set.compressed_pub->get_subscription_count() : 0,
+      publisher_set.camera_info_pub->get_subscription_count()};
   }
   counts.pointcloud = pointcloud_pub_->get_subscription_count();
   counts.imu = imu_pub_->get_subscription_count();
@@ -546,15 +550,15 @@ void OakWrapper::publish_image(ImageStreamId id, const std::shared_ptr<dai::ADat
   }
 
   const auto & spec = get_image_stream_spec(id);
-  const auto & stream = image_publisher_sets_[image_index(id)];
+  const auto & publisher_set = image_publisher_sets_[get_image_index(id)];
 
   // The intrinsics of a rectified or undistorted image are only known to DepthAI, so the camera
   // info is built from the frame
   auto cam_info = spec.rectified
                     ? get_rectified_camera_info(
                         in_data->getTransformation(), in_data->getWidth(), in_data->getHeight(),
-                        stream.calibration_info, spec.rotated_at_sensor)
-                    : stream.calibration_info;
+                        publisher_set.calibration_info, spec.rotated_at_sensor)
+                    : publisher_set.calibration_info;
   cam_info.header.stamp =
     depthai_bridge::getFrameTime(ros_base_time_, steady_base_time_, in_data->getTimestamp());
 
@@ -563,8 +567,8 @@ void OakWrapper::publish_image(ImageStreamId id, const std::shared_ptr<dai::ADat
     return;
   }
 
-  stream.camera_info_pub->publish(cam_info);
-  stream.image_pub->publish(std::move(image));
+  publisher_set.camera_info_pub->publish(cam_info);
+  publisher_set.image_pub->publish(std::move(image));
 }
 
 std::unique_ptr<sensor_msgs::msg::Image> OakWrapper::to_ros_image(
@@ -616,33 +620,33 @@ void OakWrapper::publish_compressed_image(
   }
 
   const auto & spec = get_image_stream_spec(id);
-  const auto & stream = image_publisher_sets_[image_index(id)];
+  const auto & publisher_set = image_publisher_sets_[get_image_index(id)];
   const auto stamp =
     depthai_bridge::getFrameTime(ros_base_time_, steady_base_time_, in_data->getTimestamp());
 
   // The raw image publishes the camera info while the raw gate is open. Otherwise the compressed
   // stream (which is also opened for camera info subscribers) takes over.
-  if (!is_gate_open(spec.raw_gate) && stream.camera_info_pub->get_subscription_count() > 0) {
+  if (!is_gate_open(spec.raw_gate) && publisher_set.camera_info_pub->get_subscription_count() > 0) {
     auto cam_info = spec.rectified
                       ? get_rectified_camera_info(
                           in_data->transformation, in_data->getWidth(), in_data->getHeight(),
-                          stream.calibration_info, spec.rotated_at_sensor)
-                      : stream.calibration_info;
+                          publisher_set.calibration_info, spec.rotated_at_sensor)
+                      : publisher_set.calibration_info;
     cam_info.header.stamp = stamp;
-    stream.camera_info_pub->publish(cam_info);
+    publisher_set.camera_info_pub->publish(cam_info);
   }
 
-  if (stream.compressed_pub->get_subscription_count() == 0) {
+  if (publisher_set.compressed_pub->get_subscription_count() == 0) {
     return;
   }
 
   auto image = std::make_unique<sensor_msgs::msg::CompressedImage>();
   image->header.stamp = stamp;
-  image->header.frame_id = stream.calibration_info.header.frame_id;
+  image->header.frame_id = publisher_set.calibration_info.header.frame_id;
   image->format = "jpeg";
   image->data.assign(in_data->getData().begin(), in_data->getData().end());
 
-  stream.compressed_pub->publish(std::move(image));
+  publisher_set.compressed_pub->publish(std::move(image));
 }
 
 void OakWrapper::publish_imu(const std::shared_ptr<dai::ADatatype> & message)
