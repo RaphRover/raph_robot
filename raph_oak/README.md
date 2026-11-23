@@ -47,6 +47,7 @@ and need a restart.
 
 | Group | Parameters |
 |---|---|
+| (top level) | `tf_frame_prefix` (read only, default empty): prefix of every TF frame id the node publishes (images, camera infos, IMU, point cloud), matching a robot description loaded with a prefix |
 | `device` | `id`, `usb_port_id` (read only), `ir_laser_dot_projector_intensity`, `ir_laser_dot_projector_lazy`, `ir_flood_light_intensity` |
 | `depth` | `confidence_threshold`, `lr_check_*`, `subpixel_*`, `extended_disparity_enabled`, `min_distance`, `max_distance` (not read only, changeable at runtime) |
 | `pointcloud` | `fps` (default 5, changeable at runtime): rate limit of the depth frames fed to the point cloud node, set through the `fps` field of its gate |

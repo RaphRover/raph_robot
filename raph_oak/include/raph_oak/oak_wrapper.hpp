@@ -93,9 +93,9 @@ private:
 
   // Converts the host timestamps of the DepthAI messages to ROS time
   FrameClock frame_clock_;
-  // TODO(fszkudlarek): make sure the frame ids work under a namespace
-  ImuConverter imu_converter_{"oak_imu_frame", 0.001, 0.00001};
-  PointCloudConverter pointcloud_converter_{"oak_stereo_camera_optical_frame"};
+  // Created once the parameters, which hold the frame id prefix, are known
+  std::optional<ImuConverter> imu_converter_;
+  std::optional<PointCloudConverter> pointcloud_converter_;
 
   // Last state sent to each control target (true = gate open), written by the check timer and read
   // by the queue callbacks
@@ -125,6 +125,7 @@ private:
 
   void run_pipeline();
   void create_ros_publishers();
+  std::string tf_frame(const std::string & frame) const;
   void create_ros_services();
   void fill_camera_info(const dai::CalibrationHandler & calibration_handler);
   const sensor_msgs::msg::CameraInfo & get_still_camera_info(uint32_t width, uint32_t height);

@@ -1,4 +1,9 @@
 raph_oak:
+  tf_frame_prefix:
+    type: string
+    default_value: ""
+    description: Prefix of the TF frame ids of all published messages (e.g. "robot1/"), for when the robot description is loaded with a prefix
+    read_only: true
   device:
     id:
       type: string

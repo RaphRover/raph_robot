@@ -105,7 +105,15 @@ OakWrapper::OakWrapper(rclcpp::NodeOptions options)
   this->create_ros_publishers();
   this->create_ros_services();
 
+  imu_converter_.emplace(tf_frame("oak_imu_frame"), 0.001, 0.00001);
+  pointcloud_converter_.emplace(tf_frame("oak_stereo_camera_optical_frame"));
+
   check_timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check_timer_callback, this));
+}
+
+std::string OakWrapper::tf_frame(const std::string & frame) const
+{
+  return params_.tf_frame_prefix + frame;
 }
 
 void OakWrapper::create_ros_publishers()
@@ -189,7 +197,7 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   depth_info.p[3] = 0.0;
 
   for (const auto & spec : ImageStreamSpecs) {
-    publisher_calibration_info(spec.id).header.frame_id = spec.frame_id;
+    publisher_calibration_info(spec.id).header.frame_id = tf_frame(spec.frame_id);
   }
 
   // Invalidate the cached still image camera info, it is rebuilt on the next capture
@@ -206,7 +214,7 @@ const sensor_msgs::msg::CameraInfo & OakWrapper::get_still_camera_info(
   // Same sensor as the RGB stream, but at the full resolution the still frame came in at
   still_camera_info_ = get_rotated_camera_info(calibration_to_camera_info(
     *calibration_handler_, dai::CameraBoardSocket::CAM_A, width, height));
-  still_camera_info_.header.frame_id = "oak_rgb_camera_optical_frame";
+  still_camera_info_.header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
 
   return still_camera_info_;
 }
@@ -634,7 +642,7 @@ void OakWrapper::publish_imu(const std::shared_ptr<dai::ADatatype> & message)
     return;
   }
 
-  for (const auto & imu : imu_converter_.convert(*in_data, frame_clock_)) {
+  for (const auto & imu : imu_converter_->convert(*in_data, frame_clock_)) {
     imu_pub_->publish(imu);
   }
 }
@@ -647,7 +655,7 @@ void OakWrapper::publish_pointcloud(const std::shared_ptr<dai::ADatatype> & mess
     return;
   }
 
-  pointcloud_pub_->publish(pointcloud_converter_.convert(*in_data, frame_clock_));
+  pointcloud_pub_->publish(pointcloud_converter_->convert(*in_data, frame_clock_));
 }
 
 void OakWrapper::capture_still(

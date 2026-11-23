@@ -62,6 +62,7 @@ struct ImageStreamSpec
   /// <topic>/compressed
   const char * topic;
   const char * info_topic;
+  /// TF frame id, without the tf_frame_prefix parameter
   const char * frame_id;
   /// Gate in front of the ImageManip of the stream, Control::None if the stream has no ImageManip
   Control in_gate;
