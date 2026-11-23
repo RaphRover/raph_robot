@@ -28,11 +28,11 @@
 #include "raph_oak/streams.hpp"
 
 /**
- * What the camera has to do for the current subscribers, as pure functions.
+ * What the camera has to do for the current subscribers.
  *
- * The node counts the subscribers (compute_demand) and then applies the decisions made here, which
- * are the part of the node that is easy to get wrong and that can be tested without a camera, a
- * ROS graph or any timing.
+ * The node counts the subscribers, builds a Demand from them and then applies the decisions made
+ * here, which are the part of the node that is easy to get wrong and that can be tested without a
+ * camera, a ROS graph or any timing.
  */
 namespace raph_oak
 {
@@ -52,20 +52,6 @@ struct SubscriberCounts
   std::size_t imu{0};
 };
 
-/// What one image stream needs from the camera
-struct ImageDemand
-{
-  bool raw{false};
-  bool encoded{false};
-};
-
-struct Demand
-{
-  std::array<ImageDemand, ImageStreamCount> images{};
-  bool pointcloud{false};
-  bool imu{false};
-};
-
 /// Which gates are open. Only the gates that follow the demand are meaningful, see
 /// Control::follows_demand()
 class GateStates
@@ -78,26 +64,57 @@ private:
   std::array<bool, Control::Count> open_{};
 };
 
+/// What one image stream needs from the camera
+class ImageDemand
+{
+public:
+  ImageDemand() = default;
+
+  /// The camera info alone is served from the compressed stream if the stream has one, which is
+  /// much cheaper to transfer than the raw image
+  ImageDemand(const ImageSubscriberCounts & subscribers, bool has_compressed);
+
+  bool raw() const { return raw_; }
+  bool encoded() const { return encoded_; }
+  bool any() const { return raw_ || encoded_; }
+
+private:
+  bool raw_{false};
+  bool encoded_{false};
+};
+
+/// What the camera has to do for all the streams
+class Demand
+{
+public:
+  Demand() = default;
+  explicit Demand(const SubscriberCounts & counts);
+
+  const ImageDemand & image(ImageStreamId id) const { return images_[image_index(id)]; }
+  bool pointcloud() const { return pointcloud_; }
+  bool imu() const { return imu_; }
+
+  /// The depth is needed for the depth image and for the point cloud
+  bool depth_needed() const;
+
+  /// The stereo sensors are needed for everything derived from them
+  bool stereo_needed() const;
+
+  /// The gates that have to be open, see Control::follows_demand()
+  GateStates gate_states() const;
+
+private:
+  std::array<ImageDemand, ImageStreamCount> images_{};
+  bool pointcloud_{false};
+  bool imu_{false};
+};
+
 enum class StereoSensorAction
 {
   None,
   Start,
   Stop
 };
-
-/// Demand of one image stream. The camera info alone is served from the compressed stream if the
-/// stream has one, which is much cheaper to transfer than the raw image.
-ImageDemand compute_image_demand(const ImageSubscriberCounts & subscribers, bool has_compressed);
-
-Demand compute_demand(const SubscriberCounts & counts);
-
-/// The depth is needed for the depth image and for the point cloud
-bool depth_needed(const Demand & demand);
-
-/// The stereo sensors are needed for everything derived from them
-bool stereo_needed(const Demand & demand);
-
-GateStates compute_gate_states(const Demand & demand);
 
 /**
  * Decide whether the stereo sensors have to be started or stopped.

@@ -31,67 +31,58 @@
 namespace raph_oak
 {
 
-ImageDemand compute_image_demand(const ImageSubscriberCounts & subscribers, bool has_compressed)
+ImageDemand::ImageDemand(const ImageSubscriberCounts & subscribers, bool has_compressed)
 {
   if (!has_compressed) {
-    return ImageDemand{subscribers.image > 0 || subscribers.camera_info > 0, false};
+    raw_ = subscribers.image > 0 || subscribers.camera_info > 0;
+    return;
   }
 
-  ImageDemand demand;
-  demand.raw = subscribers.image > 0;
+  raw_ = subscribers.image > 0;
   // The raw image publishes the camera info while it is requested
-  demand.encoded = subscribers.compressed > 0 || (subscribers.camera_info > 0 && !demand.raw);
-  return demand;
+  encoded_ = subscribers.compressed > 0 || (subscribers.camera_info > 0 && !raw_);
 }
 
-Demand compute_demand(const SubscriberCounts & counts)
+Demand::Demand(const SubscriberCounts & counts)
+: pointcloud_(counts.pointcloud > 0), imu_(counts.imu > 0)
 {
-  Demand demand;
   for (const auto & spec : ImageStreamSpecs) {
     const auto index = image_index(spec.id);
-    demand.images[index] = compute_image_demand(counts.images[index], spec.has_compressed());
+    images_[index] = ImageDemand(counts.images[index], spec.has_compressed());
   }
-  demand.pointcloud = counts.pointcloud > 0;
-  demand.imu = counts.imu > 0;
-  return demand;
 }
 
-bool depth_needed(const Demand & demand)
-{
-  return demand.images[image_index(ImageStreamId::Depth)].raw || demand.pointcloud;
-}
+bool Demand::depth_needed() const { return image(ImageStreamId::Depth).raw() || pointcloud_; }
 
-bool stereo_needed(const Demand & demand)
+bool Demand::stereo_needed() const
 {
-  if (depth_needed(demand)) {
+  if (depth_needed()) {
     return true;
   }
-  return std::any_of(
-    ImageStreamSpecs.begin(), ImageStreamSpecs.end(), [&demand](const auto & spec) {
-      const auto & image = demand.images[image_index(spec.id)];
-      return spec.stereo && (image.raw || image.encoded);
-    });
+  return std::any_of(ImageStreamSpecs.begin(), ImageStreamSpecs.end(), [this](const auto & spec) {
+    return spec.stereo && image(spec.id).any();
+  });
 }
 
-GateStates compute_gate_states(const Demand & demand)
+GateStates Demand::gate_states() const
 {
-  GateStates states{};
+  GateStates states;
   for (const auto & spec : ImageStreamSpecs) {
-    const auto & image = demand.images[image_index(spec.id)];
-    states.set(spec.raw_gate, image.raw);
+    const auto & stream = image(spec.id);
+    states.set(spec.raw_gate, stream.raw());
     if (!spec.enc_gate.is_none()) {
-      states.set(spec.enc_gate, image.encoded);
+      states.set(spec.enc_gate, stream.encoded());
     }
     // The rotation, and the encoder behind it, only run while one of its outputs is wanted
     if (!spec.in_gate.is_none()) {
-      states.set(spec.in_gate, image.raw || image.encoded);
+      states.set(spec.in_gate, stream.any());
     }
   }
 
   // The point cloud is computed from the same rotated depth, so it keeps the depth input open
-  states.set(Control::DepthIn, depth_needed(demand));
-  states.set(Control::PointCloud, demand.pointcloud);
-  states.set(Control::Imu, demand.imu);
+  states.set(Control::DepthIn, depth_needed());
+  states.set(Control::PointCloud, pointcloud_);
+  states.set(Control::Imu, imu_);
   return states;
 }
 

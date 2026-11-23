@@ -127,69 +127,69 @@ TEST(Control, OnlyTheGatesFollowTheDemand)
 
 TEST(ImageDemand, NothingWithoutSubscribers)
 {
-  const auto demand = compute_image_demand({}, true);
-  EXPECT_FALSE(demand.raw);
-  EXPECT_FALSE(demand.encoded);
+  const auto demand = ImageDemand({}, true);
+  EXPECT_FALSE(demand.raw());
+  EXPECT_FALSE(demand.encoded());
 }
 
 TEST(ImageDemand, RawImage)
 {
-  const auto demand = compute_image_demand({1, 0, 0}, true);
-  EXPECT_TRUE(demand.raw);
-  EXPECT_FALSE(demand.encoded);
+  const auto demand = ImageDemand({1, 0, 0}, true);
+  EXPECT_TRUE(demand.raw());
+  EXPECT_FALSE(demand.encoded());
 }
 
 TEST(ImageDemand, CompressedImage)
 {
-  const auto demand = compute_image_demand({0, 2, 0}, true);
-  EXPECT_FALSE(demand.raw);
-  EXPECT_TRUE(demand.encoded);
+  const auto demand = ImageDemand({0, 2, 0}, true);
+  EXPECT_FALSE(demand.raw());
+  EXPECT_TRUE(demand.encoded());
 }
 
 TEST(ImageDemand, CameraInfoAloneIsServedFromTheCompressedStream)
 {
-  const auto demand = compute_image_demand({0, 0, 1}, true);
-  EXPECT_FALSE(demand.raw);
-  EXPECT_TRUE(demand.encoded);
+  const auto demand = ImageDemand({0, 0, 1}, true);
+  EXPECT_FALSE(demand.raw());
+  EXPECT_TRUE(demand.encoded());
 }
 
 TEST(ImageDemand, CameraInfoIsServedFromTheRawImageWhenItIsRequested)
 {
-  const auto demand = compute_image_demand({1, 0, 1}, true);
-  EXPECT_TRUE(demand.raw);
-  EXPECT_FALSE(demand.encoded);
+  const auto demand = ImageDemand({1, 0, 1}, true);
+  EXPECT_TRUE(demand.raw());
+  EXPECT_FALSE(demand.encoded());
 }
 
 TEST(ImageDemand, CameraInfoAndCompressedImage)
 {
-  const auto demand = compute_image_demand({0, 1, 1}, true);
-  EXPECT_FALSE(demand.raw);
-  EXPECT_TRUE(demand.encoded);
+  const auto demand = ImageDemand({0, 1, 1}, true);
+  EXPECT_FALSE(demand.raw());
+  EXPECT_TRUE(demand.encoded());
 }
 
 TEST(ImageDemand, WithoutCompressedVariantCameraInfoNeedsTheRawImage)
 {
-  const auto demand = compute_image_demand({0, 0, 1}, false);
-  EXPECT_TRUE(demand.raw);
-  EXPECT_FALSE(demand.encoded);
+  const auto demand = ImageDemand({0, 0, 1}, false);
+  EXPECT_TRUE(demand.raw());
+  EXPECT_FALSE(demand.encoded());
 }
 
 TEST(Demand, NoSubscribersNeedNothing)
 {
-  const auto demand = compute_demand({});
-  EXPECT_FALSE(depth_needed(demand));
-  EXPECT_FALSE(stereo_needed(demand));
+  const Demand demand;
+  EXPECT_FALSE(demand.depth_needed());
+  EXPECT_FALSE(demand.stereo_needed());
 
-  const auto states = compute_gate_states(demand);
+  const auto states = demand.gate_states();
   EXPECT_EQ(open_gates(states), 0U);
 }
 
 TEST(Demand, RgbDoesNotNeedTheStereoSensors)
 {
-  const auto demand = compute_demand(subscribers(ImageStreamId::Rgb, {1, 1, 0}));
-  EXPECT_FALSE(stereo_needed(demand));
+  const auto demand = Demand(subscribers(ImageStreamId::Rgb, {1, 1, 0}));
+  EXPECT_FALSE(demand.stereo_needed());
 
-  const auto states = compute_gate_states(demand);
+  const auto states = demand.gate_states();
   EXPECT_TRUE(gate(states, Control::RgbRaw));
   EXPECT_TRUE(gate(states, Control::RgbEnc));
   EXPECT_EQ(open_gates(states), 2U);
@@ -197,10 +197,10 @@ TEST(Demand, RgbDoesNotNeedTheStereoSensors)
 
 TEST(Demand, RgbRectDoesNotNeedTheStereoSensors)
 {
-  const auto demand = compute_demand(subscribers(ImageStreamId::RgbRect, {0, 0, 1}));
-  EXPECT_FALSE(stereo_needed(demand));
+  const auto demand = Demand(subscribers(ImageStreamId::RgbRect, {0, 0, 1}));
+  EXPECT_FALSE(demand.stereo_needed());
 
-  const auto states = compute_gate_states(demand);
+  const auto states = demand.gate_states();
   EXPECT_FALSE(gate(states, Control::RgbRectRaw));
   EXPECT_TRUE(gate(states, Control::RgbRectEnc));
   EXPECT_EQ(open_gates(states), 1U);
@@ -208,11 +208,11 @@ TEST(Demand, RgbRectDoesNotNeedTheStereoSensors)
 
 TEST(Demand, RawStereoImageOpensItsInputAndRawGate)
 {
-  const auto demand = compute_demand(subscribers(ImageStreamId::LeftRect, {1, 0, 0}));
-  EXPECT_TRUE(stereo_needed(demand));
-  EXPECT_FALSE(depth_needed(demand));
+  const auto demand = Demand(subscribers(ImageStreamId::LeftRect, {1, 0, 0}));
+  EXPECT_TRUE(demand.stereo_needed());
+  EXPECT_FALSE(demand.depth_needed());
 
-  const auto states = compute_gate_states(demand);
+  const auto states = demand.gate_states();
   EXPECT_TRUE(gate(states, Control::LeftRectIn));
   EXPECT_TRUE(gate(states, Control::LeftRectRaw));
   EXPECT_FALSE(gate(states, Control::LeftRectEnc));
@@ -221,10 +221,10 @@ TEST(Demand, RawStereoImageOpensItsInputAndRawGate)
 
 TEST(Demand, CompressedStereoImageOpensItsInputAndEncoderGate)
 {
-  const auto demand = compute_demand(subscribers(ImageStreamId::Right, {0, 1, 0}));
-  EXPECT_TRUE(stereo_needed(demand));
+  const auto demand = Demand(subscribers(ImageStreamId::Right, {0, 1, 0}));
+  EXPECT_TRUE(demand.stereo_needed());
 
-  const auto states = compute_gate_states(demand);
+  const auto states = demand.gate_states();
   EXPECT_TRUE(gate(states, Control::RightIn));
   EXPECT_FALSE(gate(states, Control::RightRaw));
   EXPECT_TRUE(gate(states, Control::RightEnc));
@@ -233,11 +233,11 @@ TEST(Demand, CompressedStereoImageOpensItsInputAndEncoderGate)
 
 TEST(Demand, DepthCameraInfoAloneNeedsTheDepth)
 {
-  const auto demand = compute_demand(subscribers(ImageStreamId::Depth, {0, 0, 1}));
-  EXPECT_TRUE(depth_needed(demand));
-  EXPECT_TRUE(stereo_needed(demand));
+  const auto demand = Demand(subscribers(ImageStreamId::Depth, {0, 0, 1}));
+  EXPECT_TRUE(demand.depth_needed());
+  EXPECT_TRUE(demand.stereo_needed());
 
-  const auto states = compute_gate_states(demand);
+  const auto states = demand.gate_states();
   EXPECT_TRUE(gate(states, Control::DepthIn));
   EXPECT_TRUE(gate(states, Control::DepthRaw));
   EXPECT_FALSE(gate(states, Control::PointCloud));
@@ -247,11 +247,11 @@ TEST(Demand, PointCloudAloneKeepsTheDepthInputOpenButNotTheDepthOutput)
 {
   SubscriberCounts counts;
   counts.pointcloud = 1;
-  const auto demand = compute_demand(counts);
-  EXPECT_TRUE(depth_needed(demand));
-  EXPECT_TRUE(stereo_needed(demand));
+  const auto demand = Demand(counts);
+  EXPECT_TRUE(demand.depth_needed());
+  EXPECT_TRUE(demand.stereo_needed());
 
-  const auto states = compute_gate_states(demand);
+  const auto states = demand.gate_states();
   EXPECT_TRUE(gate(states, Control::DepthIn));
   EXPECT_FALSE(gate(states, Control::DepthRaw));
   EXPECT_TRUE(gate(states, Control::PointCloud));
@@ -262,10 +262,10 @@ TEST(Demand, ImuDoesNotNeedTheStereoSensors)
 {
   SubscriberCounts counts;
   counts.imu = 3;
-  const auto demand = compute_demand(counts);
-  EXPECT_FALSE(stereo_needed(demand));
+  const auto demand = Demand(counts);
+  EXPECT_FALSE(demand.stereo_needed());
 
-  const auto states = compute_gate_states(demand);
+  const auto states = demand.gate_states();
   EXPECT_TRUE(gate(states, Control::Imu));
   EXPECT_EQ(open_gates(states), 1U);
 }
@@ -278,7 +278,7 @@ TEST(Demand, EverythingSubscribed)
   }
   counts.pointcloud = 1;
   counts.imu = 1;
-  const auto states = compute_gate_states(compute_demand(counts));
+  const auto states = Demand(counts).gate_states();
 
   // 6 streams with compressed variant: 2 gates each, the 4 stereo ones also an input gate, plus the
   // depth input and output, the point cloud and the imu
@@ -287,8 +287,8 @@ TEST(Demand, EverythingSubscribed)
 
 TEST(Demand, TheGatesOfDifferentStreamsAreIndependent)
 {
-  const auto demand = compute_demand(subscribers(ImageStreamId::Left, {1, 0, 0}));
-  const auto states = compute_gate_states(demand);
+  const auto demand = Demand(subscribers(ImageStreamId::Left, {1, 0, 0}));
+  const auto states = demand.gate_states();
   EXPECT_FALSE(gate(states, Control::LeftRectIn));
   EXPECT_FALSE(gate(states, Control::RightIn));
   EXPECT_FALSE(gate(states, Control::DepthIn));

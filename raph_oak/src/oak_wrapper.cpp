@@ -376,7 +376,7 @@ std::shared_ptr<dai::Device> OakWrapper::connect_to_device()
   return device;
 }
 
-void OakWrapper::check_publishers() { apply_demand(compute_demand(count_subscribers())); }
+void OakWrapper::check_publishers() { apply_demand(Demand(count_subscribers())); }
 
 SubscriberCounts OakWrapper::count_subscribers() const
 {
@@ -395,13 +395,13 @@ SubscriberCounts OakWrapper::count_subscribers() const
 
 void OakWrapper::apply_demand(const Demand & demand)
 {
-  const auto wanted_gates = compute_gate_states(demand);
-  const bool depth_is_needed = depth_needed(demand);
+  const auto wanted_gates = demand.gate_states();
+  const bool depth_is_needed = demand.depth_needed();
 
   // Wake the sensors up before opening anything that depends on them and put them to sleep after
   // everything depending on them was closed
   const auto sensors = stereo_sensor_action(
-    stereo_streaming_, stereo_needed(demand), std::chrono::steady_clock::now(), stereo_stopped_at_,
+    stereo_streaming_, demand.stereo_needed(), std::chrono::steady_clock::now(), stereo_stopped_at_,
     StereoRestartDelay);
   if (sensors == StereoSensorAction::Start) {
     set_stereo_streaming(true);

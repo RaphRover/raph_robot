@@ -213,7 +213,7 @@ source, so correct them if the actual reasons differ.
 |---|---|
 | `streams.hpp` | Table of the image streams (`ImageStreams`): topics, frame ids, gates and how the camera info is made. The publishers, the queue callbacks and the subscriber based activation are all loops over it |
 | `control.hpp` | `Control`, a target of the control channel, with its log name and properties |
-| `demand.hpp/.cpp` | Pure functions: subscriber counts → what is needed → gate states, stereo sensor start/stop (with the restart delay), laser intensity, point cloud rate. No DepthAI, no ROS |
+| `demand.hpp/.cpp` | `Demand`: subscriber counts → what each stream needs → gate states; plus the stereo sensor start/stop (with the restart delay), laser intensity and point cloud rate. No DepthAI, no ROS |
 | `pipeline.hpp/.cpp` | Builds the DepthAI pipeline and defines the control channel |
 | `camera_info.hpp/.cpp` | Camera info conversions |
 | `oak_wrapper.hpp/.cpp` | The node: connects to the camera, counts subscribers, applies the decisions of `demand` and publishes |
