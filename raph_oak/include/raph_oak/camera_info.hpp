@@ -20,11 +20,23 @@
 
 #pragma once
 
+#include <cstdint>
+
+#include "depthai/common/CameraBoardSocket.hpp"
 #include "depthai/common/ImgTransformations.hpp"
+#include "depthai/device/CalibrationHandler.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
 
 namespace raph_oak
 {
+
+// Camera info of a camera from its factory calibration, at the given resolution: the intrinsics
+// and the first 8 distortion coefficients (rational polynomial model). For the cameras of the
+// stereo pair also the rectification rotation, and for the left one of the calibration (the
+// first camera of the pair) the baseline in P, as in depthai_bridge.
+sensor_msgs::msg::CameraInfo calibration_to_camera_info(
+  const dai::CalibrationHandler & calibration, dai::CameraBoardSocket socket, uint32_t width,
+  uint32_t height);
 
 // Calculate the camera info for the images rotated by 180 degrees
 sensor_msgs::msg::CameraInfo get_rotated_camera_info(

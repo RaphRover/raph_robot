@@ -38,12 +38,12 @@
 #include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
-#include "depthai_bridge/ImuConverter.hpp"
-#include "depthai_bridge/PointCloudConverter.hpp"
 
 // ROS
 #include "raph_oak/control.hpp"
+#include "raph_oak/conversions.hpp"
 #include "raph_oak/demand.hpp"
+#include "raph_oak/frame_clock.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/pipeline.hpp"
 #include "raph_oak/streams.hpp"
@@ -91,8 +91,11 @@ private:
   // ROS Services
   std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> capture_still_srv_;
 
-  std::shared_ptr<depthai_bridge::ImuConverter> imu_converter_;
-  std::shared_ptr<depthai_bridge::PointCloudConverter> pointcloud_converter_;
+  // Converts the host timestamps of the DepthAI messages to ROS time
+  FrameClock frame_clock_;
+  // TODO(fszkudlarek): make sure the frame ids work under a namespace
+  ImuConverter imu_converter_{"oak_imu_frame", 0.001, 0.00001};
+  PointCloudConverter pointcloud_converter_{"oak_stereo_camera_optical_frame"};
 
   // Last state sent to each control target (true = gate open), written by the check timer and read
   // by the queue callbacks
@@ -109,8 +112,6 @@ private:
   std::optional<dai::CalibrationHandler> calibration_handler_;
   sensor_msgs::msg::CameraInfo still_camera_info_;
 
-  std::chrono::time_point<std::chrono::steady_clock> steady_base_time_;
-  rclcpp::Time ros_base_time_;
   std::shared_ptr<rclcpp::TimerBase> check_timer_;
 
   ParamListener param_listener_;

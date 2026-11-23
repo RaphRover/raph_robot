@@ -62,10 +62,6 @@
 #include "XLink/XLinkPublicDefines.h"
 
 // ROS
-#include "depthai_bridge/ImageConverter.hpp"
-#include "depthai_bridge/ImuConverter.hpp"
-#include "depthai_bridge/PointCloudConverter.hpp"
-#include "depthai_bridge/depthaiUtility.hpp"
 #include "raph_oak/camera_info.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/parameters.hpp"
@@ -100,24 +96,14 @@ static constexpr std::chrono::milliseconds StillCaptureTimeout{2000};
 static constexpr std::chrono::milliseconds StereoRestartDelay{3000};
 
 OakWrapper::OakWrapper(rclcpp::NodeOptions options)
-: Node("oak_wrapper", options),
-  steady_base_time_(std::chrono::steady_clock::now()),
-  param_listener_(get_node_parameters_interface())
+: Node("oak_wrapper", options), param_listener_(get_node_parameters_interface())
 {
-  ros_base_time_ = rclcpp::Clock().now();
   update_parameters();
   parameter_callback_handle_ = this->add_post_set_parameters_callback(
     std::bind(&OakWrapper::post_set_parameters_callback, this, std::placeholders::_1));
 
   this->create_ros_publishers();
   this->create_ros_services();
-
-  // TODO(fszkudlarek): make sure this works under namespace
-  imu_converter_ = std::make_shared<depthai_bridge::ImuConverter>(
-    "oak_imu_frame", depthai_bridge::ImuSyncMethod::LINEAR_INTERPOLATE_GYRO, 0.001, 0.00001);
-
-  pointcloud_converter_ =
-    std::make_shared<depthai_bridge::PointCloudConverter>("oak_stereo_camera_optical_frame");
 
   check_timer_ = create_wall_timer(100ms, std::bind(&OakWrapper::check_timer_callback, this));
 }
@@ -161,11 +147,8 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
 {
   calibration_handler_ = calibration_handler;
 
-  // Only used to get camera info matrices
-  auto img_converter = depthai_bridge::ImageConverter("oak_rgb_camera_optical_frame", false);
-
-  const auto camera_info = [&](dai::CameraBoardSocket socket, int width, int height) {
-    return img_converter.calibrationToCameraInfo(calibration_handler, socket, width, height);
+  const auto camera_info = [&](dai::CameraBoardSocket socket, uint32_t width, uint32_t height) {
+    return calibration_to_camera_info(calibration_handler, socket, width, height);
   };
   const auto publisher_calibration_info =
     [this](ImageStreamId id) -> sensor_msgs::msg::CameraInfo & {
@@ -176,12 +159,12 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   // right camera is the left one and the other way round
   const auto left_socket = calibration_handler.getStereoRightCameraId();
   const auto right_socket = calibration_handler.getStereoLeftCameraId();
-  const int mono_width = static_cast<int>(params_.mono.width);
-  const int mono_height = static_cast<int>(params_.mono.height);
+  const auto mono_width = static_cast<uint32_t>(params_.mono.width);
+  const auto mono_height = static_cast<uint32_t>(params_.mono.height);
 
   publisher_calibration_info(ImageStreamId::Rgb) = get_rotated_camera_info(camera_info(
-    dai::CameraBoardSocket::CAM_A, static_cast<int>(params_.rgb.width),
-    static_cast<int>(params_.rgb.height)));
+    dai::CameraBoardSocket::CAM_A, static_cast<uint32_t>(params_.rgb.width),
+    static_cast<uint32_t>(params_.rgb.height)));
   publisher_calibration_info(ImageStreamId::Left) =
     get_rotated_camera_info(camera_info(left_socket, mono_width, mono_height));
   publisher_calibration_info(ImageStreamId::LeftRect) =
@@ -220,13 +203,9 @@ const sensor_msgs::msg::CameraInfo & OakWrapper::get_still_camera_info(
     return still_camera_info_;
   }
 
-  // Only used to get camera info matrices
-  auto img_converter = depthai_bridge::ImageConverter("oak_rgb_camera_optical_frame", false);
-
   // Same sensor as the RGB stream, but at the full resolution the still frame came in at
-  still_camera_info_ = get_rotated_camera_info(img_converter.calibrationToCameraInfo(
-    *calibration_handler_, dai::CameraBoardSocket::CAM_A, static_cast<int>(width),
-    static_cast<int>(height)));
+  still_camera_info_ = get_rotated_camera_info(calibration_to_camera_info(
+    *calibration_handler_, dai::CameraBoardSocket::CAM_A, width, height));
   still_camera_info_.header.frame_id = "oak_rgb_camera_optical_frame";
 
   return still_camera_info_;
@@ -559,8 +538,7 @@ void OakWrapper::publish_image(ImageStreamId id, const std::shared_ptr<dai::ADat
                         in_data->getTransformation(), in_data->getWidth(), in_data->getHeight(),
                         publisher_set.calibration_info, spec.rotated_at_sensor)
                     : publisher_set.calibration_info;
-  cam_info.header.stamp =
-    depthai_bridge::getFrameTime(ros_base_time_, steady_base_time_, in_data->getTimestamp());
+  cam_info.header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
 
   auto image = to_ros_image(in_data, cam_info.header);
   if (!image) {
@@ -621,8 +599,7 @@ void OakWrapper::publish_compressed_image(
 
   const auto & spec = get_image_stream_spec(id);
   const auto & publisher_set = image_publisher_sets_[get_image_index(id)];
-  const auto stamp =
-    depthai_bridge::getFrameTime(ros_base_time_, steady_base_time_, in_data->getTimestamp());
+  const auto stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
 
   // The raw image publishes the camera info while the raw gate is open. Otherwise the compressed
   // stream (which is also opened for camera info subscribers) takes over.
@@ -657,16 +634,7 @@ void OakWrapper::publish_imu(const std::shared_ptr<dai::ADatatype> & message)
     return;
   }
 
-  std::deque<sensor_msgs::msg::Imu> op_msgs;
-  imu_converter_->toRosMsg(in_data, op_msgs);
-
-  while (!op_msgs.empty()) {
-    sensor_msgs::msg::Imu imu = op_msgs.front();
-    op_msgs.pop_front();
-
-    // Mark the orientation as unknown
-    imu.orientation_covariance[0] = -1.0;
-
+  for (const auto & imu : imu_converter_.convert(*in_data, frame_clock_)) {
     imu_pub_->publish(imu);
   }
 }
@@ -679,15 +647,7 @@ void OakWrapper::publish_pointcloud(const std::shared_ptr<dai::ADatatype> & mess
     return;
   }
 
-  std::deque<sensor_msgs::msg::PointCloud2> op_msgs;
-  pointcloud_converter_->toRosMsg(in_data, op_msgs);
-
-  while (!op_msgs.empty()) {
-    const sensor_msgs::msg::PointCloud2 pointcloud = op_msgs.front();
-    op_msgs.pop_front();
-
-    pointcloud_pub_->publish(pointcloud);
-  }
+  pointcloud_pub_->publish(pointcloud_converter_.convert(*in_data, frame_clock_));
 }
 
 void OakWrapper::capture_still(
@@ -719,8 +679,7 @@ void OakWrapper::capture_still(
 
   sensor_msgs::msg::CameraInfo cam_info =
     get_still_camera_info(in_data->getWidth(), in_data->getHeight());
-  cam_info.header.stamp =
-    depthai_bridge::getFrameTime(ros_base_time_, steady_base_time_, in_data->getTimestamp());
+  cam_info.header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
 
   auto image = to_ros_image(in_data, cam_info.header);
   if (!image) {

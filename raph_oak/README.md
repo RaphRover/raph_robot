@@ -1,7 +1,7 @@
 # raph_oak <!-- omit in toc -->
 
 ROS 2 driver for the OAK-D Pro W (RVC2) camera on the Raph Rover. It is a composable node,
-`raph_oak::OakWrapper`, built on DepthAI v3 and the `depthai_bridge_v3` converters.
+`raph_oak::OakWrapper`, built directly on DepthAI v3.
 
 The node builds a fixed DepthAI pipeline on the camera and publishes only what somebody
 subscribes to: unused streams are neither computed on the camera nor sent over USB.
@@ -215,9 +215,11 @@ source, so correct them if the actual reasons differ.
 | `control.hpp` | `Control`, a target of the control channel, with its log name and properties |
 | `demand.hpp/.cpp` | `Demand`: subscriber counts → what each stream needs → gate states; plus the stereo sensor start/stop (with the restart delay), laser intensity and point cloud rate. No DepthAI, no ROS |
 | `pipeline.hpp/.cpp` | Builds the DepthAI pipeline and defines the control channel |
-| `camera_info.hpp/.cpp` | Camera info conversions |
+| `camera_info.hpp/.cpp` | Camera info: from the factory calibration, for the 180° rotation, from the intrinsics of a rectified frame, scaled |
+| `conversions.hpp/.cpp` | `ImuConverter` (gyroscope interpolated at the accelerometer timestamps) and `PointCloudConverter` |
+| `frame_clock.hpp` | `FrameClock`: DepthAI host timestamps to ROS time |
 | `oak_wrapper.hpp/.cpp` | The node: connects to the camera, counts subscribers, applies the decisions of `demand` and publishes |
-| `test/test_demand.cpp` | Unit tests of the table and of `demand` (run with `colcon test --packages-select raph_oak`) |
+| `test/` | Unit tests, no camera needed (`colcon test --packages-select raph_oak`): `test_demand` for the stream table and `demand`, `test_conversions` for the camera info, IMU and point cloud conversions (camera info cases use numbers of a real OAK-D Pro W) |
 
 To add an image stream, add an entry to `ImageStreamId` and `ImageStreamSpecs`, the gates it uses to
 `Control::Value` (and `Control::name()`), and build its nodes with `make_image_queue_set` in `pipeline.cpp`.
