@@ -51,8 +51,13 @@ enum class ImageStreamId : uint8_t
 
 constexpr std::size_t ImageStreamCount = static_cast<std::size_t>(ImageStreamId::Count);
 
-constexpr std::size_t get_image_index(ImageStreamId id) { return static_cast<std::size_t>(id); }
+constexpr std::size_t get_image_index(ImageStreamId stream_id)
+{
+  return static_cast<std::size_t>(stream_id);
+}
 
+// Stream specifications are intentionally public aggregates.
+// NOLINTBEGIN(misc-non-private-member-variables-in-classes)
 struct ImageStreamSpec
 {
   ImageStreamId id;
@@ -81,6 +86,7 @@ struct ImageStreamSpec
 
   constexpr bool has_compressed() const { return !enc_gate.is_none(); }
 };
+// NOLINTEND(misc-non-private-member-variables-in-classes)
 
 // Left is the physically right camera and the other way round, because the camera is mounted
 // upside down: see create_dai_pipeline()
@@ -110,9 +116,9 @@ inline constexpr std::array<ImageStreamSpec, ImageStreamCount> ImageStreamSpecs{
 }};
 // clang-format on
 
-constexpr const ImageStreamSpec & get_image_stream_spec(ImageStreamId id)
+constexpr const ImageStreamSpec & get_image_stream_spec(ImageStreamId stream_id)
 {
-  return ImageStreamSpecs[get_image_index(id)];
+  return ImageStreamSpecs[get_image_index(stream_id)];
 }
 
 }  // namespace raph_oak
