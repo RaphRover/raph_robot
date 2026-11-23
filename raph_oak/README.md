@@ -13,6 +13,7 @@ subscribes to: unused streams are neither computed on the camera nor sent over U
 - [Lazy activation](#lazy-activation)
   - [Measured effect](#measured-effect)
 - [Why not depthai\_ros\_driver](#why-not-depthai_ros_driver)
+- [Code structure](#code-structure)
 - [Editing the pipeline graph](#editing-the-pipeline-graph)
 
 ## Topics
@@ -205,6 +206,23 @@ and the commits after it) and in the source of the upstream driver:
 If one of these stops being true, for example upstream gaining on-camera lazy activation, this
 decision should be revisited. The motives above are reconstructed from the history and the
 source, so correct them if the actual reasons differ.
+
+## Code structure
+
+| File | Role |
+|---|---|
+| `streams.hpp` | Table of the image streams (`ImageStreams`): topics, frame ids, gates and how the camera info is made. The publishers, the queue callbacks and the subscriber based activation are all loops over it |
+| `control.hpp` | The `Control` targets of the control channel and their log names |
+| `demand.hpp/.cpp` | Pure functions: subscriber counts → what is needed → gate states, stereo sensor start/stop (with the restart delay), laser intensity, point cloud rate. No DepthAI, no ROS |
+| `pipeline.hpp/.cpp` | Builds the DepthAI pipeline and defines the control channel |
+| `camera_info.hpp/.cpp` | Camera info conversions |
+| `oak_wrapper.hpp/.cpp` | The node: connects to the camera, counts subscribers, applies the decisions of `demand` and publishes |
+| `test/test_demand.cpp` | Unit tests of the table and of `demand` (run with `colcon test --packages-select raph_oak`) |
+
+To add an image stream, add an entry to `ImageStreamId` and `ImageStreams`, the gates it uses to
+`Control` (and `control_name`), and build its nodes with `make_image_queues` in `pipeline.cpp`.
+Nothing else in the node changes: the topics, the publishers, the callbacks and the activation
+follow from the table. Add the stream to `doc/pipeline.dot` as well.
 
 ## Editing the pipeline graph
 

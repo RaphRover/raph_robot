@@ -23,6 +23,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -41,8 +42,11 @@
 #include "depthai_bridge/PointCloudConverter.hpp"
 
 // ROS
+#include "raph_oak/control.hpp"
+#include "raph_oak/demand.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/pipeline.hpp"
+#include "raph_oak/streams.hpp"
 #include "rclcpp/node.hpp"
 #include "rclcpp/node_options.hpp"
 #include "rclcpp/service.hpp"
@@ -66,27 +70,19 @@ private:
   std::shared_ptr<dai::Device> device_;
   PipelineDetails pipeline_details_;
 
-  // ROS Publishers
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> rgb_img_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> rgb_cam_info_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> rgb_compressed_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> rgb_rect_img_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> rgb_rect_cam_info_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> rgb_rect_compressed_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> left_img_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> left_cam_info_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> left_compressed_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> left_rect_img_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> left_rect_cam_info_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> left_rect_compressed_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> right_img_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> right_cam_info_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> right_compressed_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> right_rect_img_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> right_rect_cam_info_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> right_rect_compressed_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> stereo_depth_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> stereo_cam_info_pub_;
+  // ROS Publishers of an image stream, see ImageStreamSpecs
+  struct ImagePublisherSet
+  {
+    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> image_pub;
+    /// Empty if the stream has no compressed variant
+    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> compressed_pub;
+    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> camera_info_pub;
+    /// Camera info from the factory calibration. The streams with rectified images only use it for
+    /// the rectification rotation and the baseline, see get_rectified_camera_info()
+    sensor_msgs::msg::CameraInfo calibration_info;
+  };
+  std::array<ImagePublisherSet, ImageStreamCount> image_publisher_sets_;
+
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Imu>> imu_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>> pointcloud_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> still_image_pub_;
@@ -105,14 +101,6 @@ private:
   bool stereo_streaming_{true};
   // When the stereo sensors were last stopped, a start right after is lost by the camera
   std::chrono::steady_clock::time_point stereo_stopped_at_;
-
-  // Camera info for callbacks
-  sensor_msgs::msg::CameraInfo rgb_camera_info_;
-  sensor_msgs::msg::CameraInfo left_camera_info_;
-  sensor_msgs::msg::CameraInfo left_rect_camera_info_;
-  sensor_msgs::msg::CameraInfo right_camera_info_;
-  sensor_msgs::msg::CameraInfo right_rect_camera_info_;
-  sensor_msgs::msg::CameraInfo stereo_camera_info_;
 
   // The still image resolution is only known once the first frame arrives, so its camera info is
   // built on demand and cached here, together with the calibration it was derived from.
@@ -143,35 +131,19 @@ private:
   void release_device();
   std::shared_ptr<dai::Device> connect_to_device();
   void check_publishers();
+  SubscriberCounts count_subscribers() const;
+  void apply_demand(const Demand & demand);
   void reset_control_state();
-  void set_gate(
-    Control gate, bool should_be_open, const std::string & stream_name, bool quiet, int fps = -1);
+  void set_gate(Control gate, bool should_be_open, int fps = -1);
   void set_stereo_streaming(bool streaming);
   bool is_gate_open(Control gate) const;
   void post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters);
   void update_parameters();
   void send_parameters() const;
-  void publish_image(
-    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> img_pub,
-    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
-    sensor_msgs::msg::CameraInfo cam_info, const std::shared_ptr<dai::ADatatype> & message);
+  void publish_image(ImageStreamId id, const std::shared_ptr<dai::ADatatype> & message);
   std::unique_ptr<sensor_msgs::msg::Image> to_ros_image(
     const std::shared_ptr<dai::ImgFrame> & in_data, const std_msgs::msg::Header & header) const;
-  void publish_compressed_image(
-    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
-    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
-    sensor_msgs::msg::CameraInfo cam_info, Control raw_gate, const std::string & frame_id,
-    const std::shared_ptr<dai::ADatatype> & message);
-  void publish_rectified_image(
-    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> img_pub,
-    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
-    const sensor_msgs::msg::CameraInfo & calibration_info, bool rotated_at_sensor,
-    const std::shared_ptr<dai::ADatatype> & message);
-  void publish_rectified_compressed_image(
-    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> img_pub,
-    std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> cam_info_pub,
-    const sensor_msgs::msg::CameraInfo & calibration_info, bool rotated_at_sensor, Control raw_gate,
-    const std::string & frame_id, const std::shared_ptr<dai::ADatatype> & message);
+  void publish_compressed_image(ImageStreamId id, const std::shared_ptr<dai::ADatatype> & message);
   void publish_imu(const std::shared_ptr<dai::ADatatype> & message);
   void publish_pointcloud(const std::shared_ptr<dai::ADatatype> & message);
   void capture_still(

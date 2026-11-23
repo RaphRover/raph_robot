@@ -17,6 +17,7 @@ generate_parameter_library(
 
 add_library(raph_oak SHARED
   src/camera_info.cpp
+  src/demand.cpp
   src/oak_wrapper.cpp
   src/parameters.cpp
   src/pipeline.cpp
@@ -63,6 +64,11 @@ if(BUILD_TESTING)
   endif()
 
   ament_lint_auto_find_test_dependencies()
+
+  # The logic that decides what the camera has to do does not depend on DepthAI or ROS
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_demand test/test_demand.cpp src/demand.cpp)
+  target_include_directories(test_demand PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 endif()
 
 ament_package()
