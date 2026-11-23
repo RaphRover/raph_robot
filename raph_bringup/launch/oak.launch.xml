@@ -1,5 +1,9 @@
 <launch version="0.1.1">
 
+  <arg name="tf_frame_prefix"
+    default=""
+    description="The prefix added to each published TF frame id" />
+
   <node_container namespace=""
     name="oak_container"
     pkg="rclcpp_components"
@@ -9,6 +13,8 @@
       pkg="raph_oak"
       plugin="raph_oak::OakWrapper">
       <extra_arg name="use_intra_process_comms" value="true" />
+      <param name="tf_frame_prefix" value="$(var tf_frame_prefix)" />
+      <param from="$(find-pkg-share raph_bringup)/config/oak.yaml" />
     </composable_node>
     <composable_node namespace="oak/stereo"
       name="compressed_republisher"
