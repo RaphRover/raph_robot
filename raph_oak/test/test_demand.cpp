@@ -353,18 +353,5 @@ TEST(Laser, OnlyWhileDepthIsNeededWithLazyActivation)
   EXPECT_FLOAT_EQ(laser_intensity(true, true, 0.3), 0.3F);
 }
 
-TEST(PointCloudRate, RoundsToWholeFrames)
-{
-  EXPECT_EQ(pointcloud_rate(5.0), 5);
-  EXPECT_EQ(pointcloud_rate(4.6), 5);
-  EXPECT_EQ(pointcloud_rate(4.4), 4);
-}
-
-TEST(PointCloudRate, IsAtLeastOne)
-{
-  EXPECT_EQ(pointcloud_rate(0.2), 1);
-  EXPECT_EQ(pointcloud_rate(-3.0), 1);
-}
-
 }  // namespace
 }  // namespace raph_oak

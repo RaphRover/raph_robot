@@ -22,7 +22,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <cstddef>
 
 #include "raph_oak/control.hpp"
@@ -103,7 +102,5 @@ float laser_intensity(bool lazy, bool depth_is_needed, double configured_intensi
 {
   return !lazy || depth_is_needed ? static_cast<float>(configured_intensity) : 0.0F;
 }
-
-int pointcloud_rate(double fps) { return std::max(1, static_cast<int>(std::lround(fps))); }
 
 }  // namespace raph_oak

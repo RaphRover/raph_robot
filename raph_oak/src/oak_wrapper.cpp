@@ -399,7 +399,7 @@ void OakWrapper::apply_demand(const Demand & demand)
   }
 
   // The point cloud gate limits the rate of the depth frames fed to the point cloud node
-  const int pointcloud_fps = pointcloud_rate(params_.pointcloud.fps);
+  const int pointcloud_fps = static_cast<int>(params_.pointcloud.max_rate);
   for (const auto gate : Control::all()) {
     if (gate.follows_demand()) {
       set_gate(gate, wanted_gates.is_open(gate), gate == Control::PointCloud ? pointcloud_fps : -1);

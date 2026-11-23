@@ -131,7 +131,4 @@ StereoSensorAction stereo_sensor_action(
 /// while the depth is needed
 float laser_intensity(bool lazy, bool depth_is_needed, double configured_intensity);
 
-/// Whole frames per second of the point cloud gate, at least 1
-int pointcloud_rate(double fps);
-
 }  // namespace raph_oak

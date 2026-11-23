@@ -14,7 +14,7 @@
       min_distance: 0.0
       max_distance: 10.0
     pointcloud:
-      fps: 5.0
+      max_rate: 5
     mono:
       width: 1280
       height: 800
