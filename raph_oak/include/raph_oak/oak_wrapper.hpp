@@ -96,7 +96,9 @@ private:
 
   // Last state sent to each control target (true = gate open), written by the check timer and read
   // by the queue callbacks
-  std::array<std::atomic<bool>, ControlCount> control_state_{};
+  std::array<std::atomic<bool>, Control::Count> control_state_{};
+  // Rate limit last sent to each open gate, -1 for none. Only used by the check timer
+  std::array<int, Control::Count> gate_fps_{};
   // The stereo sensors are paused while no stereo output is needed
   bool stereo_streaming_{true};
   // When the stereo sensors were last stopped, a start right after is lost by the camera
@@ -119,8 +121,6 @@ private:
 
   // Last IR laser dot projector intensity sent to the device, empty if unknown
   std::optional<float> laser_intensity_;
-  // Rate limit last sent to the point cloud gate, -1 if none
-  int pointcloud_fps_{-1};
 
   void run_pipeline();
   void create_ros_publishers();

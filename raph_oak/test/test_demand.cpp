@@ -43,13 +43,13 @@ SubscriberCounts subscribers(ImageStreamId id, ImageSubscriberCounts counts)
   return result;
 }
 
-bool gate(const GateStates & states, Control control) { return states[control_index(control)]; }
+bool gate(const GateStates & states, Control control) { return states.is_open(control); }
 
 std::size_t open_gates(const GateStates & states)
 {
   std::size_t count = 0;
-  for (std::size_t i = 0; i < ControlCount; ++i) {
-    if (is_demand_gate(static_cast<Control>(i)) && states[i]) {
+  for (const auto control : Control::all()) {
+    if (control.follows_demand() && states.is_open(control)) {
       ++count;
     }
   }
@@ -73,12 +73,12 @@ TEST(StreamTable, NamesTopicsAndGatesAreUnique)
     EXPECT_TRUE(topics.insert(spec.topic).second) << spec.topic;
     EXPECT_TRUE(topics.insert(spec.info_topic).second) << spec.info_topic;
 
-    EXPECT_NE(spec.raw_gate, NoControl) << spec.name;
+    EXPECT_FALSE(spec.raw_gate.is_none()) << spec.name;
     EXPECT_TRUE(gates.insert(spec.raw_gate).second) << spec.name;
-    if (spec.enc_gate != NoControl) {
+    if (!spec.enc_gate.is_none()) {
       EXPECT_TRUE(gates.insert(spec.enc_gate).second) << spec.name;
     }
-    if (spec.in_gate != NoControl) {
+    if (!spec.in_gate.is_none()) {
       EXPECT_TRUE(gates.insert(spec.in_gate).second) << spec.name;
     }
   }
@@ -95,15 +95,34 @@ TEST(StreamTable, StereoStreamsHaveAnInputGate)
 {
   // The stereo outputs are rotated by an ImageManip, which is what the input gate keeps idle
   for (const auto & spec : ImageStreamSpecs) {
-    EXPECT_EQ(spec.stereo, spec.in_gate != NoControl) << spec.name;
+    EXPECT_EQ(spec.stereo, !spec.in_gate.is_none()) << spec.name;
   }
 }
 
 TEST(Control, EveryTargetHasAName)
 {
-  for (std::size_t i = 0; i < ControlCount; ++i) {
-    EXPECT_STRNE(control_name(static_cast<Control>(i)), "unknown") << i;
+  for (const auto control : Control::all()) {
+    EXPECT_STRNE(control.name(), "none") << control.index();
   }
+}
+
+TEST(Control, AllListsEveryTargetInOrder)
+{
+  const auto all = Control::all();
+  for (std::size_t i = 0; i < Control::Count; ++i) {
+    EXPECT_EQ(all[i].index(), i);
+  }
+  EXPECT_EQ(Control(Control::None).index(), Control::Count);
+}
+
+TEST(Control, OnlyTheGatesFollowTheDemand)
+{
+  EXPECT_TRUE(Control(Control::LeftRaw).follows_demand());
+  EXPECT_TRUE(Control(Control::PointCloud).follows_demand());
+  EXPECT_FALSE(Control(Control::Still).follows_demand());
+  EXPECT_FALSE(Control(Control::CameraB).follows_demand());
+  EXPECT_FALSE(Control(Control::CameraC).follows_demand());
+  EXPECT_FALSE(Control(Control::None).follows_demand());
 }
 
 TEST(ImageDemand, NothingWithoutSubscribers)

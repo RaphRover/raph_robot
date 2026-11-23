@@ -66,9 +66,17 @@ struct Demand
   bool imu{false};
 };
 
-/// Which gates are open, indexed by Control. Only the gates that follow the demand are meaningful,
-/// see is_demand_gate()
-using GateStates = std::array<bool, ControlCount>;
+/// Which gates are open. Only the gates that follow the demand are meaningful, see
+/// Control::follows_demand()
+class GateStates
+{
+public:
+  bool is_open(Control gate) const { return open_[gate.index()]; }
+  void set(Control gate, bool open) { open_[gate.index()] = open; }
+
+private:
+  std::array<bool, Control::Count> open_{};
+};
 
 enum class StereoSensorAction
 {
@@ -90,13 +98,6 @@ bool depth_needed(const Demand & demand);
 bool stereo_needed(const Demand & demand);
 
 GateStates compute_gate_states(const Demand & demand);
-
-/// True for the control targets that follow the demand. The still image gate is opened by the
-/// service and the sensors are handled by stereo_sensor_action
-constexpr bool is_demand_gate(Control control)
-{
-  return control != Control::Still && control != Control::CameraB && control != Control::CameraC;
-}
 
 /**
  * Decide whether the stereo sensors have to be started or stopped.

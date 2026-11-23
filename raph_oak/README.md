@@ -212,7 +212,7 @@ source, so correct them if the actual reasons differ.
 | File | Role |
 |---|---|
 | `streams.hpp` | Table of the image streams (`ImageStreams`): topics, frame ids, gates and how the camera info is made. The publishers, the queue callbacks and the subscriber based activation are all loops over it |
-| `control.hpp` | The `Control` targets of the control channel and their log names |
+| `control.hpp` | `Control`, a target of the control channel, with its log name and properties |
 | `demand.hpp/.cpp` | Pure functions: subscriber counts → what is needed → gate states, stereo sensor start/stop (with the restart delay), laser intensity, point cloud rate. No DepthAI, no ROS |
 | `pipeline.hpp/.cpp` | Builds the DepthAI pipeline and defines the control channel |
 | `camera_info.hpp/.cpp` | Camera info conversions |
@@ -220,7 +220,7 @@ source, so correct them if the actual reasons differ.
 | `test/test_demand.cpp` | Unit tests of the table and of `demand` (run with `colcon test --packages-select raph_oak`) |
 
 To add an image stream, add an entry to `ImageStreamId` and `ImageStreams`, the gates it uses to
-`Control` (and `control_name`), and build its nodes with `make_image_queues` in `pipeline.cpp`.
+`Control::Value` (and `Control::name()`), and build its nodes with `make_image_queues` in `pipeline.cpp`.
 Nothing else in the node changes: the topics, the publishers, the callbacks and the activation
 follow from the table. Add the stream to `doc/pipeline.dot` as well.
 

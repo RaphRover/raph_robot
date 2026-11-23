@@ -20,14 +20,16 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 
 namespace raph_oak
 {
 
 /**
- * Targets of the single device control channel.
+ * A target of the single device control channel.
  *
  * All Gate nodes and the stereo cameras are controlled through one XLink input stream: the host
  * sends the target id as a one byte dai::Buffer immediately followed by the actual control message
@@ -40,112 +42,152 @@ namespace raph_oak
  *  - *Raw gates sit in front of the XLinkOut of the raw image,
  *  - *Enc gates sit in front of the JPEG encoder.
  *
+ * The targets are written like enum values (Control::RgbRaw) and converted implicitly, so they can
+ * be compared and used in a switch.
+ *
  * This header does not depend on DepthAI, so that the logic using it can be unit tested.
  */
-enum class Control : uint8_t
+class Control
 {
-  RgbRaw,
-  RgbEnc,
-  RgbRectRaw,
-  RgbRectEnc,
-  DepthIn,
-  DepthRaw,
-  PointCloud,
-  LeftIn,
-  LeftRaw,
-  LeftEnc,
-  LeftRectIn,
-  LeftRectRaw,
-  LeftRectEnc,
-  RightIn,
-  RightRaw,
-  RightEnc,
-  RightRectIn,
-  RightRectRaw,
-  RightRectEnc,
-  Imu,
-  Still,
-  CameraB,  // left stereo sensor (CameraControl: start/stop streaming)
-  CameraC,  // right stereo sensor (CameraControl: start/stop streaming)
-  Count
+public:
+  enum Value : uint8_t
+  {
+    RgbRaw,
+    RgbEnc,
+    RgbRectRaw,
+    RgbRectEnc,
+    DepthIn,
+    DepthRaw,
+    PointCloud,
+    LeftIn,
+    LeftRaw,
+    LeftEnc,
+    LeftRectIn,
+    LeftRectRaw,
+    LeftRectEnc,
+    RightIn,
+    RightRaw,
+    RightEnc,
+    RightRectIn,
+    RightRectRaw,
+    RightRectEnc,
+    Imu,
+    Still,
+    CameraB,  // left stereo sensor (CameraControl: start/stop streaming)
+    CameraC,  // right stereo sensor (CameraControl: start/stop streaming)
+    /// No target, where a stream does not have one of its gates
+    None
+  };
+
+  /// Number of targets, None excluded
+  static constexpr std::size_t Count = None;
+
+  // Implicit on purpose: Control::RgbRaw is a Control
+  constexpr Control(Value value)  // NOLINT(google-explicit-constructor)
+  : value_(value)
+  {
+  }
+
+  // Implicit on purpose: comparisons and switch statements work on the value
+  constexpr operator Value() const { return value_; }  // NOLINT(google-explicit-constructor)
+
+  /// All targets in order, None excluded
+  static constexpr std::array<Control, Count> all()
+  {
+    return all(std::make_index_sequence<Count>{});
+  }
+
+  /// Index in arrays of size Count and the id sent over the control channel
+  constexpr std::size_t index() const { return static_cast<std::size_t>(value_); }
+
+  constexpr bool is_none() const { return value_ == None; }
+
+  /// Name used in logs
+  constexpr const char * name() const
+  {
+    switch (value_) {
+      case RgbRaw:
+        return "rgb";
+      case RgbEnc:
+        return "rgb compressed";
+      case RgbRectRaw:
+        return "rgb_rect";
+      case RgbRectEnc:
+        return "rgb_rect compressed";
+      case DepthIn:
+        return "depth input";
+      case DepthRaw:
+        return "depth";
+      case PointCloud:
+        return "pointcloud";
+      case LeftIn:
+        return "left input";
+      case LeftRaw:
+        return "left";
+      case LeftEnc:
+        return "left compressed";
+      case LeftRectIn:
+        return "left_rect input";
+      case LeftRectRaw:
+        return "left_rect";
+      case LeftRectEnc:
+        return "left_rect compressed";
+      case RightIn:
+        return "right input";
+      case RightRaw:
+        return "right";
+      case RightEnc:
+        return "right compressed";
+      case RightRectIn:
+        return "right_rect input";
+      case RightRectRaw:
+        return "right_rect";
+      case RightRectEnc:
+        return "right_rect compressed";
+      case Imu:
+        return "imu";
+      case Still:
+        return "still image";
+      case CameraB:
+        return "camera B";
+      case CameraC:
+        return "camera C";
+      case None:
+        break;
+    }
+    return "none";
+  }
+
+  /// The input gates of the image processing are opened and closed too often to log them as info
+  constexpr bool is_internal() const
+  {
+    switch (value_) {
+      case DepthIn:
+      case LeftIn:
+      case LeftRectIn:
+      case RightIn:
+      case RightRectIn:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /// A gate that follows the subscribers. The still image gate is opened by the service and the
+  /// sensors are started and stopped separately
+  constexpr bool follows_demand() const
+  {
+    return value_ != Still && value_ != CameraB && value_ != CameraC && value_ != None;
+  }
+
+private:
+  template <std::size_t... Indices>
+  static constexpr std::array<Control, Count> all(std::index_sequence<Indices...> /*indices*/)
+  {
+    return {Control(static_cast<Value>(Indices))...};
+  }
+
+  Value value_;
 };
-
-constexpr std::size_t ControlCount = static_cast<std::size_t>(Control::Count);
-
-/// Marks "no gate" where a stream does not have one of its gates
-constexpr Control NoControl = Control::Count;
-
-constexpr std::size_t control_index(Control control) { return static_cast<std::size_t>(control); }
-
-/// Name used in logs
-constexpr const char * control_name(Control control)
-{
-  switch (control) {
-    case Control::RgbRaw:
-      return "rgb";
-    case Control::RgbEnc:
-      return "rgb compressed";
-    case Control::RgbRectRaw:
-      return "rgb_rect";
-    case Control::RgbRectEnc:
-      return "rgb_rect compressed";
-    case Control::DepthIn:
-      return "depth input";
-    case Control::DepthRaw:
-      return "depth";
-    case Control::PointCloud:
-      return "pointcloud";
-    case Control::LeftIn:
-      return "left input";
-    case Control::LeftRaw:
-      return "left";
-    case Control::LeftEnc:
-      return "left compressed";
-    case Control::LeftRectIn:
-      return "left_rect input";
-    case Control::LeftRectRaw:
-      return "left_rect";
-    case Control::LeftRectEnc:
-      return "left_rect compressed";
-    case Control::RightIn:
-      return "right input";
-    case Control::RightRaw:
-      return "right";
-    case Control::RightEnc:
-      return "right compressed";
-    case Control::RightRectIn:
-      return "right_rect input";
-    case Control::RightRectRaw:
-      return "right_rect";
-    case Control::RightRectEnc:
-      return "right_rect compressed";
-    case Control::Imu:
-      return "imu";
-    case Control::Still:
-      return "still image";
-    case Control::CameraB:
-      return "camera B";
-    case Control::CameraC:
-      return "camera C";
-    case Control::Count:
-      break;
-  }
-  return "unknown";
-}
-
-/// The input gates of the image processing are opened and closed too often to log them as info
-constexpr bool control_is_internal(Control control)
-{
-  switch (control) {
-    case Control::DepthIn:
-    case Control::LeftIn:
-    case Control::LeftRectIn:
-    case Control::RightIn:
-    case Control::RightRectIn:
-      return true;
-    default:
-      return false;
-  }
-}
 
 }  // namespace raph_oak

@@ -29,6 +29,7 @@
 #include <exception>
 #include <functional>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -303,7 +304,6 @@ void OakWrapper::release_device()
 
   // A new device starts with the laser off and every gate closed
   laser_intensity_.reset();
-  pointcloud_fps_ = -1;
   reset_control_state();
 }
 
@@ -395,7 +395,7 @@ SubscriberCounts OakWrapper::count_subscribers() const
 
 void OakWrapper::apply_demand(const Demand & demand)
 {
-  const auto gates = compute_gate_states(demand);
+  const auto wanted_gates = compute_gate_states(demand);
   const bool depth_is_needed = depth_needed(demand);
 
   // Wake the sensors up before opening anything that depends on them and put them to sleep after
@@ -407,21 +407,11 @@ void OakWrapper::apply_demand(const Demand & demand)
     set_stereo_streaming(true);
   }
 
-  // The point cloud gate limits the rate of the depth frames fed to the point cloud node. A changed
-  // rate is applied by opening the already open gate again.
+  // The point cloud gate limits the rate of the depth frames fed to the point cloud node
   const int pointcloud_fps = pointcloud_rate(params_.pointcloud.fps);
-  if (
-    gates[control_index(Control::PointCloud)] && is_gate_open(Control::PointCloud) &&
-    pointcloud_fps != pointcloud_fps_) {
-    send_control(
-      pipeline_details_, Control::PointCloud, dai::GateControl::openGate(-1, pointcloud_fps));
-  }
-  pointcloud_fps_ = pointcloud_fps;
-
-  for (std::size_t i = 0; i < ControlCount; ++i) {
-    const auto gate = static_cast<Control>(i);
-    if (is_demand_gate(gate)) {
-      set_gate(gate, gates[i], gate == Control::PointCloud ? pointcloud_fps : -1);
+  for (const auto gate : Control::all()) {
+    if (gate.follows_demand()) {
+      set_gate(gate, wanted_gates.is_open(gate), gate == Control::PointCloud ? pointcloud_fps : -1);
     }
   }
 
@@ -448,31 +438,46 @@ void OakWrapper::reset_control_state()
   for (auto & state : control_state_) {
     state = false;
   }
+  gate_fps_.fill(-1);
   // The stereo sensors stream after the pipeline was started
   stereo_streaming_ = true;
 }
 
-bool OakWrapper::is_gate_open(Control gate) const { return control_state_[control_index(gate)]; }
+bool OakWrapper::is_gate_open(Control gate) const { return control_state_[gate.index()]; }
 
 void OakWrapper::set_gate(Control gate, bool should_be_open, int fps)
 {
-  auto & is_open = control_state_[control_index(gate)];
-  if (should_be_open == is_open) {
+  auto & is_open = control_state_[gate.index()];
+  auto & sent_fps = gate_fps_[gate.index()];
+
+  // An open gate is opened again to apply a changed rate
+  const bool open_changed = should_be_open != is_open;
+  const bool fps_changed = should_be_open && fps != sent_fps;
+  if (!open_changed && !fps_changed) {
     return;
   }
 
-  const std::string action = should_be_open ? "Opening" : "Closing";
-  if (control_is_internal(gate)) {
-    RCLCPP_DEBUG_STREAM(
-      get_logger(), action << " gate for \"" << control_name(gate) << "\" stream");
+  std::ostringstream message;
+  if (open_changed) {
+    message << (should_be_open ? "Opening" : "Closing") << " gate for \"" << gate.name()
+            << "\" stream";
   } else {
-    RCLCPP_INFO_STREAM(get_logger(), action << " gate for \"" << control_name(gate) << "\" stream");
+    message << "Changing the rate of the gate for \"" << gate.name() << "\" stream";
+  }
+  if (should_be_open && fps > 0) {
+    message << " (" << fps << " fps)";
+  }
+  if (gate.is_internal()) {
+    RCLCPP_DEBUG_STREAM(get_logger(), message.str());
+  } else {
+    RCLCPP_INFO_STREAM(get_logger(), message.str());
   }
 
   auto gate_control = std::make_shared<dai::GateControl>(should_be_open, -1, fps);
   send_control(pipeline_details_, gate, gate_control);
 
   is_open = should_be_open;
+  sent_fps = should_be_open ? fps : -1;
 }
 
 void OakWrapper::set_stereo_streaming(bool streaming)
@@ -484,7 +489,7 @@ void OakWrapper::set_stereo_streaming(bool streaming)
   RCLCPP_INFO_STREAM(
     get_logger(), (streaming ? "Starting" : "Stopping") << " the stereo camera sensors");
 
-  for (const auto sensor : {Control::CameraB, Control::CameraC}) {
+  for (const Control sensor : {Control::CameraB, Control::CameraC}) {
     auto control = std::make_shared<dai::CameraControl>();
     if (streaming) {
       control->setStartStreaming();

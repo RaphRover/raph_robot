@@ -63,11 +63,11 @@ struct ImageStreamSpec
   const char * topic;
   const char * info_topic;
   const char * frame_id;
-  /// Gate in front of the ImageManip of the stream, NoControl if the stream has no ImageManip
+  /// Gate in front of the ImageManip of the stream, Control::None if the stream has no ImageManip
   Control in_gate;
   /// Gate in front of the raw image
   Control raw_gate;
-  /// Gate in front of the JPEG encoder, NoControl if the stream has no compressed variant
+  /// Gate in front of the JPEG encoder, Control::None if the stream has no compressed variant
   Control enc_gate;
   /// The stream comes from the stereo sensors, which have to be streaming for it
   bool stereo;
@@ -78,7 +78,7 @@ struct ImageStreamSpec
   /// the intrinsics of the frame
   bool rotated_at_sensor;
 
-  bool has_compressed() const { return enc_gate != NoControl; }
+  constexpr bool has_compressed() const { return !enc_gate.is_none(); }
 };
 
 // Left is the physically right camera and the other way round, because the camera is mounted
@@ -86,10 +86,10 @@ struct ImageStreamSpec
 // clang-format off
 inline constexpr std::array<ImageStreamSpec, ImageStreamCount> ImageStreamSpecs{{
   {ImageStreamId::Rgb, "rgb", "rgb/image_raw", "rgb/camera_info",
-   "oak_rgb_camera_optical_frame", NoControl, Control::RgbRaw, Control::RgbEnc,
+   "oak_rgb_camera_optical_frame", Control::None, Control::RgbRaw, Control::RgbEnc,
    false, false, false},
   {ImageStreamId::RgbRect, "rgb_rect", "rgb_rect/image_rect", "rgb_rect/camera_info",
-   "oak_rgb_camera_optical_frame", NoControl, Control::RgbRectRaw, Control::RgbRectEnc,
+   "oak_rgb_camera_optical_frame", Control::None, Control::RgbRectRaw, Control::RgbRectEnc,
    false, true, true},
   {ImageStreamId::Left, "left", "left/image_raw", "left/camera_info",
    "oak_left_camera_optical_frame", Control::LeftIn, Control::LeftRaw, Control::LeftEnc,
@@ -104,7 +104,7 @@ inline constexpr std::array<ImageStreamSpec, ImageStreamCount> ImageStreamSpecs{
    "oak_right_camera_optical_frame", Control::RightRectIn, Control::RightRectRaw,
    Control::RightRectEnc, true, true, false},
   {ImageStreamId::Depth, "depth", "stereo/image_raw", "stereo/camera_info",
-   "oak_stereo_camera_optical_frame", Control::DepthIn, Control::DepthRaw, NoControl,
+   "oak_stereo_camera_optical_frame", Control::DepthIn, Control::DepthRaw, Control::None,
    true, true, false},
 }};
 // clang-format on

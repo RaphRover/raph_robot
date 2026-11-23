@@ -78,20 +78,20 @@ GateStates compute_gate_states(const Demand & demand)
   GateStates states{};
   for (const auto & spec : ImageStreamSpecs) {
     const auto & image = demand.images[image_index(spec.id)];
-    states[control_index(spec.raw_gate)] = image.raw;
-    if (spec.enc_gate != NoControl) {
-      states[control_index(spec.enc_gate)] = image.encoded;
+    states.set(spec.raw_gate, image.raw);
+    if (!spec.enc_gate.is_none()) {
+      states.set(spec.enc_gate, image.encoded);
     }
     // The rotation, and the encoder behind it, only run while one of its outputs is wanted
-    if (spec.in_gate != NoControl) {
-      states[control_index(spec.in_gate)] = image.raw || image.encoded;
+    if (!spec.in_gate.is_none()) {
+      states.set(spec.in_gate, image.raw || image.encoded);
     }
   }
 
   // The point cloud is computed from the same rotated depth, so it keeps the depth input open
-  states[control_index(Control::DepthIn)] = depth_needed(demand);
-  states[control_index(Control::PointCloud)] = demand.pointcloud;
-  states[control_index(Control::Imu)] = demand.imu;
+  states.set(Control::DepthIn, depth_needed(demand));
+  states.set(Control::PointCloud, demand.pointcloud);
+  states.set(Control::Imu, demand.imu);
   return states;
 }
 

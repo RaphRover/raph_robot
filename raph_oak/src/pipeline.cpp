@@ -69,7 +69,7 @@ void send_control(
   // The control script reads the target id and then the message from the same stream, so the pair
   // must not be interleaved with another sender
   auto header = std::make_shared<dai::Buffer>();
-  header->setData(std::vector<std::uint8_t>{static_cast<std::uint8_t>(target)});
+  header->setData(std::vector<std::uint8_t>{static_cast<std::uint8_t>(target.index())});
 
   const std::lock_guard<std::mutex> lock(*details.control_mutex);
   details.control_queue->send(header);
@@ -101,7 +101,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   details.control_queue = control_script->inputs["control"].createInputQueue(256, true);
 
   auto control_output = [&](Control target) -> dai::Node::Output & {
-    return control_script->outputs["c" + std::to_string(static_cast<int>(target))];
+    return control_script->outputs["c" + std::to_string(target.index())];
   };
 
   // A gate that starts closed and is opened and closed through the control channel
