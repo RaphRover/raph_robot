@@ -33,7 +33,6 @@
 #include "depthai/common/CameraImageOrientation.hpp"
 #include "depthai/common/DepthUnit.hpp"
 #include "depthai/device/Device.hpp"
-#include "depthai/pipeline/MessageQueue.hpp"
 #include "depthai/pipeline/Node.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/datatype/ADatatype.hpp"
@@ -53,8 +52,10 @@
 #include "depthai/properties/VideoEncoderProperties.hpp"
 
 // ROS
+#include "raph_oak/control.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/parameters.hpp"
+#include "raph_oak/streams.hpp"
 
 namespace raph_oak
 {
@@ -69,7 +70,7 @@ void send_control(
   // The control script reads the target id and then the message from the same stream, so the pair
   // must not be interleaved with another sender
   auto header = std::make_shared<dai::Buffer>();
-  header->setData(std::vector<std::uint8_t>{static_cast<std::uint8_t>(target)});
+  header->setData(std::vector<std::uint8_t>{static_cast<std::uint8_t>(target.index())});
 
   const std::lock_guard<std::mutex> lock(*details.control_mutex);
   details.control_queue->send(header);
@@ -101,7 +102,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   details.control_queue = control_script->inputs["control"].createInputQueue(256, true);
 
   auto control_output = [&](Control target) -> dai::Node::Output & {
-    return control_script->outputs["c" + std::to_string(static_cast<int>(target))];
+    return control_script->outputs["c" + std::to_string(target.index())];
   };
 
   // A gate that starts closed and is opened and closed through the control channel
@@ -115,18 +116,19 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   };
 
   // Raw output: source -> gate -> host
-  auto make_raw_queue = [&](dai::Node::Output & source, Control gate_target, const char * name) {
-    auto gate = make_gate(source, gate_target);
-    auto queue = gate->output.createOutputQueue(1, false);
-    queue->setName(name);
-    return queue;
-  };
+  auto make_raw_queue =
+    [&](dai::Node::Output & source, Control gate_target, const std::string & name) {
+      auto gate = make_gate(source, gate_target);
+      auto queue = gate->output.createOutputQueue(1, false);
+      queue->setName(name);
+      return queue;
+    };
 
   // Compressed output: source -> gate -> MJPEG encoder -> host. The gate sits in front of the
   // encoder, so the encoder is idle and nothing is transferred while it is closed.
   auto make_compressed_queue = [&](
                                  dai::Node::Output & source, Control gate_target, float fps,
-                                 int jpeg_quality, const char * name) {
+                                 int jpeg_quality, const std::string & name) {
     auto gate = make_gate(source, gate_target);
     auto encoder = pipeline->create<dai::node::VideoEncoder>();
     encoder->setDefaultProfilePreset(fps, dai::VideoEncoderProperties::Profile::MJPEG);
@@ -138,24 +140,41 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
     return queue;
   };
 
-  // A 180 degree rotated image coming from a stereo output. The "in" gate in front of the
-  // ImageManip keeps the rotation (and the encoder behind it) idle while nobody wants the image.
-  auto make_rotated_mono = [&](
-                             dai::Node::Output & stereo_output, Control in_gate, Control raw_gate,
-                             Control enc_gate, const char * name, const char * compressed_name,
-                             std::shared_ptr<dai::MessageQueue> & raw_queue,
-                             std::shared_ptr<dai::MessageQueue> & compressed_queue) {
+  // The queues of an image stream: the raw image and, if the stream has one, the JPEG compressed
+  // one, both behind the gates of the stream
+  auto make_image_queue_set =
+    [&](dai::Node::Output & source, ImageStreamId stream_id, float fps, int jpeg_quality) {
+      const auto & spec = get_image_stream_spec(stream_id);
+      auto & queue_set = details.image_queue_sets[get_image_index(stream_id)];
+      queue_set.raw_queue = make_raw_queue(source, spec.raw_gate, spec.name);
+      if (spec.has_compressed()) {
+        queue_set.compressed_queue = make_compressed_queue(
+          source, spec.enc_gate, fps, jpeg_quality, std::string(spec.name) + "_compressed");
+      }
+    };
+
+  // Rotation of a stereo output by 180 degrees (the camera is mounted upside down). The "in" gate
+  // in front of the ImageManip keeps the rotation, and everything behind it, idle while nobody
+  // wants the image.
+  auto make_rotation = [&](
+                         dai::Node::Output & stereo_output, ImageStreamId stream_id, uint32_t width,
+                         uint32_t height, dai::ImgFrame::Type type) -> dai::Node::Output & {
     auto rotate = pipeline->create<dai::node::ImageManip>();
-    rotate->initialConfig->setOutputSize(params.mono.width, params.mono.height);
+    rotate->initialConfig->setOutputSize(width, height);
     rotate->initialConfig->addRotateDeg(180.0);
-    rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW8);
+    rotate->initialConfig->setFrameType(type);
     rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
     rotate->inputImage.setBlocking(false);
-    make_gate(stereo_output, in_gate)->output.link(rotate->inputImage);
+    make_gate(stereo_output, get_image_stream_spec(stream_id).in_gate)
+      ->output.link(rotate->inputImage);
+    return rotate->out;
+  };
 
-    raw_queue = make_raw_queue(rotate->out, raw_gate, name);
-    compressed_queue = make_compressed_queue(
-      rotate->out, enc_gate, params.mono.fps, params.mono_compressed.jpeg_quality, compressed_name);
+  // A 180 degree rotated mono image coming from a stereo output
+  auto make_rotated_mono = [&](dai::Node::Output & stereo_output, ImageStreamId stream_id) {
+    auto & rotated = make_rotation(
+      stereo_output, stream_id, params.mono.width, params.mono.height, dai::ImgFrame::Type::RAW8);
+    make_image_queue_set(rotated, stream_id, params.mono.fps, params.mono_compressed.jpeg_quality);
   };
 
   // RGB camera node
@@ -164,10 +183,8 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto * rgb_output = rgb_node->requestOutput(
     {params.rgb.width, params.rgb.height}, dai::ImgFrame::Type::NV12, dai::ImgResizeMode::CROP,
     params.rgb.fps);
-  details.rgb_queue = make_raw_queue(*rgb_output, Control::RgbRaw, "rgb");
-  details.rgb_compressed_queue = make_compressed_queue(
-    *rgb_output, Control::RgbEnc, params.rgb.fps, params.rgb_compressed.jpeg_quality,
-    "rgb_compressed");
+  make_image_queue_set(
+    *rgb_output, ImageStreamId::Rgb, params.rgb.fps, params.rgb_compressed.jpeg_quality);
 
   // Undistorted RGB image, computed on the camera from its calibration. It is a second output of
   // the same sensor, so it shares CAM_A's rotation, and has its own raw and encoder gates.
@@ -178,10 +195,8 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto * rgb_rect_output = rgb_node->requestOutput(
     {params.rgb.width, params.rgb.height}, dai::ImgFrame::Type::NV12, dai::ImgResizeMode::CROP,
     params.rgb.fps, true, rect_alpha_scaling);
-  details.rgb_rect_queue = make_raw_queue(*rgb_rect_output, Control::RgbRectRaw, "rgb_rect");
-  details.rgb_rect_compressed_queue = make_compressed_queue(
-    *rgb_rect_output, Control::RgbRectEnc, params.rgb.fps, params.rgb_compressed.jpeg_quality,
-    "rgb_rect_compressed");
+  make_image_queue_set(
+    *rgb_rect_output, ImageStreamId::RgbRect, params.rgb.fps, params.rgb_compressed.jpeg_quality);
 
   // Stereo depth
   auto stereo_depth_node = pipeline->create<dai::node::StereoDepth>()->build(
@@ -211,40 +226,19 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
 
   // Depth: depth gate -> rotation -> raw gate -> host
   //                                \-> point cloud gate -> point cloud node
-  auto depth_rotate = pipeline->create<dai::node::ImageManip>();
   // Robotics preset outputs depth at half the input resolution
-  depth_rotate->initialConfig->setOutputSize(params.mono.width / 2, params.mono.height / 2);
-  depth_rotate->initialConfig->addRotateDeg(180.0);
-  depth_rotate->initialConfig->setFrameType(dai::ImgFrame::Type::RAW16);
-  depth_rotate->setMaxOutputFrameSize(params.mono.width * params.mono.height);
-  depth_rotate->inputImage.setBlocking(false);
-  make_gate(stereo_depth_node->depth, Control::DepthIn)->output.link(depth_rotate->inputImage);
-
-  details.depth_queue = make_raw_queue(depth_rotate->out, Control::DepthRaw, "depth");
+  auto & depth_rotated = make_rotation(
+    stereo_depth_node->depth, ImageStreamId::Depth, params.mono.width / 2, params.mono.height / 2,
+    dai::ImgFrame::Type::RAW16);
+  make_image_queue_set(depth_rotated, ImageStreamId::Depth, params.mono.fps, 0);
 
   auto depth_config_queue = stereo_depth_node->inputConfig.createInputQueue(1, false);
 
-  // Left camera (physically the right one, rotated by 180 degrees)
-  make_rotated_mono(
-    stereo_depth_node->syncedRight, Control::LeftIn, Control::LeftRaw, Control::LeftEnc, "left",
-    "left_compressed", details.left_queue, details.left_compressed_queue);
-
-  // Left rectified
-  make_rotated_mono(
-    stereo_depth_node->rectifiedRight, Control::LeftRectIn, Control::LeftRectRaw,
-    Control::LeftRectEnc, "left_rect", "left_rect_compressed", details.left_rect_queue,
-    details.left_rect_compressed_queue);
-
-  // Right camera (physically the left one, rotated by 180 degrees)
-  make_rotated_mono(
-    stereo_depth_node->syncedLeft, Control::RightIn, Control::RightRaw, Control::RightEnc, "right",
-    "right_compressed", details.right_queue, details.right_compressed_queue);
-
-  // Right rectified
-  make_rotated_mono(
-    stereo_depth_node->rectifiedLeft, Control::RightRectIn, Control::RightRectRaw,
-    Control::RightRectEnc, "right_rect", "right_rect_compressed", details.right_rect_queue,
-    details.right_rect_compressed_queue);
+  // Left is the physically right camera and the other way round
+  make_rotated_mono(stereo_depth_node->syncedRight, ImageStreamId::Left);
+  make_rotated_mono(stereo_depth_node->rectifiedRight, ImageStreamId::LeftRect);
+  make_rotated_mono(stereo_depth_node->syncedLeft, ImageStreamId::Right);
+  make_rotated_mono(stereo_depth_node->rectifiedLeft, ImageStreamId::RightRect);
 
   // Imu node
   auto imu_node = pipeline->create<dai::node::IMU>();
@@ -259,7 +253,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   pointcloud_node->initialConfig->setOrganized(true);
   pointcloud_node->initialConfig->setTargetCoordinateSystem(dai::CameraBoardSocket::CAM_C);
   pointcloud_node->initialConfig->setLengthUnit(dai::LengthUnit::METER);
-  make_gate(depth_rotate->out, Control::PointCloud)->output.link(pointcloud_node->inputDepth);
+  make_gate(depth_rotated, Control::PointCloud)->output.link(pointcloud_node->inputDepth);
   details.pointcloud_queue = pointcloud_node->outputPointCloud.createOutputQueue(1, false);
   details.pointcloud_queue->setName("pointcloud");
 

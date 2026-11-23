@@ -20,8 +20,7 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+#include <array>
 #include <memory>
 #include <mutex>
 
@@ -29,72 +28,27 @@
 #include "depthai/pipeline/InputQueue.hpp"
 #include "depthai/pipeline/MessageQueue.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
+#include "depthai/pipeline/datatype/ADatatype.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
+#include "raph_oak/control.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
+#include "raph_oak/streams.hpp"
 
 namespace raph_oak
 {
 
-/**
- * Targets of the single device control channel.
- *
- * All Gate nodes and the stereo cameras are controlled through one XLink input stream: the host
- * sends the target id as a one byte dai::Buffer immediately followed by the actual control message
- * (dai::GateControl or dai::CameraControl), and a Script node forwards the message to the target.
- *
- * Gates come in up to three stages per image, so that nothing is computed or transferred unless it
- * is needed:
- *  - *In gates sit in front of the (rotation) ImageManip, so a closed gate keeps the ImageManip and
- *    everything behind it idle,
- *  - *Raw gates sit in front of the XLinkOut of the raw image,
- *  - *Enc gates sit in front of the JPEG encoder.
- */
-enum class Control : uint8_t
+/// The queues of one image stream, see ImageStreamSpecs
+struct ImageQueueSet
 {
-  RgbRaw,
-  RgbEnc,
-  RgbRectRaw,
-  RgbRectEnc,
-  DepthIn,
-  DepthRaw,
-  PointCloud,
-  LeftIn,
-  LeftRaw,
-  LeftEnc,
-  LeftRectIn,
-  LeftRectRaw,
-  LeftRectEnc,
-  RightIn,
-  RightRaw,
-  RightEnc,
-  RightRectIn,
-  RightRectRaw,
-  RightRectEnc,
-  Imu,
-  Still,
-  CameraB,  // left stereo sensor (CameraControl: start/stop streaming)
-  CameraC,  // right stereo sensor (CameraControl: start/stop streaming)
-  Count
+  std::shared_ptr<dai::MessageQueue> raw_queue;
+  /// Empty if the stream has no compressed variant
+  std::shared_ptr<dai::MessageQueue> compressed_queue;
 };
-
-constexpr std::size_t ControlCount = static_cast<std::size_t>(Control::Count);
 
 struct PipelineDetails
 {
   std::shared_ptr<dai::Pipeline> pipeline;
-  std::shared_ptr<dai::MessageQueue> rgb_queue;
-  std::shared_ptr<dai::MessageQueue> rgb_compressed_queue;
-  std::shared_ptr<dai::MessageQueue> rgb_rect_queue;
-  std::shared_ptr<dai::MessageQueue> rgb_rect_compressed_queue;
-  std::shared_ptr<dai::MessageQueue> depth_queue;
-  std::shared_ptr<dai::MessageQueue> left_queue;
-  std::shared_ptr<dai::MessageQueue> left_compressed_queue;
-  std::shared_ptr<dai::MessageQueue> left_rect_queue;
-  std::shared_ptr<dai::MessageQueue> left_rect_compressed_queue;
-  std::shared_ptr<dai::MessageQueue> right_queue;
-  std::shared_ptr<dai::MessageQueue> right_compressed_queue;
-  std::shared_ptr<dai::MessageQueue> right_rect_queue;
-  std::shared_ptr<dai::MessageQueue> right_rect_compressed_queue;
+  std::array<ImageQueueSet, ImageStreamCount> image_queue_sets;
   std::shared_ptr<dai::MessageQueue> imu_queue;
   std::shared_ptr<dai::InputQueue> depth_config_queue;
   std::shared_ptr<dai::MessageQueue> pointcloud_queue;

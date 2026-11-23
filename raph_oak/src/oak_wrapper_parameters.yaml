@@ -1,4 +1,9 @@
 raph_oak:
+  tf_frame_prefix:
+    type: string
+    default_value: ""
+    description: Prefix of the TF frame ids of all published messages (e.g. "robot1/"), for when the robot description is loaded with a prefix
+    read_only: true
   device:
     id:
       type: string
@@ -70,12 +75,12 @@ raph_oak:
       validation:
         bounds<>: [0.0, 60.0]
   pointcloud:
-    fps:
-      type: double
-      default_value: 5.0
-      description: Maximum point cloud rate in frames per second, rounded to whole frames. The depth frames feeding the point cloud are limited to this rate, so less is computed on the host and nothing above it is published. Values above the depth rate have no effect
+    max_rate:
+      type: int
+      default_value: 5
+      description: Maximum point cloud rate in frames per second. The depth frames feeding the point cloud are limited to this rate, so less is computed on the host and nothing above it is published. Values above the depth rate have no effect
       validation:
-        bounds<>: [1.0, 60.0]
+        bounds<>: [1, 60]
   mono:
     width:
       type: int

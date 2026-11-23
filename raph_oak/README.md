@@ -1,7 +1,7 @@
 # raph_oak <!-- omit in toc -->
 
 ROS 2 driver for the OAK-D Pro W (RVC2) camera on the Raph Rover. It is a composable node,
-`raph_oak::OakWrapper`, built on DepthAI v3 and the `depthai_bridge_v3` converters.
+`raph_oak::OakWrapper`, built directly on DepthAI v3.
 
 The node builds a fixed DepthAI pipeline on the camera and publishes only what somebody
 subscribes to: unused streams are neither computed on the camera nor sent over USB.
@@ -13,6 +13,7 @@ subscribes to: unused streams are neither computed on the camera nor sent over U
 - [Lazy activation](#lazy-activation)
   - [Measured effect](#measured-effect)
 - [Why not depthai\_ros\_driver](#why-not-depthai_ros_driver)
+- [Code structure](#code-structure)
 - [Editing the pipeline graph](#editing-the-pipeline-graph)
 
 ## Topics
@@ -46,9 +47,10 @@ and need a restart.
 
 | Group | Parameters |
 |---|---|
+| (top level) | `tf_frame_prefix` (read only, default empty): prefix of every TF frame id the node publishes (images, camera infos, IMU, point cloud), matching a robot description loaded with a prefix |
 | `device` | `id`, `usb_port_id` (read only), `ir_laser_dot_projector_intensity`, `ir_laser_dot_projector_lazy`, `ir_flood_light_intensity` |
 | `depth` | `confidence_threshold`, `lr_check_*`, `subpixel_*`, `extended_disparity_enabled`, `min_distance`, `max_distance` (not read only, changeable at runtime) |
-| `pointcloud` | `fps` (default 5, changeable at runtime): rate limit of the depth frames fed to the point cloud node, set through the `fps` field of its gate |
+| `pointcloud` | `max_rate` (integer fps, default 5, changeable at runtime): rate limit of the depth frames fed to the point cloud node, set through the `fps` field of its gate |
 | `mono`, `mono_compressed` | resolution, fps, JPEG quality (read only) |
 | `rgb`, `rgb_compressed` | resolution, fps, JPEG quality, `rect_alpha_scaling` of the undistorted image (read only) |
 
@@ -205,6 +207,25 @@ and the commits after it) and in the source of the upstream driver:
 If one of these stops being true, for example upstream gaining on-camera lazy activation, this
 decision should be revisited. The motives above are reconstructed from the history and the
 source, so correct them if the actual reasons differ.
+
+## Code structure
+
+| File | Role |
+|---|---|
+| `streams.hpp` | Table of the image streams (`ImageStreamSpecs`): topics, frame ids, gates and how the camera info is made. The publishers, the queue callbacks and the subscriber based activation are all loops over it |
+| `control.hpp` | `Control`, a target of the control channel, with its log name and properties |
+| `demand.hpp/.cpp` | `Demand`: subscriber counts → what each stream needs → gate states; plus the stereo sensor start/stop (with the restart delay), laser intensity and point cloud rate. No DepthAI, no ROS |
+| `pipeline.hpp/.cpp` | Builds the DepthAI pipeline and defines the control channel |
+| `camera_info.hpp/.cpp` | Camera info: from the factory calibration, for the 180° rotation, from the intrinsics of a rectified frame, scaled |
+| `conversions.hpp/.cpp` | `ImuConverter` (gyroscope interpolated at the accelerometer timestamps) and `PointCloudConverter` |
+| `frame_clock.hpp` | `FrameClock`: DepthAI host timestamps to ROS time |
+| `oak_wrapper.hpp/.cpp` | The node: connects to the camera, counts subscribers, applies the decisions of `demand` and publishes |
+| `test/` | Unit tests, no camera needed (`colcon test --packages-select raph_oak`): `test_demand` for the stream table and `demand`, `test_conversions` for the camera info, IMU and point cloud conversions (camera info cases use numbers of a real OAK-D Pro W) |
+
+To add an image stream, add an entry to `ImageStreamId` and `ImageStreamSpecs`, the gates it uses to
+`Control::Value` (and `Control::name()`), and build its nodes with `make_image_queue_set` in `pipeline.cpp`.
+Nothing else in the node changes: the topics, the publishers, the callbacks and the activation
+follow from the table. Add the stream to `doc/pipeline.dot` as well.
 
 ## Editing the pipeline graph
 
