@@ -577,7 +577,7 @@ void OakWrapper::check_publishers()
 
   set_gate(Control::Imu, imu, "imu", false);
 
-  // ...and put them to sleep after everything depending on them was closed
+  // If stereo is not needed, stop streaming from the stereo sensors to save resources.
   if (!stereo_needed) {
     set_stereo_streaming(false);
   }
