@@ -22,7 +22,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cstddef>
 
 #include "raph_oak/control.hpp"
 #include "raph_oak/streams.hpp"
