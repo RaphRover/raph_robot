@@ -31,6 +31,9 @@ Names are relative to the node (`~/`).
 | `points` | PointCloud2 | organized, built by DepthAI's `PointCloud` node |
 | `imu/data_raw` | Imu | accelerometer 500 Hz, gyroscope 400 Hz |
 | `rgb_still/image_still`, `rgb_still/camera_info` | Image, CameraInfo | full resolution (4000×3000), transient local |
+| `nn/detections` | vision_msgs/Detection2DArray | only with `nn.enabled`: detections in pixels of the network input frame |
+| `nn/passthrough`, `nn/passthrough/compressed`, `nn/passthrough/camera_info` | Image, CompressedImage, CameraInfo | only with `nn.enabled`: the frame the network ran on (letterboxed RGB), with the distortion of the RGB calibration |
+| `nn/overlay` | Image | only with `nn.enabled`: the detections drawn on the passthrough frame by the host |
 
 ## Services
 
@@ -51,6 +54,7 @@ and need a restart.
 | `device` | `id`, `usb_port_id` (read only), `ir_laser_dot_projector_intensity`, `ir_laser_dot_projector_lazy`, `ir_flood_light_intensity` |
 | `depth` | `confidence_threshold`, `lr_check_*`, `subpixel_*`, `extended_disparity_enabled`, `min_distance`, `max_distance` (not read only, changeable at runtime) |
 | `pointcloud` | `max_rate` (integer fps, default 5, changeable at runtime): rate limit of the depth frames fed to the point cloud node, set through the `fps` field of its gate |
+| `nn` | all read only: `enabled` (default false), `model` (path of a NNArchive or a Luxonis Model Zoo slug), `fps` (camera output and inference rate), `confidence_threshold`, `num_shaves` (RVC2 only) |
 | `mono`, `mono_compressed` | resolution, fps, JPEG quality (read only) |
 | `rgb`, `rgb_compressed` | resolution, fps, JPEG quality, `rect_alpha_scaling` of the undistorted image (read only) |
 
@@ -110,7 +114,8 @@ needs the data behind it:
 XLink input stream. The host sends a one byte target id followed by the control message
 (`GateControl` or `CameraControl`) and a `Script` node routes it to the target. The control queue
 is blocking: a dropped message would misalign the header/message pairs. This keeps the
-pipeline at **18 XLink streams** (16 device→host, 2 host→device: control and `StereoDepthConfig`),
+pipeline at **18 XLink streams** (16 device→host, 2 host→device: control and `StereoDepthConfig`;
+21 with the neural network),
 well below the XLink limit of 32 streams. Two things do not work on RVC2 and are
 the reason for the separate header message: the sequence number of a message is not preserved on
 its way to the script, and building a `GateControl` inside the script crashes the device.
@@ -122,6 +127,20 @@ crosses USB, as a synced message, and the cloud is computed on the host.
 one frame (`GateControl::openGate(1)`), which is what `capture_still` does. The full resolution
 stream itself keeps running on the camera while the node runs (about 130 MB of device memory and a
 few percent of CPU, independent of the requested fps).
+
+**Neural network.** With `nn.enabled` the network gets its own CAM_A output, requested at the
+size and frame type the model takes (letterboxed, at `nn.fps`), so there is no resize node and the
+frame is not shared with the RGB stream. The output goes through the `NN` gate into a
+`DetectionNetwork` that is built from the model (a local archive, or a Model Zoo slug that is
+downloaded on first use). It has two outputs, the detections and the passthrough of the frame it
+ran on, which are matched by sequence number on the host to draw `nn/overlay`. A second gate
+(`NN_ENC`) feeds that passthrough through an optional `ImageManip` to NV12 (the encoder only takes
+NV12) into a MJPEG `VideoEncoder`, which is the compressed passthrough. It is the frame the
+detections belong to, so the network runs for it as well, and the encoder only runs for the
+`nn/passthrough/compressed` topic and for its camera info. The
+network adds 3 XLink streams (detections, passthrough and compressed passthrough), 21 in total.
+If the model cannot be loaded or the pipeline does not start with it a few times in a row, the
+pipeline is built without the network and without these streams.
 
 **Stereo sensors.** CAM_B and CAM_C are stopped with `CameraControl::setStopStreaming()` while no
 stereo-derived topic (depth, point cloud, left, right and their rectified versions) is
@@ -137,6 +156,8 @@ The node checks the subscriber counts every 100 ms.
 | `*/image_raw/compressed`, `*/image_rect/compressed` | the encoder gate (and the compute gate) |
 | only `rgb`, `rgb_rect`, `left`, `right`, `left_rect` or `right_rect` `*/camera_info` | the encoder gate: camera info is published from the compressed stream, which is cheaper to transfer than the raw image |
 | `stereo/camera_info` | the depth gates, like `stereo/image_raw` |
+| `nn/detections`, `nn/overlay` or `nn/passthrough` | the `NN` gate, which lets the frames into the network (the overlay is drawn on the passthrough) |
+| `nn/passthrough/compressed`, or only `nn/passthrough/camera_info` | the `NN` gate and the `NN_ENC` gate in front of the encoder |
 | `stereo/image_raw` or `points` | depth compute gate; the depth raw gate and/or the point cloud gate; the IR laser dot projector (if `ir_laser_dot_projector_lazy`) |
 | `imu/data_raw` | the IMU gate |
 | anything stereo derived | the stereo sensors are started, otherwise stopped |

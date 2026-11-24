@@ -5,10 +5,13 @@
 //
 // Reading the graph
 //   solid edge        message flow between device nodes (no USB transfer)
-//   purple dashed     XLink stream over USB (host <-> device), 18 in total:
-//                     16 device -> host (one per host queue below, the point cloud one carries
-//                     the synced depth) and 2 host -> device (control, depth_config)
-//   "ctrl: <Name>"    node is controlled through Control::<Name> (include/raph_oak/pipeline.hpp)
+//   purple dashed     XLink stream over USB (host <-> device), 18 in total without and 21 with
+//                     the neural network: 16 (19) device -> host (one per host queue below, the
+//                     point cloud one carries the synced depth) and 2 host -> device (control,
+//                     depth_config)
+//   dashed box        only present when nn.enabled is set and the model loaded (the neural
+//                     network setup falls back to a pipeline without it)
+//   "ctrl: <Name>"    node is controlled through Control::<NAME> (include/raph_oak/control.hpp)
 //                     by the control multiplexer, see the optional edges at the bottom
 //
 // Keep it in sync with pipeline.cpp: adding an output means adding one node + one XLink edge.
@@ -43,8 +46,8 @@ digraph raph_oak_pipeline {
     // --- sources
     node [fillcolor="#dbeafe", color="#3b82f6"];
     cam_a [label="Camera CAM_A\nrotate 180°\nctrl: -"];
-    cam_b [label="Camera CAM_B\n(created by StereoDepth)\nctrl: CameraB"];
-    cam_c [label="Camera CAM_C\n(created by StereoDepth)\nctrl: CameraC"];
+    cam_b [label="Camera CAM_B\n(created by StereoDepth)\nctrl: CAMERA_B"];
+    cam_c [label="Camera CAM_C\n(created by StereoDepth)\nctrl: CAMERA_C"];
     imu   [label="IMU\naccel 500 Hz, gyro 400 Hz"];
 
     // --- processing
@@ -71,27 +74,44 @@ digraph raph_oak_pipeline {
     // compute gates: in front of an ImageManip, a closed gate keeps everything behind it idle
     // raw / enc gates: in front of the raw XLink output / the JPEG encoder
     node [fillcolor="#fef3c7", color="#f59e0b"];
-    g_rgb_raw      [label="Gate\nctrl: RgbRaw"];
-    g_rgb_enc      [label="Gate\nctrl: RgbEnc"];
-    g_rgb_rect_raw [label="Gate\nctrl: RgbRectRaw"];
-    g_rgb_rect_enc [label="Gate\nctrl: RgbRectEnc"];
-    g_still        [label="Gate (still)\nctrl: Still\nopenGate(1) passes one frame"];
-    g_depth_in     [label="Gate (compute)\nctrl: DepthIn"];
-    g_depth_raw    [label="Gate\nctrl: DepthRaw"];
-    g_pc           [label="Gate\nctrl: PointCloud"];
-    g_left_in      [label="Gate (compute)\nctrl: LeftIn"];
-    g_left_raw     [label="Gate\nctrl: LeftRaw"];
-    g_left_enc     [label="Gate\nctrl: LeftEnc"];
-    g_left_rect_in [label="Gate (compute)\nctrl: LeftRectIn"];
-    g_left_rect_raw [label="Gate\nctrl: LeftRectRaw"];
-    g_left_rect_enc [label="Gate\nctrl: LeftRectEnc"];
-    g_right_in     [label="Gate (compute)\nctrl: RightIn"];
-    g_right_raw    [label="Gate\nctrl: RightRaw"];
-    g_right_enc    [label="Gate\nctrl: RightEnc"];
-    g_right_rect_in  [label="Gate (compute)\nctrl: RightRectIn"];
-    g_right_rect_raw [label="Gate\nctrl: RightRectRaw"];
-    g_right_rect_enc [label="Gate\nctrl: RightRectEnc"];
-    g_imu          [label="Gate\nctrl: Imu"];
+    g_rgb_raw      [label="Gate\nctrl: RGB_RAW"];
+    g_rgb_enc      [label="Gate\nctrl: RGB_ENC"];
+    g_rgb_rect_raw [label="Gate\nctrl: RGB_RECT_RAW"];
+    g_rgb_rect_enc [label="Gate\nctrl: RGB_RECT_ENC"];
+    g_still        [label="Gate (still)\nctrl: STILL\nopenGate(1) passes one frame"];
+    g_depth_in     [label="Gate (compute)\nctrl: DEPTH_IN"];
+    g_depth_raw    [label="Gate\nctrl: DEPTH_RAW"];
+    g_pc           [label="Gate\nctrl: POINT_CLOUD"];
+    g_left_in      [label="Gate (compute)\nctrl: LEFT_IN"];
+    g_left_raw     [label="Gate\nctrl: LEFT_RAW"];
+    g_left_enc     [label="Gate\nctrl: LEFT_ENC"];
+    g_left_rect_in [label="Gate (compute)\nctrl: LEFT_RECT_IN"];
+    g_left_rect_raw [label="Gate\nctrl: LEFT_RECT_RAW"];
+    g_left_rect_enc [label="Gate\nctrl: LEFT_RECT_ENC"];
+    g_right_in     [label="Gate (compute)\nctrl: RIGHT_IN"];
+    g_right_raw    [label="Gate\nctrl: RIGHT_RAW"];
+    g_right_enc    [label="Gate\nctrl: RIGHT_ENC"];
+    g_right_rect_in  [label="Gate (compute)\nctrl: RIGHT_RECT_IN"];
+    g_right_rect_raw [label="Gate\nctrl: RIGHT_RECT_RAW"];
+    g_right_rect_enc [label="Gate\nctrl: RIGHT_RECT_ENC"];
+    g_imu          [label="Gate\nctrl: IMU"];
+
+    // --- neural network (nn.enabled): its own CAM_A output at the size and format the model takes
+    subgraph cluster_nn {
+      label="Neural network"; style="dashed"; color="#f59e0b"; fontcolor="#b45309";
+
+      node [fillcolor="#dbeafe", color="#3b82f6"];
+      nn_output [label="CAM_A output for the network\nletterboxed to the model input, nn.fps"];
+
+      node [fillcolor="#fef3c7", color="#f59e0b"];
+      g_nn     [label="Gate\nctrl: NN\nruns the network"];
+      g_nn_enc [label="Gate\nctrl: NN_ENC\nencoder only"];
+
+      node [fillcolor="#e2e8f0", color="#64748b"];
+      nn_node       [label="DetectionNetwork\nmodel from nn.model, confidence_threshold,\nnum_shaves on RVC2"];
+      nn_to_nv12    [label="ImageManip → NV12\nonly if the model input is not NV12"];
+      enc_nn        [label="VideoEncoder MJPEG"];
+    }
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -119,6 +139,12 @@ digraph raph_oak_pipeline {
 
     pointcloud_node [label="PointCloud (host)\norganized, CAM_C frame, metres"];
     q_pointcloud    [label="pointcloud\n(host queue, no XLink)", style="rounded,filled,dashed"];
+
+    // only with the neural network
+    q_nn                      [label="nn\n(detections)", style="rounded,filled,dashed"];
+    q_nn_passthrough          [label="nn_passthrough\n(network input)", style="rounded,filled,dashed"];
+    q_nn_passthrough_compressed [label="nn_passthrough_compressed", style="rounded,filled,dashed"];
+    nn_overlay [label="Overlay (host)\ndetections drawn on the passthrough\n-> ~/nn/overlay", style="rounded,filled,dashed"];
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -175,6 +201,14 @@ digraph raph_oak_pipeline {
   // imu
   imu -> g_imu;
 
+  // neural network
+  cam_a -> nn_output [label="nn input"];
+  nn_output -> g_nn;
+  g_nn -> nn_node;
+  nn_node -> g_nn_enc [label="passthrough"];
+  g_nn_enc -> nn_to_nv12;
+  nn_to_nv12 -> enc_nn;
+
   // ---------------------------------------------------------------------------------------------
   // XLink streams over USB (purple dashed)
   // ---------------------------------------------------------------------------------------------
@@ -200,17 +234,22 @@ digraph raph_oak_pipeline {
   g_right_rect_raw -> q_right_rect;
   enc_right_rect   -> q_right_rect_compressed;
   g_imu            -> q_imu;
+  nn_node          -> q_nn [label="detections"];
+  nn_node          -> q_nn_passthrough [label="passthrough"];
+  enc_nn           -> q_nn_passthrough_compressed;
   pc_sync          -> pointcloud_node [label="synced depth"];
 
   // host only
   edge [style=solid, color="#64748b", penwidth=1, fontcolor="#000000"];
   pointcloud_node -> q_pointcloud;
+  q_nn             -> nn_overlay;
+  q_nn_passthrough -> nn_overlay;
 
   // ---------------------------------------------------------------------------------------------
-  // Optional: control edges. 21 targets make the graph noisy, uncomment to draw them.
+  // Optional: control edges. 23 targets make the graph noisy, uncomment to draw them.
   // ---------------------------------------------------------------------------------------------
   // edge [style=dotted, color="#9333ea", penwidth=1, constraint=false, arrowsize=0.5];
-  // control_script -> { cam_b cam_c g_rgb_raw g_rgb_enc g_still g_depth_in g_depth_raw g_pc
+  // control_script -> { cam_b cam_c g_rgb_raw g_rgb_enc g_still g_depth_in g_depth_raw g_pc g_nn g_nn_enc
   //                     g_left_in g_left_raw g_left_enc g_left_rect_in g_left_rect_raw
   //                     g_left_rect_enc g_right_in g_right_raw g_right_enc g_right_rect_in
   //                     g_right_rect_raw g_right_rect_enc g_imu };

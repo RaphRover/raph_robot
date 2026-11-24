@@ -81,7 +81,7 @@ GateStates Demand::gate_states() const
   states.set(Control::DEPTH_IN, depth_needed());
   states.set(Control::POINT_CLOUD, pointcloud_);
   states.set(Control::IMU, imu_);
-  // The raw passthrough comes out of the network, which also runs for the detections
+  // Both passthroughs come out of the network, which also runs for the detections and the overlay
   states.set(Control::NN, nn());
   return states;
 }

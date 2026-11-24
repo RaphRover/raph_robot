@@ -386,10 +386,12 @@ PipelineDetails create_dai_pipeline(
       passthrough_queues.raw_queue = nn_node->passthrough.createOutputQueue(1, false);
       passthrough_queues.raw_queue->setName(passthrough_spec.name);
 
-      // JPEG compressed passthrough, encoded on the camera. The encoder only takes NV12, so the
-      // frame is converted first (unless the network already takes NV12). Both sit behind their
-      // own gate, so neither runs unless the compressed topic is subscribed.
-      auto nn_enc_gate = make_gate(*nn_output, passthrough_spec.enc_gate);
+      // JPEG compressed passthrough, encoded on the camera from the same passthrough, so it is
+      // the frame the detections belong to (the network runs while it is wanted). The encoder only
+      // takes NV12, so the frame is converted first (unless the network already takes NV12).
+      // Both sit behind their own gate, so neither runs while only the detections or the raw
+      // passthrough are subscribed.
+      auto nn_enc_gate = make_gate(nn_node->passthrough, passthrough_spec.enc_gate);
       auto nn_encoder = pipeline->create<dai::node::VideoEncoder>();
       nn_encoder->setDefaultProfilePreset(
         static_cast<float>(params.nn.fps), dai::VideoEncoderProperties::Profile::MJPEG);

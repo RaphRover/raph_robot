@@ -307,16 +307,17 @@ TEST(Demand, CompressedNnOpensTheNetworkAndTheEncoder)
   SubscriberCounts counts;
   counts.images[get_image_index(ImageStreamId::NN_PASSTHROUGH)].compressed = 1;
   const auto demand = Demand(counts);
-  EXPECT_FALSE(demand.nn());
+  // The compressed passthrough comes out of the network too
+  EXPECT_TRUE(demand.nn());
   EXPECT_TRUE(demand.image(ImageStreamId::NN_PASSTHROUGH).encoded());
 
   const auto states = demand.gate_states();
-  EXPECT_FALSE(gate(states, Control::NN));
+  EXPECT_TRUE(gate(states, Control::NN));
   EXPECT_TRUE(gate(states, Control::NN_ENC));
-  EXPECT_EQ(open_gates(states), 1U);
+  EXPECT_EQ(open_gates(states), 2U);
 }
 
-TEST(Demand, NnCameraInfoAloneOpensOnlyTheEncoder)
+TEST(Demand, NnCameraInfoAloneOpensTheNetworkAndTheEncoder)
 {
   SubscriberCounts counts;
   counts.images[get_image_index(ImageStreamId::NN_PASSTHROUGH)].camera_info = 1;
@@ -325,8 +326,17 @@ TEST(Demand, NnCameraInfoAloneOpensOnlyTheEncoder)
   EXPECT_TRUE(demand.image(ImageStreamId::NN_PASSTHROUGH).encoded());
 
   const auto states = demand.gate_states();
-  EXPECT_FALSE(gate(states, Control::NN));
+  EXPECT_TRUE(gate(states, Control::NN));
   EXPECT_TRUE(gate(states, Control::NN_ENC));
+}
+
+TEST(Demand, DetectionsAloneDoNotOpenTheEncoder)
+{
+  SubscriberCounts counts;
+  counts.nn = 1;
+  const auto states = Demand(counts).gate_states();
+  EXPECT_TRUE(gate(states, Control::NN));
+  EXPECT_FALSE(gate(states, Control::NN_ENC));
 }
 
 TEST(Demand, RawNnPassthroughNeedsTheNetwork)

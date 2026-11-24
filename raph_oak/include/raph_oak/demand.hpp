@@ -99,10 +99,9 @@ public:
   }
   bool pointcloud() const { return pointcloud_; }
   bool imu() const { return imu_; }
-  /// The network has to run: detections, the overlay or the raw passthrough (which comes out of
-  /// the network) are wanted. The compressed passthrough is encoded from the camera output and
-  /// does not need it
-  bool nn() const { return nn_ || image(ImageStreamId::NN_PASSTHROUGH).raw(); }
+  /// The network has to run: detections, the overlay or either passthrough (both come out of the
+  /// network) are wanted
+  bool nn() const { return nn_ || image(ImageStreamId::NN_PASSTHROUGH).any(); }
 
   /// The depth is needed for the depth image and for the point cloud
   bool depth_needed() const;
