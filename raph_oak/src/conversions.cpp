@@ -25,19 +25,102 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
+#include <opencv2/core.hpp>
+#include <opencv2/core/hal/interface.h>
+#include <opencv2/core/mat.hpp>
+#include <opencv2/core/types.hpp>
+#include <opencv2/imgproc.hpp>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
+#include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
 #include "raph_oak/frame_clock.hpp"
+#include "rclcpp/logger.hpp"
+#include "rclcpp/logging.hpp"
+#include "sensor_msgs/msg/compressed_image.hpp"
+#include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/msg/point_field.hpp"
+#include "std_msgs/msg/header.hpp"
 
 namespace raph_oak
 {
+
+std::unique_ptr<sensor_msgs::msg::Image> to_ros_image(
+  dai::ImgFrame & data, const std_msgs::msg::Header & header, const rclcpp::Logger & logger)
+{
+  auto image = std::make_unique<sensor_msgs::msg::Image>();
+  image->header = header;
+  image->width = data.getWidth();
+  image->height = data.getHeight();
+  image->is_bigendian = 1U;
+
+  if (data.getType() == dai::ImgFrame::Type::NV12) {
+    image->encoding = "bgr8";
+    image->step = image->width * 3;
+    image->data.resize(image->width * image->height * 3);
+
+    cv::Mat const in_mat(
+      cv::Size(data.getWidth(), data.getHeight() * 3 / 2), CV_8UC1, data.getData().data());
+    cv::Mat out_mat(cv::Size(data.getWidth(), data.getHeight()), CV_8UC3, image->data.data());
+    cv::cvtColor(in_mat, out_mat, cv::ColorConversionCodes::COLOR_YUV2BGR_NV12);
+  } else if (
+    data.getType() == dai::ImgFrame::Type::BGR888i ||
+    data.getType() == dai::ImgFrame::Type::RGB888i) {
+    image->encoding = data.getType() == dai::ImgFrame::Type::BGR888i ? "bgr8" : "rgb8";
+    image->step = image->width * 3;
+    image->data.assign(data.getData().begin(), data.getData().end());
+  } else if (
+    data.getType() == dai::ImgFrame::Type::BGR888p ||
+    data.getType() == dai::ImgFrame::Type::RGB888p) {
+    // Planar frames (what RVC2 networks take) need the channels interleaved for ROS
+    image->encoding = data.getType() == dai::ImgFrame::Type::BGR888p ? "bgr8" : "rgb8";
+    image->step = image->width * 3;
+    image->data.resize(static_cast<size_t>(image->width) * image->height * 3);
+
+    const cv::Size plane_size(static_cast<int>(image->width), static_cast<int>(image->height));
+    const auto plane_bytes = static_cast<size_t>(image->width) * image->height;
+    auto * in_planes = data.getData().data();
+
+    const std::array<cv::Mat, 3> planes{
+      cv::Mat(plane_size, CV_8UC1, in_planes),
+      cv::Mat(plane_size, CV_8UC1, in_planes + plane_bytes),
+      cv::Mat(plane_size, CV_8UC1, in_planes + (2 * plane_bytes))};
+    cv::Mat out_mat(plane_size, CV_8UC3, image->data.data());
+    cv::merge(planes.data(), planes.size(), out_mat);
+  } else if (
+    data.getType() == dai::ImgFrame::Type::RAW8 || data.getType() == dai::ImgFrame::Type::GRAY8) {
+    image->encoding = "mono8";
+    image->step = image->width;
+    image->data.assign(data.getData().begin(), data.getData().end());
+  } else if (data.getType() == dai::ImgFrame::Type::RAW16) {
+    image->encoding = "16UC1";
+    image->is_bigendian = 0U;
+    image->step = image->width * 2;
+    image->data.assign(data.getData().begin(), data.getData().end());
+  } else {
+    RCLCPP_WARN_STREAM(
+      logger, "Unsupported image frame type: " << static_cast<int>(data.getType()));
+    return nullptr;
+  }
+  return image;
+}
+
+std::unique_ptr<sensor_msgs::msg::CompressedImage> to_ros_compressed_image(
+  dai::EncodedFrame & data, const std_msgs::msg::Header & header)
+{
+  auto image = std::make_unique<sensor_msgs::msg::CompressedImage>();
+  image->header = header;
+  image->format = "jpeg";
+  image->data.assign(data.getData().begin(), data.getData().end());
+  return image;
+}
 
 ImuConverter::ImuConverter(
   std::string frame_id, double linear_acceleration_covariance, double angular_velocity_covariance)

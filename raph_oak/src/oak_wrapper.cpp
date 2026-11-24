@@ -21,7 +21,6 @@
 #include "raph_oak/oak_wrapper.hpp"
 
 #include <chrono>
-#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -31,13 +30,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-// OpenCV
-#include <opencv2/core/hal/interface.h>
-
-#include <opencv2/core/mat.hpp>
-#include <opencv2/core/types.hpp>
-#include <opencv2/imgproc.hpp>
 
 // DepthAI
 #include "depthai/common/CameraBoardSocket.hpp"
@@ -61,6 +53,7 @@
 // ROS
 #include "raph_oak/camera_info.hpp"
 #include "raph_oak/control.hpp"
+#include "raph_oak/conversions.hpp"
 #include "raph_oak/demand.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/parameters.hpp"
@@ -550,52 +543,13 @@ void OakWrapper::publish_image(
                     : publisher_set.calibration_info;
   cam_info.header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
 
-  auto image = to_ros_image(in_data, cam_info.header);
+  auto image = to_ros_image(*in_data, cam_info.header, get_logger());
   if (!image) {
     return;
   }
 
   publisher_set.camera_info_pub->publish(cam_info);
   publisher_set.image_pub->publish(std::move(image));
-}
-
-std::unique_ptr<sensor_msgs::msg::Image> OakWrapper::to_ros_image(
-  const std::shared_ptr<dai::ImgFrame> & in_data, const std_msgs::msg::Header & header) const
-{
-  auto image = std::make_unique<sensor_msgs::msg::Image>();
-
-  image->header = header;
-  image->width = in_data->getWidth();
-  image->height = in_data->getHeight();
-  image->is_bigendian = 1U;
-
-  if (in_data->getType() == dai::ImgFrame::Type::NV12) {
-    image->encoding = "bgr8";
-    image->step = image->width * 3;
-    image->data.resize(image->width * image->height * 3);
-
-    cv::Mat const in_mat(
-      cv::Size(in_data->getWidth(), in_data->getHeight() * 3 / 2), CV_8UC1,
-      in_data->getData().data());
-    cv::Mat out_mat(
-      cv::Size(in_data->getWidth(), in_data->getHeight()), CV_8UC3, image->data.data());
-    cv::cvtColor(in_mat, out_mat, cv::ColorConversionCodes::COLOR_YUV2BGR_NV12);
-  } else if (in_data->getType() == dai::ImgFrame::Type::RAW8) {
-    image->encoding = "mono8";
-    image->step = image->width;
-    image->data.assign(in_data->getData().begin(), in_data->getData().end());
-  } else if (in_data->getType() == dai::ImgFrame::Type::RAW16) {
-    image->encoding = "16UC1";
-    image->is_bigendian = 0U;
-    image->step = image->width * 2;
-    image->data.assign(in_data->getData().begin(), in_data->getData().end());
-  } else {
-    RCLCPP_WARN_STREAM(
-      get_logger(), "Unsupported image frame type: " << static_cast<int>(in_data->getType()));
-    return nullptr;
-  }
-
-  return image;
 }
 
 void OakWrapper::publish_compressed_image(
@@ -627,13 +581,9 @@ void OakWrapper::publish_compressed_image(
     return;
   }
 
-  auto image = std::make_unique<sensor_msgs::msg::CompressedImage>();
-  image->header.stamp = stamp;
-  image->header.frame_id = publisher_set.calibration_info.header.frame_id;
-  image->format = "jpeg";
-  image->data.assign(in_data->getData().begin(), in_data->getData().end());
-
-  publisher_set.compressed_pub->publish(std::move(image));
+  auto header = publisher_set.calibration_info.header;
+  header.stamp = stamp;
+  publisher_set.compressed_pub->publish(to_ros_compressed_image(*in_data, header));
 }
 
 void OakWrapper::publish_imu(const std::shared_ptr<dai::ADatatype> & message)
@@ -691,7 +641,7 @@ void OakWrapper::capture_still(
     get_still_camera_info(in_data->getWidth(), in_data->getHeight());
   cam_info.header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
 
-  auto image = to_ros_image(in_data, cam_info.header);
+  auto image = to_ros_image(*in_data, cam_info.header, get_logger());
   if (!image) {
     response->success = false;
     response->message = "Failed to convert the still image frame";
