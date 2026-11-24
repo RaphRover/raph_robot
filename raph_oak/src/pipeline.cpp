@@ -94,7 +94,7 @@ dai::NNArchive load_nn_archive(const std::string & model, const std::string & pl
 // input layout (most do declare that) and finally to what the platform's inference backend uses.
 dai::ImgFrame::Type get_nn_frame_type(const dai::NNArchive & archive, dai::Platform platform)
 {
-  static const std::map<std::string, dai::ImgFrame::Type> frame_types{
+  static const std::map<std::string, dai::ImgFrame::Type> kFrameTypes{
     {"BGR888i", dai::ImgFrame::Type::BGR888i}, {"BGR888p", dai::ImgFrame::Type::BGR888p},
     {"RGB888i", dai::ImgFrame::Type::RGB888i}, {"RGB888p", dai::ImgFrame::Type::RGB888p},
     {"GRAY8", dai::ImgFrame::Type::GRAY8},     {"NV12", dai::ImgFrame::Type::NV12},
@@ -105,8 +105,8 @@ dai::ImgFrame::Type get_nn_frame_type(const dai::NNArchive & archive, dai::Platf
     const auto & input = inputs.front();
 
     if (input.preprocessing.daiType) {
-      const auto frame_type = frame_types.find(*input.preprocessing.daiType);
-      if (frame_type != frame_types.end()) {
+      const auto frame_type = kFrameTypes.find(*input.preprocessing.daiType);
+      if (frame_type != kFrameTypes.end()) {
         return frame_type->second;
       }
     }

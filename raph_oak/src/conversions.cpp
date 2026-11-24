@@ -141,7 +141,7 @@ void draw_detections(
     image.step);
   // Green in both channel orders
   const cv::Scalar color(0, 255, 0);
-  constexpr double CoordinateLimit = 1000000.0;
+  constexpr double kCoordinateLimit = 1000000.0;
 
   for (const auto & detection : detections.detections) {
     const auto & box = detection.bbox;
@@ -149,9 +149,9 @@ void draw_detections(
     const double center_y = box.center.position.y;
     if (
       !std::isfinite(center_x) || !std::isfinite(center_y) || !std::isfinite(box.size_x) ||
-      !std::isfinite(box.size_y) || std::abs(center_x) > CoordinateLimit ||
-      std::abs(center_y) > CoordinateLimit || box.size_x <= 0.0 || box.size_y <= 0.0 ||
-      box.size_x > CoordinateLimit || box.size_y > CoordinateLimit) {
+      !std::isfinite(box.size_y) || std::abs(center_x) > kCoordinateLimit ||
+      std::abs(center_y) > kCoordinateLimit || box.size_x <= 0.0 || box.size_y <= 0.0 ||
+      box.size_x > kCoordinateLimit || box.size_y > kCoordinateLimit) {
       continue;
     }
 
