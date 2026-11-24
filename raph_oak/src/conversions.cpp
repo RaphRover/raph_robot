@@ -27,6 +27,9 @@
 #include <cstring>
 #include <memory>
 #include <opencv2/core.hpp>
+#include <opencv2/core/hal/interface.h>
+#include <opencv2/core/mat.hpp>
+#include <opencv2/core/types.hpp>
 #include <opencv2/imgproc.hpp>
 #include <string>
 #include <utility>
@@ -40,6 +43,7 @@
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
 #include "raph_oak/frame_clock.hpp"
+#include "rclcpp/logger.hpp"
 #include "rclcpp/logging.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
@@ -49,6 +53,7 @@
 #include "sensor_msgs/msg/point_field.hpp"
 #include "std_msgs/msg/header.hpp"
 #include "vision_msgs/msg/detection2_d.hpp"
+#include "vision_msgs/msg/detection2_d_array.hpp"
 #include "vision_msgs/msg/object_hypothesis_with_pose.hpp"
 
 namespace raph_oak
