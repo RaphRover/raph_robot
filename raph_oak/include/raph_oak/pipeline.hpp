@@ -38,7 +38,7 @@
 namespace raph_oak
 {
 
-/// The queues of one image stream, see ImageStreamSpecs
+/// The queues of one image stream, see kImageStreamSpecs
 struct ImageQueueSet
 {
   std::shared_ptr<dai::MessageQueue> raw_queue;
@@ -49,7 +49,7 @@ struct ImageQueueSet
 struct PipelineDetails
 {
   std::shared_ptr<dai::Pipeline> pipeline;
-  std::array<ImageQueueSet, ImageStreamCount> image_queue_sets;
+  std::array<ImageQueueSet, kImageStreamCount> image_queue_sets;
   std::shared_ptr<dai::MessageQueue> imu_queue;
   std::shared_ptr<dai::InputQueue> depth_config_queue;
   std::shared_ptr<dai::MessageQueue> pointcloud_queue;

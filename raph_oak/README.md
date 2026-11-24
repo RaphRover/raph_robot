@@ -212,7 +212,7 @@ source, so correct them if the actual reasons differ.
 
 | File | Role |
 |---|---|
-| `streams.hpp` | Table of the image streams (`ImageStreamSpecs`): topics, frame ids, gates and how the camera info is made. The publishers, the queue callbacks and the subscriber based activation are all loops over it |
+| `streams.hpp` | Table of the image streams (`kImageStreamSpecs`): topics, frame ids, gates and how the camera info is made. The publishers, the queue callbacks and the subscriber based activation are all loops over it |
 | `control.hpp` | `Control`, a target of the control channel, with its log name and properties |
 | `demand.hpp/.cpp` | `Demand`: subscriber counts → what each stream needs → gate states; plus the stereo sensor start/stop (with the restart delay), laser intensity and point cloud rate. No DepthAI, no ROS |
 | `pipeline.hpp/.cpp` | Builds the DepthAI pipeline and defines the control channel |
@@ -222,7 +222,7 @@ source, so correct them if the actual reasons differ.
 | `oak_wrapper.hpp/.cpp` | The node: connects to the camera, counts subscribers, applies the decisions of `demand` and publishes |
 | `test/` | Unit tests, no camera needed (`colcon test --packages-select raph_oak`): `test_demand` for the stream table and `demand`, `test_conversions` for the camera info, IMU and point cloud conversions (camera info cases use numbers of a real OAK-D Pro W) |
 
-To add an image stream, add an entry to `ImageStreamId` and `ImageStreamSpecs`, the gates it uses to
+To add an image stream, add an entry to `ImageStreamId` and `kImageStreamSpecs`, the gates it uses to
 `Control::Value` (and `Control::name()`), and build its nodes with `make_image_queue_set` in `pipeline.cpp`.
 Nothing else in the node changes: the topics, the publishers, the callbacks and the activation
 follow from the table. Add the stream to `doc/pipeline.dot` as well.

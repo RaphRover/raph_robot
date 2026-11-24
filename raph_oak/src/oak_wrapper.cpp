@@ -80,15 +80,15 @@ using namespace std::chrono_literals;
 namespace raph_oak
 {
 
-static const std::vector<std::string> UsbStrings = {"UNKNOWN", "LOW",   "FULL",
-                                                    "HIGH",    "SUPER", "SUPER_PLUS"};
+static const std::vector<std::string> kUsbStrings = {"UNKNOWN", "LOW",   "FULL",
+                                                     "HIGH",    "SUPER", "SUPER_PLUS"};
 
 // How long the ~/capture_still service waits for the triggered frame to arrive from the device
-static constexpr std::chrono::milliseconds StillCaptureTimeout{2000};
+static constexpr std::chrono::milliseconds kStillCaptureTimeout{2000};
 
 // Minimum time between stopping the stereo sensors and starting them again. A start sent shortly
 // after a stop is ignored by the camera and the stereo streams stay silent.
-static constexpr std::chrono::milliseconds StereoRestartDelay{3000};
+static constexpr std::chrono::milliseconds kStereoRestartDelay{3000};
 
 OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 : Node("oak_wrapper", options), param_listener_(get_node_parameters_interface())
@@ -113,7 +113,7 @@ std::string OakWrapper::tf_frame(const std::string & frame) const
 
 void OakWrapper::create_ros_publishers()
 {
-  for (const auto & spec : ImageStreamSpecs) {
+  for (const auto & spec : kImageStreamSpecs) {
     auto & publisher_set = image_publisher_sets_[get_image_index(spec.id)];
     const std::string topic = std::string("~/") + spec.topic;
     publisher_set.image_pub = create_publisher<sensor_msgs::msg::Image>(topic, 1);
@@ -177,38 +177,38 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   const auto mono_width = static_cast<uint32_t>(params_.mono.width);
   const auto mono_height = static_cast<uint32_t>(params_.mono.height);
 
-  publisher_calibration_info(ImageStreamId::Rgb) = get_rotated_camera_info(camera_info(
+  publisher_calibration_info(ImageStreamId::RGB) = get_rotated_camera_info(camera_info(
     dai::CameraBoardSocket::CAM_A, static_cast<uint32_t>(params_.rgb.width),
     static_cast<uint32_t>(params_.rgb.height)));
-  publisher_calibration_info(ImageStreamId::Left) =
+  publisher_calibration_info(ImageStreamId::LEFT) =
     get_rotated_camera_info(camera_info(left_socket, mono_width, mono_height));
-  publisher_calibration_info(ImageStreamId::LeftRect) =
+  publisher_calibration_info(ImageStreamId::LEFT_RECT) =
     get_rotated_camera_info(camera_info(left_socket, mono_width, mono_height), true);
-  publisher_calibration_info(ImageStreamId::Right) =
+  publisher_calibration_info(ImageStreamId::RIGHT) =
     get_rotated_camera_info(camera_info(right_socket, mono_width, mono_height));
-  publisher_calibration_info(ImageStreamId::RightRect) =
+  publisher_calibration_info(ImageStreamId::RIGHT_RECT) =
     get_rotated_camera_info(camera_info(right_socket, mono_width, mono_height), true);
 
   // The undistorted RGB image has the pose of the RGB camera
-  publisher_calibration_info(ImageStreamId::RgbRect) =
-    publisher_calibration_info(ImageStreamId::Rgb);
+  publisher_calibration_info(ImageStreamId::RGB_RECT) =
+    publisher_calibration_info(ImageStreamId::RGB);
 
   // Depth: aligned to the rectified right sensor, which is the left image after the rotation, at
   // half the mono resolution. Only a fallback: the camera info of every depth frame is built from
   // the intrinsics DepthAI attaches to it.
-  auto & depth_info = publisher_calibration_info(ImageStreamId::Depth);
+  auto & depth_info = publisher_calibration_info(ImageStreamId::DEPTH);
   depth_info = get_scaled_camera_info(
-    publisher_calibration_info(ImageStreamId::LeftRect), params_.mono.width / 2,
+    publisher_calibration_info(ImageStreamId::LEFT_RECT), params_.mono.width / 2,
     params_.mono.height / 2);
   depth_info.r = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
   depth_info.p[3] = 0.0;
 
-  for (const auto & spec : ImageStreamSpecs) {
+  for (const auto & spec : kImageStreamSpecs) {
     publisher_calibration_info(spec.id).header.frame_id = tf_frame(spec.frame_id);
   }
 
   // The network input comes from the RGB camera
-  nn_passthrough_set_.calibration_info = publisher_calibration_info(ImageStreamId::Rgb);
+  nn_passthrough_set_.calibration_info = publisher_calibration_info(ImageStreamId::RGB);
 
   // Invalidate the cached still image camera info, it is rebuilt on the next capture
   still_camera_info_ = sensor_msgs::msg::CameraInfo();
@@ -240,7 +240,7 @@ void OakWrapper::run_pipeline()
   depth_config_ = pipeline_details_.depth_config;
 
   // Register permanent callbacks on queues
-  for (const auto & spec : ImageStreamSpecs) {
+  for (const auto & spec : kImageStreamSpecs) {
     const auto stream_id = spec.id;
     const auto & queue_set = pipeline_details_.image_queue_sets[get_image_index(stream_id)];
     queue_set.raw_queue->addCallback(
@@ -411,7 +411,7 @@ std::shared_ptr<dai::Device> OakWrapper::connect_to_device()
     get_logger(), "Connected to device with ID: " << device->getDeviceId() << ", USB port id: "
                                                   << device->getDeviceInfo().name);
   RCLCPP_INFO_STREAM(
-    get_logger(), "USB Speed: " << UsbStrings[static_cast<int32_t>(device->getUsbSpeed())]);
+    get_logger(), "USB Speed: " << kUsbStrings[static_cast<int32_t>(device->getUsbSpeed())]);
 
   auto calibration_handler = device->readCalibration();
   auto eeprom = calibration_handler.getEepromData();
@@ -435,7 +435,7 @@ void OakWrapper::check_publishers() { apply_demand(Demand(count_subscribers()));
 SubscriberCounts OakWrapper::count_subscribers() const
 {
   SubscriberCounts counts;
-  for (const auto & spec : ImageStreamSpecs) {
+  for (const auto & spec : kImageStreamSpecs) {
     const auto & publisher_set = image_publisher_sets_[get_image_index(spec.id)];
     counts.images[get_image_index(spec.id)] = {
       publisher_set.image_pub->get_subscription_count(),
@@ -465,8 +465,8 @@ void OakWrapper::apply_demand(const Demand & demand)
   // everything depending on them was closed
   const auto sensors = stereo_sensor_action(
     stereo_streaming_, demand.stereo_needed(), std::chrono::steady_clock::now(), stereo_stopped_at_,
-    StereoRestartDelay);
-  if (sensors == StereoSensorAction::Start) {
+    kStereoRestartDelay);
+  if (sensors == StereoSensorAction::START) {
     set_stereo_streaming(true);
   }
 
@@ -476,20 +476,20 @@ void OakWrapper::apply_demand(const Demand & demand)
   const int pointcloud_fps = static_cast<int>(params_.pointcloud.max_rate);
   const bool nn_in_pipeline = pipeline_details_.nn_queue != nullptr;
   for (const auto gate : Control::all()) {
-    if ((gate == Control::Nn || gate == Control::NnEnc) && !nn_in_pipeline) {
+    if ((gate == Control::NN || gate == Control::NN_ENC) && !nn_in_pipeline) {
       continue;
     }
     if (!gate.follows_demand()) {
       continue;
     }
     int fps = -1;
-    if (gate == Control::PointCloud) {
+    if (gate == Control::POINT_CLOUD) {
       fps = pointcloud_fps;
     }
     set_gate(gate, wanted_gates.is_open(gate), fps);
   }
 
-  if (sensors == StereoSensorAction::Stop) {
+  if (sensors == StereoSensorAction::STOP) {
     set_stereo_streaming(false);
   }
 
@@ -563,7 +563,7 @@ void OakWrapper::set_stereo_streaming(bool streaming)
   RCLCPP_INFO_STREAM(
     get_logger(), (streaming ? "Starting" : "Stopping") << " the stereo camera sensors");
 
-  for (const Control sensor : {Control::CameraB, Control::CameraC}) {
+  for (const Control sensor : {Control::CAMERA_B, Control::CAMERA_C}) {
     auto control = std::make_shared<dai::CameraControl>();
     if (streaming) {
       control->setStartStreaming();
@@ -825,11 +825,11 @@ void OakWrapper::capture_still(
 
   // Drop anything left over from a previous, timed out capture
   pipeline_details_.still_image_queue->tryGetAll();
-  send_control(pipeline_details_, Control::Still, dai::GateControl::openGate(1));
+  send_control(pipeline_details_, Control::STILL, dai::GateControl::openGate(1));
 
   bool timed_out = false;
   auto in_data =
-    pipeline_details_.still_image_queue->get<dai::ImgFrame>(StillCaptureTimeout, timed_out);
+    pipeline_details_.still_image_queue->get<dai::ImgFrame>(kStillCaptureTimeout, timed_out);
   if (timed_out || !in_data) {
     response->success = false;
     response->message = "Timed out waiting for the still image frame";

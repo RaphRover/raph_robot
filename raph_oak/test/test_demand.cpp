@@ -58,8 +58,8 @@ std::size_t open_gates(const GateStates & states)
 
 TEST(StreamTable, IsIndexedById)
 {
-  for (std::size_t i = 0; i < ImageStreamCount; ++i) {
-    EXPECT_EQ(get_image_index(ImageStreamSpecs[i].id), i);
+  for (std::size_t i = 0; i < kImageStreamCount; ++i) {
+    EXPECT_EQ(get_image_index(kImageStreamSpecs[i].id), i);
   }
 }
 
@@ -68,7 +68,7 @@ TEST(StreamTable, NamesTopicsAndGatesAreUnique)
   std::set<std::string> names;
   std::set<std::string> topics;
   std::set<Control> gates;
-  for (const auto & spec : ImageStreamSpecs) {
+  for (const auto & spec : kImageStreamSpecs) {
     EXPECT_TRUE(names.insert(spec.name).second) << spec.name;
     EXPECT_TRUE(topics.insert(spec.topic).second) << spec.topic;
     EXPECT_TRUE(topics.insert(spec.info_topic).second) << spec.info_topic;
@@ -86,15 +86,15 @@ TEST(StreamTable, NamesTopicsAndGatesAreUnique)
 
 TEST(StreamTable, OnlyTheDepthHasNoCompressedVariant)
 {
-  for (const auto & spec : ImageStreamSpecs) {
-    EXPECT_EQ(spec.has_compressed(), spec.id != ImageStreamId::Depth) << spec.name;
+  for (const auto & spec : kImageStreamSpecs) {
+    EXPECT_EQ(spec.has_compressed(), spec.id != ImageStreamId::DEPTH) << spec.name;
   }
 }
 
 TEST(StreamTable, StereoStreamsHaveAnInputGate)
 {
   // The stereo outputs are rotated by an ImageManip, which is what the input gate keeps idle
-  for (const auto & spec : ImageStreamSpecs) {
+  for (const auto & spec : kImageStreamSpecs) {
     EXPECT_EQ(spec.stereo, !spec.in_gate.is_none()) << spec.name;
   }
 }
@@ -109,20 +109,20 @@ TEST(Control, EveryTargetHasAName)
 TEST(Control, AllListsEveryTargetInOrder)
 {
   const auto all = Control::all();
-  for (std::size_t i = 0; i < Control::Count; ++i) {
+  for (std::size_t i = 0; i < Control::kCount; ++i) {
     EXPECT_EQ(all[i].index(), i);
   }
-  EXPECT_EQ(Control(Control::None).index(), Control::Count);
+  EXPECT_EQ(Control(Control::NONE).index(), Control::kCount);
 }
 
 TEST(Control, OnlyTheGatesFollowTheDemand)
 {
-  EXPECT_TRUE(Control(Control::LeftRaw).follows_demand());
-  EXPECT_TRUE(Control(Control::PointCloud).follows_demand());
-  EXPECT_FALSE(Control(Control::Still).follows_demand());
-  EXPECT_FALSE(Control(Control::CameraB).follows_demand());
-  EXPECT_FALSE(Control(Control::CameraC).follows_demand());
-  EXPECT_FALSE(Control(Control::None).follows_demand());
+  EXPECT_TRUE(Control(Control::LEFT_RAW).follows_demand());
+  EXPECT_TRUE(Control(Control::POINT_CLOUD).follows_demand());
+  EXPECT_FALSE(Control(Control::STILL).follows_demand());
+  EXPECT_FALSE(Control(Control::CAMERA_B).follows_demand());
+  EXPECT_FALSE(Control(Control::CAMERA_C).follows_demand());
+  EXPECT_FALSE(Control(Control::NONE).follows_demand());
 }
 
 TEST(ImageDemand, NothingWithoutSubscribers)
@@ -186,61 +186,61 @@ TEST(Demand, NoSubscribersNeedNothing)
 
 TEST(Demand, RgbDoesNotNeedTheStereoSensors)
 {
-  const auto demand = Demand(subscribers(ImageStreamId::Rgb, {1, 1, 0}));
+  const auto demand = Demand(subscribers(ImageStreamId::RGB, {1, 1, 0}));
   EXPECT_FALSE(demand.stereo_needed());
 
   const auto states = demand.gate_states();
-  EXPECT_TRUE(gate(states, Control::RgbRaw));
-  EXPECT_TRUE(gate(states, Control::RgbEnc));
+  EXPECT_TRUE(gate(states, Control::RGB_RAW));
+  EXPECT_TRUE(gate(states, Control::RGB_ENC));
   EXPECT_EQ(open_gates(states), 2U);
 }
 
 TEST(Demand, RgbRectDoesNotNeedTheStereoSensors)
 {
-  const auto demand = Demand(subscribers(ImageStreamId::RgbRect, {0, 0, 1}));
+  const auto demand = Demand(subscribers(ImageStreamId::RGB_RECT, {0, 0, 1}));
   EXPECT_FALSE(demand.stereo_needed());
 
   const auto states = demand.gate_states();
-  EXPECT_FALSE(gate(states, Control::RgbRectRaw));
-  EXPECT_TRUE(gate(states, Control::RgbRectEnc));
+  EXPECT_FALSE(gate(states, Control::RGB_RECT_RAW));
+  EXPECT_TRUE(gate(states, Control::RGB_RECT_ENC));
   EXPECT_EQ(open_gates(states), 1U);
 }
 
 TEST(Demand, RawStereoImageOpensItsInputAndRawGate)
 {
-  const auto demand = Demand(subscribers(ImageStreamId::LeftRect, {1, 0, 0}));
+  const auto demand = Demand(subscribers(ImageStreamId::LEFT_RECT, {1, 0, 0}));
   EXPECT_TRUE(demand.stereo_needed());
   EXPECT_FALSE(demand.depth_needed());
 
   const auto states = demand.gate_states();
-  EXPECT_TRUE(gate(states, Control::LeftRectIn));
-  EXPECT_TRUE(gate(states, Control::LeftRectRaw));
-  EXPECT_FALSE(gate(states, Control::LeftRectEnc));
+  EXPECT_TRUE(gate(states, Control::LEFT_RECT_IN));
+  EXPECT_TRUE(gate(states, Control::LEFT_RECT_RAW));
+  EXPECT_FALSE(gate(states, Control::LEFT_RECT_ENC));
   EXPECT_EQ(open_gates(states), 2U);
 }
 
 TEST(Demand, CompressedStereoImageOpensItsInputAndEncoderGate)
 {
-  const auto demand = Demand(subscribers(ImageStreamId::Right, {0, 1, 0}));
+  const auto demand = Demand(subscribers(ImageStreamId::RIGHT, {0, 1, 0}));
   EXPECT_TRUE(demand.stereo_needed());
 
   const auto states = demand.gate_states();
-  EXPECT_TRUE(gate(states, Control::RightIn));
-  EXPECT_FALSE(gate(states, Control::RightRaw));
-  EXPECT_TRUE(gate(states, Control::RightEnc));
+  EXPECT_TRUE(gate(states, Control::RIGHT_IN));
+  EXPECT_FALSE(gate(states, Control::RIGHT_RAW));
+  EXPECT_TRUE(gate(states, Control::RIGHT_ENC));
   EXPECT_EQ(open_gates(states), 2U);
 }
 
 TEST(Demand, DepthCameraInfoAloneNeedsTheDepth)
 {
-  const auto demand = Demand(subscribers(ImageStreamId::Depth, {0, 0, 1}));
+  const auto demand = Demand(subscribers(ImageStreamId::DEPTH, {0, 0, 1}));
   EXPECT_TRUE(demand.depth_needed());
   EXPECT_TRUE(demand.stereo_needed());
 
   const auto states = demand.gate_states();
-  EXPECT_TRUE(gate(states, Control::DepthIn));
-  EXPECT_TRUE(gate(states, Control::DepthRaw));
-  EXPECT_FALSE(gate(states, Control::PointCloud));
+  EXPECT_TRUE(gate(states, Control::DEPTH_IN));
+  EXPECT_TRUE(gate(states, Control::DEPTH_RAW));
+  EXPECT_FALSE(gate(states, Control::POINT_CLOUD));
 }
 
 TEST(Demand, PointCloudAloneKeepsTheDepthInputOpenButNotTheDepthOutput)
@@ -252,9 +252,9 @@ TEST(Demand, PointCloudAloneKeepsTheDepthInputOpenButNotTheDepthOutput)
   EXPECT_TRUE(demand.stereo_needed());
 
   const auto states = demand.gate_states();
-  EXPECT_TRUE(gate(states, Control::DepthIn));
-  EXPECT_FALSE(gate(states, Control::DepthRaw));
-  EXPECT_TRUE(gate(states, Control::PointCloud));
+  EXPECT_TRUE(gate(states, Control::DEPTH_IN));
+  EXPECT_FALSE(gate(states, Control::DEPTH_RAW));
+  EXPECT_TRUE(gate(states, Control::POINT_CLOUD));
   EXPECT_EQ(open_gates(states), 2U);
 }
 
@@ -266,7 +266,7 @@ TEST(Demand, ImuDoesNotNeedTheStereoSensors)
   EXPECT_FALSE(demand.stereo_needed());
 
   const auto states = demand.gate_states();
-  EXPECT_TRUE(gate(states, Control::Imu));
+  EXPECT_TRUE(gate(states, Control::IMU));
   EXPECT_EQ(open_gates(states), 1U);
 }
 
@@ -279,8 +279,8 @@ TEST(Demand, NnDoesNotNeedTheStereoSensors)
   EXPECT_TRUE(demand.nn());
 
   const auto states = demand.gate_states();
-  EXPECT_TRUE(gate(states, Control::Nn));
-  EXPECT_FALSE(gate(states, Control::NnEnc));
+  EXPECT_TRUE(gate(states, Control::NN));
+  EXPECT_FALSE(gate(states, Control::NN_ENC));
   EXPECT_EQ(open_gates(states), 1U);
 }
 
@@ -293,8 +293,8 @@ TEST(Demand, CompressedNnOpensTheNetworkAndTheEncoder)
   EXPECT_TRUE(demand.nn_encoded());
 
   const auto states = demand.gate_states();
-  EXPECT_FALSE(gate(states, Control::Nn));
-  EXPECT_TRUE(gate(states, Control::NnEnc));
+  EXPECT_FALSE(gate(states, Control::NN));
+  EXPECT_TRUE(gate(states, Control::NN_ENC));
   EXPECT_EQ(open_gates(states), 1U);
 }
 
@@ -307,8 +307,8 @@ TEST(Demand, NnCameraInfoAloneOpensOnlyTheEncoder)
   EXPECT_TRUE(demand.nn_passthrough().encoded());
 
   const auto states = demand.gate_states();
-  EXPECT_FALSE(gate(states, Control::Nn));
-  EXPECT_TRUE(gate(states, Control::NnEnc));
+  EXPECT_FALSE(gate(states, Control::NN));
+  EXPECT_TRUE(gate(states, Control::NN_ENC));
 }
 
 TEST(Demand, RawNnPassthroughNeedsTheNetwork)
@@ -320,8 +320,8 @@ TEST(Demand, RawNnPassthroughNeedsTheNetwork)
   EXPECT_FALSE(demand.nn_encoded());
 
   const auto states = demand.gate_states();
-  EXPECT_TRUE(gate(states, Control::Nn));
-  EXPECT_FALSE(gate(states, Control::NnEnc));
+  EXPECT_TRUE(gate(states, Control::NN));
+  EXPECT_FALSE(gate(states, Control::NN_ENC));
 }
 
 TEST(Demand, EverythingSubscribed)
@@ -343,29 +343,29 @@ TEST(Demand, EverythingSubscribed)
 
 TEST(Demand, TheGatesOfDifferentStreamsAreIndependent)
 {
-  const auto demand = Demand(subscribers(ImageStreamId::Left, {1, 0, 0}));
+  const auto demand = Demand(subscribers(ImageStreamId::LEFT, {1, 0, 0}));
   const auto states = demand.gate_states();
-  EXPECT_FALSE(gate(states, Control::LeftRectIn));
-  EXPECT_FALSE(gate(states, Control::RightIn));
-  EXPECT_FALSE(gate(states, Control::DepthIn));
+  EXPECT_FALSE(gate(states, Control::LEFT_RECT_IN));
+  EXPECT_FALSE(gate(states, Control::RIGHT_IN));
+  EXPECT_FALSE(gate(states, Control::DEPTH_IN));
 }
 
 TEST(StereoSensors, NeededWhileStreamingChangesNothing)
 {
   const auto now = Clock::now();
-  EXPECT_EQ(stereo_sensor_action(true, true, now, now, 3000ms), StereoSensorAction::None);
+  EXPECT_EQ(stereo_sensor_action(true, true, now, now, 3000ms), StereoSensorAction::NONE);
 }
 
 TEST(StereoSensors, NotNeededWhileStoppedChangesNothing)
 {
   const auto now = Clock::now();
-  EXPECT_EQ(stereo_sensor_action(false, false, now, now, 3000ms), StereoSensorAction::None);
+  EXPECT_EQ(stereo_sensor_action(false, false, now, now, 3000ms), StereoSensorAction::NONE);
 }
 
 TEST(StereoSensors, StopsWhenNotNeeded)
 {
   const auto now = Clock::now();
-  EXPECT_EQ(stereo_sensor_action(true, false, now, now, 3000ms), StereoSensorAction::Stop);
+  EXPECT_EQ(stereo_sensor_action(true, false, now, now, 3000ms), StereoSensorAction::STOP);
 }
 
 TEST(StereoSensors, DoesNotStartRightAfterTheyWereStopped)
@@ -373,10 +373,10 @@ TEST(StereoSensors, DoesNotStartRightAfterTheyWereStopped)
   const auto stopped_at = Clock::now();
   EXPECT_EQ(
     stereo_sensor_action(false, true, stopped_at + 100ms, stopped_at, 3000ms),
-    StereoSensorAction::None);
+    StereoSensorAction::NONE);
   EXPECT_EQ(
     stereo_sensor_action(false, true, stopped_at + 2999ms, stopped_at, 3000ms),
-    StereoSensorAction::None);
+    StereoSensorAction::NONE);
 }
 
 TEST(StereoSensors, StartsOnceTheRestartDelayPassed)
@@ -384,17 +384,17 @@ TEST(StereoSensors, StartsOnceTheRestartDelayPassed)
   const auto stopped_at = Clock::now();
   EXPECT_EQ(
     stereo_sensor_action(false, true, stopped_at + 3000ms, stopped_at, 3000ms),
-    StereoSensorAction::Start);
+    StereoSensorAction::START);
   EXPECT_EQ(
     stereo_sensor_action(false, true, stopped_at + 10000ms, stopped_at, 3000ms),
-    StereoSensorAction::Start);
+    StereoSensorAction::START);
 }
 
 TEST(StereoSensors, StopIsNotDelayed)
 {
   // Stopping only depends on the demand, a stop shortly after a start is fine
   const auto now = Clock::now();
-  EXPECT_EQ(stereo_sensor_action(true, false, now, now - 1ms, 3000ms), StereoSensorAction::Stop);
+  EXPECT_EQ(stereo_sensor_action(true, false, now, now - 1ms, 3000ms), StereoSensorAction::STOP);
 }
 
 TEST(Laser, AlwaysOnWithoutLazyActivation)

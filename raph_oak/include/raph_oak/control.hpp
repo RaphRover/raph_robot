@@ -43,7 +43,7 @@ namespace raph_oak
  *  - *Enc gates sit in front of the JPEG encoder (for the neural network, in front of the
  *    conversion to NV12 that the encoder needs).
  *
- * The targets are written like enum values (Control::RgbRaw) and converted implicitly, so they can
+ * The targets are written like enum values (Control::RGB_RAW) and converted implicitly, so they can
  * be compared and used in a switch.
  *
  * This header does not depend on DepthAI, so that the logic using it can be unit tested.
@@ -53,39 +53,39 @@ class Control
 public:
   enum Value : uint8_t
   {
-    RgbRaw,
-    RgbEnc,
-    RgbRectRaw,
-    RgbRectEnc,
-    DepthIn,
-    DepthRaw,
-    PointCloud,
-    LeftIn,
-    LeftRaw,
-    LeftEnc,
-    LeftRectIn,
-    LeftRectRaw,
-    LeftRectEnc,
-    RightIn,
-    RightRaw,
-    RightEnc,
-    RightRectIn,
-    RightRectRaw,
-    RightRectEnc,
-    Imu,
-    Nn,
-    NnEnc,
-    Still,
-    CameraB,  // left stereo sensor (CameraControl: start/stop streaming)
-    CameraC,  // right stereo sensor (CameraControl: start/stop streaming)
+    RGB_RAW,
+    RGB_ENC,
+    RGB_RECT_RAW,
+    RGB_RECT_ENC,
+    DEPTH_IN,
+    DEPTH_RAW,
+    POINT_CLOUD,
+    LEFT_IN,
+    LEFT_RAW,
+    LEFT_ENC,
+    LEFT_RECT_IN,
+    LEFT_RECT_RAW,
+    LEFT_RECT_ENC,
+    RIGHT_IN,
+    RIGHT_RAW,
+    RIGHT_ENC,
+    RIGHT_RECT_IN,
+    RIGHT_RECT_RAW,
+    RIGHT_RECT_ENC,
+    IMU,
+    NN,
+    NN_ENC,
+    STILL,
+    CAMERA_B,  // left stereo sensor (CameraControl: start/stop streaming)
+    CAMERA_C,  // right stereo sensor (CameraControl: start/stop streaming)
     /// No target, where a stream does not have one of its gates
-    None
+    NONE
   };
 
-  /// Number of targets, None excluded
-  static constexpr std::size_t Count = None;
+  /// Number of targets, NONE excluded
+  static constexpr std::size_t kCount = NONE;
 
-  // Implicit on purpose: Control::RgbRaw is a Control
+  // Implicit on purpose: Control::RGB_RAW is a Control
   constexpr Control(Value value)  // NOLINT(google-explicit-constructor)
   : value_(value)
   {
@@ -94,72 +94,72 @@ public:
   // Implicit on purpose: comparisons and switch statements work on the value
   constexpr operator Value() const { return value_; }  // NOLINT(google-explicit-constructor)
 
-  /// All targets in order, None excluded
-  static constexpr std::array<Control, Count> all()
+  /// All targets in order, NONE excluded
+  static constexpr std::array<Control, kCount> all()
   {
-    return all(std::make_index_sequence<Count>{});
+    return all(std::make_index_sequence<kCount>{});
   }
 
-  /// Index in arrays of size Count and the id sent over the control channel
+  /// Index in arrays of size kCount and the id sent over the control channel
   constexpr std::size_t index() const { return static_cast<std::size_t>(value_); }
 
-  constexpr bool is_none() const { return value_ == None; }
+  constexpr bool is_none() const { return value_ == NONE; }
 
   /// Name used in logs
   constexpr const char * name() const
   {
     switch (value_) {
-      case RgbRaw:
+      case RGB_RAW:
         return "rgb";
-      case RgbEnc:
+      case RGB_ENC:
         return "rgb compressed";
-      case RgbRectRaw:
+      case RGB_RECT_RAW:
         return "rgb_rect";
-      case RgbRectEnc:
+      case RGB_RECT_ENC:
         return "rgb_rect compressed";
-      case DepthIn:
+      case DEPTH_IN:
         return "depth input";
-      case DepthRaw:
+      case DEPTH_RAW:
         return "depth";
-      case PointCloud:
+      case POINT_CLOUD:
         return "pointcloud";
-      case LeftIn:
+      case LEFT_IN:
         return "left input";
-      case LeftRaw:
+      case LEFT_RAW:
         return "left";
-      case LeftEnc:
+      case LEFT_ENC:
         return "left compressed";
-      case LeftRectIn:
+      case LEFT_RECT_IN:
         return "left_rect input";
-      case LeftRectRaw:
+      case LEFT_RECT_RAW:
         return "left_rect";
-      case LeftRectEnc:
+      case LEFT_RECT_ENC:
         return "left_rect compressed";
-      case RightIn:
+      case RIGHT_IN:
         return "right input";
-      case RightRaw:
+      case RIGHT_RAW:
         return "right";
-      case RightEnc:
+      case RIGHT_ENC:
         return "right compressed";
-      case RightRectIn:
+      case RIGHT_RECT_IN:
         return "right_rect input";
-      case RightRectRaw:
+      case RIGHT_RECT_RAW:
         return "right_rect";
-      case RightRectEnc:
+      case RIGHT_RECT_ENC:
         return "right_rect compressed";
-      case Imu:
+      case IMU:
         return "imu";
-      case Nn:
+      case NN:
         return "nn";
-      case NnEnc:
+      case NN_ENC:
         return "nn compressed";
-      case Still:
+      case STILL:
         return "still image";
-      case CameraB:
+      case CAMERA_B:
         return "camera B";
-      case CameraC:
+      case CAMERA_C:
         return "camera C";
-      case None:
+      case NONE:
         break;
     }
     return "none";
@@ -169,11 +169,11 @@ public:
   constexpr bool is_internal() const
   {
     switch (value_) {
-      case DepthIn:
-      case LeftIn:
-      case LeftRectIn:
-      case RightIn:
-      case RightRectIn:
+      case DEPTH_IN:
+      case LEFT_IN:
+      case LEFT_RECT_IN:
+      case RIGHT_IN:
+      case RIGHT_RECT_IN:
         return true;
       default:
         return false;
@@ -184,12 +184,12 @@ public:
   /// sensors are started and stopped separately
   constexpr bool follows_demand() const
   {
-    return value_ != Still && value_ != CameraB && value_ != CameraC && value_ != None;
+    return value_ != STILL && value_ != CAMERA_B && value_ != CAMERA_C && value_ != NONE;
   }
 
 private:
   template <std::size_t... Indices>
-  static constexpr std::array<Control, Count> all(std::index_sequence<Indices...> /*indices*/)
+  static constexpr std::array<Control, kCount> all(std::index_sequence<Indices...> /*indices*/)
   {
     return {Control(static_cast<Value>(Indices))...};
   }

@@ -72,7 +72,7 @@ private:
   std::shared_ptr<dai::Device> device_;
   PipelineDetails pipeline_details_;
 
-  // ROS Publishers of an image stream, see ImageStreamSpecs
+  // ROS Publishers of an image stream, see kImageStreamSpecs
   struct ImagePublisherSet
   {
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> image_pub;
@@ -83,7 +83,7 @@ private:
     /// the rectification rotation and the baseline, see get_rectified_camera_info()
     sensor_msgs::msg::CameraInfo calibration_info;
   };
-  std::array<ImagePublisherSet, ImageStreamCount> image_publisher_sets_;
+  std::array<ImagePublisherSet, kImageStreamCount> image_publisher_sets_;
 
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Imu>> imu_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>> pointcloud_pub_;
@@ -115,9 +115,9 @@ private:
 
   // Last state sent to each control target (true = gate open), written by the check timer and read
   // by the queue callbacks
-  std::array<std::atomic<bool>, Control::Count> control_state_{};
+  std::array<std::atomic<bool>, Control::kCount> control_state_{};
   // Rate limit last sent to each open gate, -1 for none. Only used by the check timer
-  std::array<int, Control::Count> gate_fps_{};
+  std::array<int, Control::kCount> gate_fps_{};
   // The stereo sensors are paused while no stereo output is needed
   bool stereo_streaming_{true};
   // When the stereo sensors were last stopped, a start right after is lost by the camera
@@ -165,8 +165,9 @@ private:
   void post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters);
   void update_parameters();
   void send_parameters() const;
-  void publish_image(ImageStreamId id, const std::shared_ptr<dai::ADatatype> & message);
-  void publish_compressed_image(ImageStreamId id, const std::shared_ptr<dai::ADatatype> & message);
+  void publish_image(ImageStreamId stream_id, const std::shared_ptr<dai::ADatatype> & message);
+  void publish_compressed_image(
+    ImageStreamId stream_id, const std::shared_ptr<dai::ADatatype> & message);
   void publish_imu(const std::shared_ptr<dai::ADatatype> & message);
   void publish_pointcloud(const std::shared_ptr<dai::ADatatype> & message);
   void publish_detections(const std::shared_ptr<dai::ADatatype> & message);

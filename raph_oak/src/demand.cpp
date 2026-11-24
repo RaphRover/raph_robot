@@ -47,20 +47,20 @@ Demand::Demand(const SubscriberCounts & counts)
   nn_(counts.nn > 0),
   nn_passthrough_(counts.nn_passthrough, true)
 {
-  for (const auto & spec : ImageStreamSpecs) {
+  for (const auto & spec : kImageStreamSpecs) {
     const auto index = get_image_index(spec.id);
     images_[index] = ImageDemand(counts.images[index], spec.has_compressed());
   }
 }
 
-bool Demand::depth_needed() const { return image(ImageStreamId::Depth).raw() || pointcloud_; }
+bool Demand::depth_needed() const { return image(ImageStreamId::DEPTH).raw() || pointcloud_; }
 
 bool Demand::stereo_needed() const
 {
   if (depth_needed()) {
     return true;
   }
-  return std::any_of(ImageStreamSpecs.begin(), ImageStreamSpecs.end(), [this](const auto & spec) {
+  return std::any_of(kImageStreamSpecs.begin(), kImageStreamSpecs.end(), [this](const auto & spec) {
     return spec.stereo && image(spec.id).any();
   });
 }
@@ -68,7 +68,7 @@ bool Demand::stereo_needed() const
 GateStates Demand::gate_states() const
 {
   GateStates states;
-  for (const auto & spec : ImageStreamSpecs) {
+  for (const auto & spec : kImageStreamSpecs) {
     const auto & image_demand = image(spec.id);
     states.set(spec.raw_gate, image_demand.raw());
     if (!spec.enc_gate.is_none()) {
@@ -81,11 +81,11 @@ GateStates Demand::gate_states() const
   }
 
   // The point cloud is computed from the same rotated depth, so it keeps the depth input open
-  states.set(Control::DepthIn, depth_needed());
-  states.set(Control::PointCloud, pointcloud_);
-  states.set(Control::Imu, imu_);
-  states.set(Control::Nn, nn());
-  states.set(Control::NnEnc, nn_encoded());
+  states.set(Control::DEPTH_IN, depth_needed());
+  states.set(Control::POINT_CLOUD, pointcloud_);
+  states.set(Control::IMU, imu_);
+  states.set(Control::NN, nn());
+  states.set(Control::NN_ENC, nn_encoded());
   return states;
 }
 
@@ -94,12 +94,12 @@ StereoSensorAction stereo_sensor_action(
   std::chrono::steady_clock::time_point stopped_at, std::chrono::milliseconds restart_delay)
 {
   if (needed && !streaming) {
-    return now - stopped_at >= restart_delay ? StereoSensorAction::Start : StereoSensorAction::None;
+    return now - stopped_at >= restart_delay ? StereoSensorAction::START : StereoSensorAction::NONE;
   }
   if (!needed && streaming) {
-    return StereoSensorAction::Stop;
+    return StereoSensorAction::STOP;
   }
-  return StereoSensorAction::None;
+  return StereoSensorAction::NONE;
 }
 
 float laser_intensity(bool lazy, bool depth_is_needed, double configured_intensity)

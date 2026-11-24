@@ -254,7 +254,7 @@ std::vector<sensor_msgs::msg::Imu> ImuConverter::convert(
     if (time <= time0) {
       // Older than any gyroscope report that is left: cannot be interpolated
       accelerometer_reports_.pop_front();
-    } else if (time > time1 || time1 - time0 > MaxGyroscopeGap) {
+    } else if (time > time1 || time1 - time0 > kMaxGyroscopeGap) {
       gyroscope_reports_.pop_front();
     } else {
       const double alpha = std::chrono::duration<double>(time - time0).count() /
@@ -311,17 +311,17 @@ sensor_msgs::msg::PointCloud2 PointCloudConverter::convert(
   message.is_dense = data.isOrganized();
   message.is_bigendian = false;
 
-  constexpr std::uint32_t FieldSize = sizeof(float);
+  constexpr std::uint32_t kFieldSize = sizeof(float);
   const std::array<const char *, 3> names{"x", "y", "z"};
   for (std::size_t i = 0; i < names.size(); ++i) {
     sensor_msgs::msg::PointField field;
     field.name = names[i];
-    field.offset = static_cast<std::uint32_t>(i) * FieldSize;
+    field.offset = static_cast<std::uint32_t>(i) * kFieldSize;
     field.datatype = sensor_msgs::msg::PointField::FLOAT32;
     field.count = 1;
     message.fields.push_back(field);
   }
-  message.point_step = 3 * FieldSize;
+  message.point_step = 3 * kFieldSize;
   message.row_step = message.point_step * message.width;
 
   const auto points = data.getPoints();

@@ -47,7 +47,7 @@ struct ImageSubscriberCounts
 
 struct SubscriberCounts
 {
-  std::array<ImageSubscriberCounts, ImageStreamCount> images{};
+  std::array<ImageSubscriberCounts, kImageStreamCount> images{};
   std::size_t pointcloud{0};
   std::size_t imu{0};
   /// Subscribers of ~/nn/detections and ~/nn/overlay, 0 when nn.enabled is false
@@ -65,7 +65,7 @@ public:
   void set(Control gate, bool open) { open_[gate.index()] = open; }
 
 private:
-  std::array<bool, Control::Count> open_{};
+  std::array<bool, Control::kCount> open_{};
 };
 
 /// What one image stream needs from the camera
@@ -118,7 +118,7 @@ public:
   GateStates gate_states() const;
 
 private:
-  std::array<ImageDemand, ImageStreamCount> images_{};
+  std::array<ImageDemand, kImageStreamCount> images_{};
   bool pointcloud_{false};
   bool imu_{false};
   bool nn_{false};
@@ -127,9 +127,9 @@ private:
 
 enum class StereoSensorAction
 {
-  None,
-  Start,
-  Stop
+  NONE,
+  START,
+  STOP
 };
 
 /**
