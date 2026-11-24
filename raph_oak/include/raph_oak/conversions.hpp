@@ -27,8 +27,6 @@
 #include <string>
 #include <vector>
 
-#include "depthai/common/CameraBoardSocket.hpp"
-#include "depthai/device/CalibrationHandler.hpp"
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
 #include "depthai/pipeline/datatype/ImgDetections.hpp"
@@ -36,7 +34,6 @@
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
 #include "raph_oak/frame_clock.hpp"
 #include "rclcpp/logger.hpp"
-#include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
@@ -46,14 +43,6 @@
 
 namespace raph_oak
 {
-
-// Camera info of a camera from its factory calibration, at the given resolution: the intrinsics
-// and the first 8 distortion coefficients (rational polynomial model). For the cameras of the
-// stereo pair also the rectification rotation, and for the left one of the calibration (the
-// first camera of the pair) the baseline in P, as in depthai_bridge.
-sensor_msgs::msg::CameraInfo calibration_to_camera_info(
-  const dai::CalibrationHandler & calibration, dai::CameraBoardSocket socket, uint32_t width,
-  uint32_t height);
 
 std::unique_ptr<sensor_msgs::msg::Image> to_ros_image(
   dai::ImgFrame & data, const std_msgs::msg::Header & header, const rclcpp::Logger & logger);

@@ -38,8 +38,6 @@
 #include <utility>
 #include <vector>
 
-#include "depthai/common/CameraBoardSocket.hpp"
-#include "depthai/device/CalibrationHandler.hpp"
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
 #include "depthai/pipeline/datatype/ImgDetections.hpp"
@@ -48,7 +46,6 @@
 #include "raph_oak/frame_clock.hpp"
 #include "rclcpp/logger.hpp"
 #include "rclcpp/logging.hpp"
-#include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
@@ -61,60 +58,6 @@
 
 namespace raph_oak
 {
-
-sensor_msgs::msg::CameraInfo calibration_to_camera_info(
-  const dai::CalibrationHandler & calibration, dai::CameraBoardSocket socket, uint32_t width,
-  uint32_t height)
-{
-  constexpr std::size_t DistortionCoefficientCount = 8;
-  // DepthAI stores translations in centimetres
-  constexpr double MetresPerCentimetre = 0.01;
-
-  sensor_msgs::msg::CameraInfo info;
-  info.width = width;
-  info.height = height;
-  info.distortion_model = "rational_polynomial";
-
-  const auto intrinsics =
-    calibration.getCameraIntrinsics(socket, static_cast<int>(width), static_cast<int>(height));
-  for (std::size_t row = 0; row < 3; ++row) {
-    for (std::size_t col = 0; col < 3; ++col) {
-      info.k[row * 3 + col] = intrinsics[row][col];
-      info.p[row * 4 + col] = intrinsics[row][col];
-    }
-  }
-  info.r = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
-
-  const auto distortion = calibration.getDistortionCoefficients(socket);
-  info.d.assign(DistortionCoefficientCount, 0.0);
-  for (std::size_t i = 0; i < DistortionCoefficientCount && i < distortion.size(); ++i) {
-    info.d[i] = distortion[i];
-  }
-
-  const auto left_socket = calibration.getStereoLeftCameraId();
-  const auto right_socket = calibration.getStereoRightCameraId();
-  if (
-    left_socket == dai::CameraBoardSocket::AUTO || right_socket == dai::CameraBoardSocket::AUTO ||
-    (socket != left_socket && socket != right_socket)) {
-    return info;
-  }
-
-  std::vector<std::vector<float>> rectification;
-  if (socket == left_socket) {
-    // Projection into the first camera of the pair, seen from the second one
-    info.p[3] = info.k[0] * calibration.getCameraExtrinsics(left_socket, right_socket)[0][3] *
-                MetresPerCentimetre;
-    rectification = calibration.getStereoLeftRectificationRotation();
-  } else {
-    rectification = calibration.getStereoRightRectificationRotation();
-  }
-  for (std::size_t row = 0; row < 3; ++row) {
-    for (std::size_t col = 0; col < 3; ++col) {
-      info.r[row * 3 + col] = rectification[row][col];
-    }
-  }
-  return info;
-}
 
 std::unique_ptr<sensor_msgs::msg::Image> to_ros_image(
   dai::ImgFrame & data, const std_msgs::msg::Header & header, const rclcpp::Logger & logger)
