@@ -114,6 +114,9 @@ std::string OakWrapper::tf_frame(const std::string & frame) const
 void OakWrapper::create_ros_publishers()
 {
   for (const auto & spec : kImageStreamSpecs) {
+    if (spec.needs_nn && !params_.nn.enabled) {
+      continue;
+    }
     auto & publisher_set = image_publisher_sets_[get_image_index(spec.id)];
     const std::string topic = std::string("~/") + spec.topic;
     publisher_set.image_pub = create_publisher<sensor_msgs::msg::Image>(topic, 1);
@@ -141,12 +144,6 @@ void OakWrapper::create_ros_publishers()
   // Neural network
   if (params_.nn.enabled) {
     nn_detections_pub_ = create_publisher<vision_msgs::msg::Detection2DArray>("~/nn/detections", 1);
-    nn_passthrough_set_.image_pub =
-      create_publisher<sensor_msgs::msg::Image>("~/nn/passthrough", 1);
-    nn_passthrough_set_.compressed_pub =
-      create_publisher<sensor_msgs::msg::CompressedImage>("~/nn/passthrough/compressed", 1);
-    nn_passthrough_set_.camera_info_pub =
-      create_publisher<sensor_msgs::msg::CameraInfo>("~/nn/passthrough/camera_info", 1);
     nn_overlay_pub_ = create_publisher<sensor_msgs::msg::Image>("~/nn/overlay", 1);
   }
 }
@@ -193,6 +190,11 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   publisher_calibration_info(ImageStreamId::RGB_RECT) =
     publisher_calibration_info(ImageStreamId::RGB);
 
+  // The network input comes from the RGB camera. The frame is resized and letterboxed but not
+  // undistorted, so the distortion of the calibration still applies
+  publisher_calibration_info(ImageStreamId::NN_PASSTHROUGH) =
+    publisher_calibration_info(ImageStreamId::RGB);
+
   // Depth: aligned to the rectified right sensor, which is the left image after the rotation, at
   // half the mono resolution. Only a fallback: the camera info of every depth frame is built from
   // the intrinsics DepthAI attaches to it.
@@ -206,9 +208,6 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   for (const auto & spec : kImageStreamSpecs) {
     publisher_calibration_info(spec.id).header.frame_id = tf_frame(spec.frame_id);
   }
-
-  // The network input comes from the RGB camera
-  nn_passthrough_set_.calibration_info = publisher_calibration_info(ImageStreamId::RGB);
 
   // Invalidate the cached still image camera info, it is rebuilt on the next capture
   still_camera_info_ = sensor_msgs::msg::CameraInfo();
@@ -243,6 +242,10 @@ void OakWrapper::run_pipeline()
   for (const auto & spec : kImageStreamSpecs) {
     const auto stream_id = spec.id;
     const auto & queue_set = pipeline_details_.image_queue_sets[get_image_index(stream_id)];
+    // The streams of the network only exist when it made it into the pipeline
+    if (!queue_set.raw_queue) {
+      continue;
+    }
     queue_set.raw_queue->addCallback(
       [this, stream_id](const std::shared_ptr<dai::ADatatype> & message) {
         publish_image(stream_id, message);
@@ -264,18 +267,6 @@ void OakWrapper::run_pipeline()
   if (pipeline_details_.nn_queue) {
     pipeline_details_.nn_queue->addCallback(
       [this](const std::shared_ptr<dai::ADatatype> & message) { publish_detections(message); });
-  }
-
-  if (pipeline_details_.nn_compressed_queue) {
-    pipeline_details_.nn_compressed_queue->addCallback(
-      [this](const std::shared_ptr<dai::ADatatype> & message) {
-        publish_nn_compressed_image(message);
-      });
-  }
-
-  if (pipeline_details_.nn_image_queue) {
-    pipeline_details_.nn_image_queue->addCallback(
-      [this](const std::shared_ptr<dai::ADatatype> & message) { publish_nn_image(message); });
   }
 
   // All gates start closed and the sensors streaming
@@ -437,6 +428,10 @@ SubscriberCounts OakWrapper::count_subscribers() const
   SubscriberCounts counts;
   for (const auto & spec : kImageStreamSpecs) {
     const auto & publisher_set = image_publisher_sets_[get_image_index(spec.id)];
+    // The publishers of the streams of the network only exist when nn.enabled is set
+    if (!publisher_set.image_pub) {
+      continue;
+    }
     counts.images[get_image_index(spec.id)] = {
       publisher_set.image_pub->get_subscription_count(),
       publisher_set.compressed_pub ? publisher_set.compressed_pub->get_subscription_count() : 0,
@@ -448,10 +443,6 @@ SubscriberCounts OakWrapper::count_subscribers() const
   if (nn_detections_pub_) {
     counts.nn =
       nn_detections_pub_->get_subscription_count() + nn_overlay_pub_->get_subscription_count();
-    counts.nn_passthrough = {
-      nn_passthrough_set_.image_pub->get_subscription_count(),
-      nn_passthrough_set_.compressed_pub->get_subscription_count(),
-      nn_passthrough_set_.camera_info_pub->get_subscription_count()};
   }
   return counts;
 }
@@ -479,14 +470,10 @@ void OakWrapper::apply_demand(const Demand & demand)
     if ((gate == Control::NN || gate == Control::NN_ENC) && !nn_in_pipeline) {
       continue;
     }
-    if (!gate.follows_demand()) {
-      continue;
+    if (gate.follows_demand()) {
+      set_gate(
+        gate, wanted_gates.is_open(gate), gate == Control::POINT_CLOUD ? pointcloud_fps : -1);
     }
-    int fps = -1;
-    if (gate == Control::POINT_CLOUD) {
-      fps = pointcloud_fps;
-    }
-    set_gate(gate, wanted_gates.is_open(gate), fps);
   }
 
   if (sensors == StereoSensorAction::STOP) {
@@ -516,8 +503,6 @@ void OakWrapper::reset_control_state()
   // The stereo sensors stream after the pipeline was started
   stereo_streaming_ = true;
 }
-
-bool OakWrapper::is_gate_open(Control gate) const { return control_state_[gate.index()]; }
 
 void OakWrapper::set_gate(Control gate, bool should_be_open, int fps)
 {
@@ -623,18 +608,33 @@ void OakWrapper::publish_image(
   const auto & spec = get_image_stream_spec(stream_id);
   const auto & publisher_set = image_publisher_sets_[get_image_index(stream_id)];
 
+  // The raw gate of a stream with a compressed variant is only open for the raw image, except for
+  // the passthrough, which comes out of the network that also runs for the detections and the
+  // overlay. The overlay is drawn on the same image
+  const bool overlay_wanted =
+    stream_id == ImageStreamId::NN_PASSTHROUGH && nn_overlay_pub_->get_subscription_count() > 0;
+  if (
+    spec.has_compressed() && publisher_set.image_pub->get_subscription_count() == 0 &&
+    !overlay_wanted) {
+    return;
+  }
+
   // The intrinsics of a rectified or undistorted image are only known to DepthAI, so the camera
   // info is built from the frame
   auto cam_info = spec.rectified
                     ? get_rectified_camera_info(
                         in_data->getTransformation(), in_data->getWidth(), in_data->getHeight(),
-                        publisher_set.calibration_info, spec.rotated_at_sensor)
+                        publisher_set.calibration_info, spec.rotated_at_sensor, spec.undistorted)
                     : publisher_set.calibration_info;
   cam_info.header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
 
   auto image = to_ros_image(*in_data, cam_info.header, get_logger());
   if (!image) {
     return;
+  }
+
+  if (overlay_wanted) {
+    set_nn_overlay_image(*image, in_data->getSequenceNum());
   }
 
   publisher_set.camera_info_pub->publish(cam_info);
@@ -654,13 +654,15 @@ void OakWrapper::publish_compressed_image(
   const auto & publisher_set = image_publisher_sets_[get_image_index(stream_id)];
   const auto stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
 
-  // The raw image publishes the camera info while the raw gate is open. Otherwise the compressed
+  // The raw image publishes the camera info while it is subscribed. Otherwise the compressed
   // stream (which is also opened for camera info subscribers) takes over.
-  if (!is_gate_open(spec.raw_gate) && publisher_set.camera_info_pub->get_subscription_count() > 0) {
+  if (
+    publisher_set.image_pub->get_subscription_count() == 0 &&
+    publisher_set.camera_info_pub->get_subscription_count() > 0) {
     auto cam_info = spec.rectified
                       ? get_rectified_camera_info(
                           in_data->transformation, in_data->getWidth(), in_data->getHeight(),
-                          publisher_set.calibration_info, spec.rotated_at_sensor)
+                          publisher_set.calibration_info, spec.rotated_at_sensor, spec.undistorted)
                       : publisher_set.calibration_info;
     cam_info.header.stamp = stamp;
     publisher_set.camera_info_pub->publish(cam_info);
@@ -724,75 +726,12 @@ void OakWrapper::publish_detections(const std::shared_ptr<dai::ADatatype> & mess
   }
 }
 
-void OakWrapper::publish_nn_image(const std::shared_ptr<dai::ADatatype> & message)
+void OakWrapper::set_nn_overlay_image(const sensor_msgs::msg::Image & image, std::int64_t sequence)
 {
-  const auto in_data = std::dynamic_pointer_cast<dai::ImgFrame>(message);
-  if (!in_data) {
-    RCLCPP_WARN(get_logger(), "Received a message that is not an image frame");
-    return;
-  }
-
-  std_msgs::msg::Header header;
-  header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
-  header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
-
-  const bool want_raw = nn_passthrough_set_.image_pub->get_subscription_count() > 0;
-  if (want_raw && nn_passthrough_set_.camera_info_pub->get_subscription_count() > 0) {
-    // The frame is resized and letterboxed but not undistorted, so the distortion of the RGB
-    // calibration still applies. CAM_A is rotated at the sensor, which the frame does not know.
-    auto cam_info = get_rectified_camera_info(
-      in_data->getTransformation(), in_data->getWidth(), in_data->getHeight(),
-      nn_passthrough_set_.calibration_info, true, false);
-    cam_info.header.stamp = header.stamp;
-    nn_passthrough_set_.camera_info_pub->publish(cam_info);
-  }
-  const bool want_overlay = nn_overlay_pub_->get_subscription_count() > 0;
-  if (!want_raw && !want_overlay) {
-    return;
-  }
-
-  auto image = to_ros_image(*in_data, header, get_logger());
-  if (!image) {
-    return;
-  }
-
-  if (want_overlay) {
-    const std::lock_guard<std::mutex> lock(nn_overlay_mutex_);
-    nn_overlay_image_ = *image;
-    nn_overlay_image_sequence_ = in_data->getSequenceNum();
-    publish_nn_overlay_if_ready();
-  }
-
-  if (want_raw) {
-    nn_passthrough_set_.image_pub->publish(std::move(image));
-  }
-}
-
-void OakWrapper::publish_nn_compressed_image(const std::shared_ptr<dai::ADatatype> & message)
-{
-  const auto in_data = std::dynamic_pointer_cast<dai::EncodedFrame>(message);
-  if (!in_data) {
-    RCLCPP_WARN(get_logger(), "Received a message that is not an encoded frame");
-    return;
-  }
-
-  std_msgs::msg::Header header;
-  header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
-  header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
-  // The raw passthrough publishes the camera info while it is requested
-  if (
-    nn_passthrough_set_.image_pub->get_subscription_count() == 0 &&
-    nn_passthrough_set_.camera_info_pub->get_subscription_count() > 0) {
-    auto cam_info = get_rectified_camera_info(
-      in_data->transformation, in_data->getWidth(), in_data->getHeight(),
-      nn_passthrough_set_.calibration_info, true, false);
-    cam_info.header.stamp = header.stamp;
-    nn_passthrough_set_.camera_info_pub->publish(cam_info);
-  }
-
-  if (nn_passthrough_set_.compressed_pub->get_subscription_count() > 0) {
-    nn_passthrough_set_.compressed_pub->publish(to_ros_compressed_image(*in_data, header));
-  }
+  const std::lock_guard<std::mutex> lock(nn_overlay_mutex_);
+  nn_overlay_image_ = image;
+  nn_overlay_image_sequence_ = sequence;
+  publish_nn_overlay_if_ready();
 }
 
 void OakWrapper::publish_nn_overlay_if_ready()

@@ -84,6 +84,24 @@ TEST(StreamTable, NamesTopicsAndGatesAreUnique)
   }
 }
 
+TEST(StreamTable, OnlyThePassthroughNeedsTheNetwork)
+{
+  for (const auto & spec : kImageStreamSpecs) {
+    EXPECT_EQ(spec.needs_nn, spec.id == ImageStreamId::NN_PASSTHROUGH) << spec.name;
+  }
+}
+
+TEST(StreamTable, OnlyUndistortedStreamsAreRectified)
+{
+  // A stream that is not rectified takes the camera info of its calibration, so it cannot be
+  // undistorted. The passthrough is resized but keeps the distortion
+  for (const auto & spec : kImageStreamSpecs) {
+    EXPECT_TRUE(!spec.undistorted || spec.rectified) << spec.name;
+  }
+  EXPECT_TRUE(get_image_stream_spec(ImageStreamId::NN_PASSTHROUGH).rectified);
+  EXPECT_FALSE(get_image_stream_spec(ImageStreamId::NN_PASSTHROUGH).undistorted);
+}
+
 TEST(StreamTable, OnlyTheDepthHasNoCompressedVariant)
 {
   for (const auto & spec : kImageStreamSpecs) {
@@ -287,10 +305,10 @@ TEST(Demand, NnDoesNotNeedTheStereoSensors)
 TEST(Demand, CompressedNnOpensTheNetworkAndTheEncoder)
 {
   SubscriberCounts counts;
-  counts.nn_passthrough.compressed = 1;
+  counts.images[get_image_index(ImageStreamId::NN_PASSTHROUGH)].compressed = 1;
   const auto demand = Demand(counts);
   EXPECT_FALSE(demand.nn());
-  EXPECT_TRUE(demand.nn_encoded());
+  EXPECT_TRUE(demand.image(ImageStreamId::NN_PASSTHROUGH).encoded());
 
   const auto states = demand.gate_states();
   EXPECT_FALSE(gate(states, Control::NN));
@@ -301,10 +319,10 @@ TEST(Demand, CompressedNnOpensTheNetworkAndTheEncoder)
 TEST(Demand, NnCameraInfoAloneOpensOnlyTheEncoder)
 {
   SubscriberCounts counts;
-  counts.nn_passthrough.camera_info = 1;
+  counts.images[get_image_index(ImageStreamId::NN_PASSTHROUGH)].camera_info = 1;
   const auto demand = Demand(counts);
-  EXPECT_FALSE(demand.nn_passthrough().raw());
-  EXPECT_TRUE(demand.nn_passthrough().encoded());
+  EXPECT_FALSE(demand.image(ImageStreamId::NN_PASSTHROUGH).raw());
+  EXPECT_TRUE(demand.image(ImageStreamId::NN_PASSTHROUGH).encoded());
 
   const auto states = demand.gate_states();
   EXPECT_FALSE(gate(states, Control::NN));
@@ -314,10 +332,10 @@ TEST(Demand, NnCameraInfoAloneOpensOnlyTheEncoder)
 TEST(Demand, RawNnPassthroughNeedsTheNetwork)
 {
   SubscriberCounts counts;
-  counts.nn_passthrough.image = 1;
+  counts.images[get_image_index(ImageStreamId::NN_PASSTHROUGH)].image = 1;
   const auto demand = Demand(counts);
   EXPECT_TRUE(demand.nn());
-  EXPECT_FALSE(demand.nn_encoded());
+  EXPECT_FALSE(demand.image(ImageStreamId::NN_PASSTHROUGH).encoded());
 
   const auto states = demand.gate_states();
   EXPECT_TRUE(gate(states, Control::NN));
@@ -333,12 +351,12 @@ TEST(Demand, EverythingSubscribed)
   counts.pointcloud = 1;
   counts.imu = 1;
   counts.nn = 1;
-  counts.nn_passthrough = {1, 1, 1};
   const auto states = Demand(counts).gate_states();
 
-  // 6 streams with compressed variant: 2 gates each, the 4 stereo ones also an input gate, plus the
-  // depth input and output, the point cloud, the imu and the neural network
-  EXPECT_EQ(open_gates(states), 6U * 2U + 4U + 2U + 1U + 1U + 2U);
+  // 7 streams with compressed variant (the passthrough of the network among them, whose gates are
+  // the network and its encoder): 2 gates each, the 4 stereo ones also an input gate, plus the
+  // depth input and output, the point cloud and the imu
+  EXPECT_EQ(open_gates(states), 7U * 2U + 4U + 2U + 1U + 1U);
 }
 
 TEST(Demand, TheGatesOfDifferentStreamsAreIndependent)

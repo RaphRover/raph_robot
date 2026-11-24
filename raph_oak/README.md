@@ -227,6 +227,13 @@ To add an image stream, add an entry to `ImageStreamId` and `kImageStreamSpecs`,
 Nothing else in the node changes: the topics, the publishers, the callbacks and the activation
 follow from the table. Add the stream to `doc/pipeline.dot` as well.
 
+A stream that only exists when the neural network is in the pipeline sets `needs_nn` (the
+`NN_PASSTHROUGH` stream): its publishers are created only when `nn.enabled` is set and its queues
+are filled by the network setup in `pipeline.cpp`, which can leave them empty when the model fails
+to load. Its raw gate is the input gate of the network, so `Demand::nn()` also opens it for the
+detections and the overlay. Such a stream with `rectified` set and `undistorted` unset keeps the
+distortion of its calibration in the camera info.
+
 ## Editing the pipeline graph
 
 `doc/pipeline.dot` is written and maintained by hand. Adding an output to `pipeline.cpp` means one

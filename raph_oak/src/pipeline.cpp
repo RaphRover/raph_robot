@@ -360,11 +360,13 @@ PipelineDetails create_dai_pipeline(
       // The network gets its own CAM_A output at the size and format it takes, so there is no
       // resize node. The output runs at nn.fps. Letterboxing keeps the full field of view, at the
       // cost of padding the frame. The gate keeps the inference idle while nobody is subscribed.
+      const auto & passthrough_spec = get_image_stream_spec(ImageStreamId::NN_PASSTHROUGH);
+      auto & passthrough_queues = details.image_queue_sets[get_image_index(passthrough_spec.id)];
       const auto nn_frame_type = get_nn_frame_type(archive, device->getPlatform());
       auto * nn_output = rgb_node->requestOutput(
         {input_size->first, input_size->second}, nn_frame_type, dai::ImgResizeMode::LETTERBOX,
         static_cast<float>(params.nn.fps));
-      auto nn_gate = make_gate(*nn_output, Control::NN);
+      auto nn_gate = make_gate(*nn_output, passthrough_spec.raw_gate);
 
       auto nn_node =
         pipeline->create<dai::node::DetectionNetwork>()->build(nn_gate->output, archive);
@@ -380,13 +382,14 @@ PipelineDetails create_dai_pipeline(
 
       details.nn_queue = nn_node->out.createOutputQueue(1, false);
       details.nn_queue->setName("nn");
-      details.nn_image_queue = nn_node->passthrough.createOutputQueue(1, false);
-      details.nn_image_queue->setName("nn_image");
+      // The raw passthrough comes out of the network, behind the gate of its input
+      passthrough_queues.raw_queue = nn_node->passthrough.createOutputQueue(1, false);
+      passthrough_queues.raw_queue->setName(passthrough_spec.name);
 
       // JPEG compressed passthrough, encoded on the camera. The encoder only takes NV12, so the
       // frame is converted first (unless the network already takes NV12). Both sit behind their
       // own gate, so neither runs unless the compressed topic is subscribed.
-      auto nn_enc_gate = make_gate(*nn_output, Control::NN_ENC);
+      auto nn_enc_gate = make_gate(*nn_output, passthrough_spec.enc_gate);
       auto nn_encoder = pipeline->create<dai::node::VideoEncoder>();
       nn_encoder->setDefaultProfilePreset(
         static_cast<float>(params.nn.fps), dai::VideoEncoderProperties::Profile::MJPEG);
@@ -403,8 +406,9 @@ PipelineDetails create_dai_pipeline(
         nn_enc_gate->output.link(nn_to_nv12->inputImage);
         nn_to_nv12->out.link(nn_encoder->input);
       }
-      details.nn_compressed_queue = nn_encoder->out.createOutputQueue(1, false);
-      details.nn_compressed_queue->setName("nn_image_compressed");
+      passthrough_queues.compressed_queue = nn_encoder->out.createOutputQueue(1, false);
+      passthrough_queues.compressed_queue->setName(
+        std::string(passthrough_spec.name) + "_compressed");
 
       RCLCPP_INFO_STREAM(
         logger, "Loaded neural network \"" << params.nn.model << "\" (" << input_size->first << "x"

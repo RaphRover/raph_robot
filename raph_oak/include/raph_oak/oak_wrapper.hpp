@@ -90,9 +90,6 @@ private:
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> still_image_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> still_cam_info_pub_;
   std::shared_ptr<rclcpp::Publisher<vision_msgs::msg::Detection2DArray>> nn_detections_pub_;
-  /// The passthrough of the network input. Its calibration_info is the one of the RGB camera, as the
-  /// frame is resized and letterboxed but not undistorted
-  ImagePublisherSet nn_passthrough_set_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> nn_overlay_pub_;
 
   // The passthrough frame and its detections arrive on separate queues. Whichever comes first
@@ -113,8 +110,7 @@ private:
   std::optional<ImuConverter> imu_converter_;
   std::optional<PointCloudConverter> pointcloud_converter_;
 
-  // Last state sent to each control target (true = gate open), written by the check timer and read
-  // by the queue callbacks
+  // Last state sent to each control target (true = gate open)
   std::array<std::atomic<bool>, Control::kCount> control_state_{};
   // Rate limit last sent to each open gate, -1 for none. Only used by the check timer
   std::array<int, Control::kCount> gate_fps_{};
@@ -161,7 +157,6 @@ private:
   void reset_control_state();
   void set_gate(Control gate, bool should_be_open, int fps = -1);
   void set_stereo_streaming(bool streaming);
-  bool is_gate_open(Control gate) const;
   void post_set_parameters_callback(const std::vector<rclcpp::Parameter> & parameters);
   void update_parameters();
   void send_parameters() const;
@@ -171,8 +166,7 @@ private:
   void publish_imu(const std::shared_ptr<dai::ADatatype> & message);
   void publish_pointcloud(const std::shared_ptr<dai::ADatatype> & message);
   void publish_detections(const std::shared_ptr<dai::ADatatype> & message);
-  void publish_nn_image(const std::shared_ptr<dai::ADatatype> & message);
-  void publish_nn_compressed_image(const std::shared_ptr<dai::ADatatype> & message);
+  void set_nn_overlay_image(const sensor_msgs::msg::Image & image, std::int64_t sequence);
   void publish_nn_overlay_if_ready();  // nn_overlay_mutex_ has to be held
   void capture_still(
     std_srvs::srv::Trigger::Request::SharedPtr request,

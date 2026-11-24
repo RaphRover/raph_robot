@@ -46,6 +46,8 @@ enum class ImageStreamId : uint8_t
   RIGHT,
   RIGHT_RECT,
   DEPTH,
+  /// The image the network takes, only present when the network is in the pipeline
+  NN_PASSTHROUGH,
   COUNT
 };
 
@@ -80,9 +82,14 @@ struct ImageStreamSpec
   /// Camera info comes from the intrinsics DepthAI attaches to each frame, not from the factory
   /// calibration
   bool rectified;
+  /// The frames were undistorted, so the camera info has no distortion. A resized frame that was
+  /// not undistorted keeps the distortion of the calibration. Only used with rectified
+  bool undistorted;
   /// The frames were rotated by the sensor, not by an ImageManip: DepthAI does not record that in
   /// the intrinsics of the frame
   bool rotated_at_sensor;
+  /// The stream only exists when the neural network made it into the pipeline
+  bool needs_nn;
 
   constexpr bool has_compressed() const { return !enc_gate.is_none(); }
 };
@@ -94,25 +101,29 @@ struct ImageStreamSpec
 inline constexpr std::array<ImageStreamSpec, kImageStreamCount> kImageStreamSpecs{{
   {ImageStreamId::RGB, "rgb", "rgb/image_raw", "rgb/camera_info",
    "oak_rgb_camera_optical_frame", Control::NONE, Control::RGB_RAW, Control::RGB_ENC,
-   false, false, false},
+   false, false, false, false, false},
   {ImageStreamId::RGB_RECT, "rgb_rect", "rgb_rect/image_rect", "rgb_rect/camera_info",
    "oak_rgb_camera_optical_frame", Control::NONE, Control::RGB_RECT_RAW, Control::RGB_RECT_ENC,
-   false, true, true},
+   false, true, true, true, false},
   {ImageStreamId::LEFT, "left", "left/image_raw", "left/camera_info",
    "oak_left_camera_optical_frame", Control::LEFT_IN, Control::LEFT_RAW, Control::LEFT_ENC,
-   true, false, false},
+   true, false, false, false, false},
   {ImageStreamId::LEFT_RECT, "left_rect", "left_rect/image_rect", "left_rect/camera_info",
    "oak_left_camera_optical_frame", Control::LEFT_RECT_IN, Control::LEFT_RECT_RAW,
-   Control::LEFT_RECT_ENC, true, true, false},
+   Control::LEFT_RECT_ENC, true, true, true, false, false},
   {ImageStreamId::RIGHT, "right", "right/image_raw", "right/camera_info",
    "oak_right_camera_optical_frame", Control::RIGHT_IN, Control::RIGHT_RAW, Control::RIGHT_ENC,
-   true, false, false},
+   true, false, false, false, false},
   {ImageStreamId::RIGHT_RECT, "right_rect", "right_rect/image_rect", "right_rect/camera_info",
    "oak_right_camera_optical_frame", Control::RIGHT_RECT_IN, Control::RIGHT_RECT_RAW,
-   Control::RIGHT_RECT_ENC, true, true, false},
+   Control::RIGHT_RECT_ENC, true, true, true, false, false},
   {ImageStreamId::DEPTH, "depth", "stereo/image_raw", "stereo/camera_info",
    "oak_stereo_camera_optical_frame", Control::DEPTH_IN, Control::DEPTH_RAW, Control::NONE,
-   true, true, false},
+   true, true, true, false, false},
+  {ImageStreamId::NN_PASSTHROUGH, "nn_passthrough", "nn/passthrough",
+   "nn/passthrough/camera_info",
+   "oak_rgb_camera_optical_frame", Control::NONE, Control::NN, Control::NN_ENC,
+   false, true, false, true, true},
 }};
 // clang-format on
 

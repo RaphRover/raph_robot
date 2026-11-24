@@ -41,8 +41,9 @@ namespace raph_oak
 /// The queues of one image stream, see kImageStreamSpecs
 struct ImageQueueSet
 {
+  /// Empty if the stream does not exist, see ImageStreamSpec::needs_nn
   std::shared_ptr<dai::MessageQueue> raw_queue;
-  /// Empty if the stream has no compressed variant
+  /// Empty if the stream has no compressed variant or does not exist
   std::shared_ptr<dai::MessageQueue> compressed_queue;
 };
 
@@ -55,11 +56,9 @@ struct PipelineDetails
   std::shared_ptr<dai::MessageQueue> pointcloud_queue;
   std::shared_ptr<dai::MessageQueue> still_image_queue;
 
-  // Neural network. These stay null when the nn.enabled parameter is false or the model could
-  // not be loaded.
+  // Neural network detections. Stays null when the nn.enabled parameter is false or the model could
+  // not be loaded, which is also when the NN_PASSTHROUGH stream has no queues.
   std::shared_ptr<dai::MessageQueue> nn_queue;
-  std::shared_ptr<dai::MessageQueue> nn_image_queue;
-  std::shared_ptr<dai::MessageQueue> nn_compressed_queue;
 
   // Control channel (see Control)
   std::shared_ptr<dai::InputQueue> control_queue;
