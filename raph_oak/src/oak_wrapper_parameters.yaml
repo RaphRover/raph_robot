@@ -92,10 +92,10 @@ raph_oak:
       default_value: ""
       description: Path to a local NNArchive file (.tar.xz) or, if no such file exists, a Luxonis Model Zoo slug (e.g. luxonis/yolov6-nano:r2-coco-512x288). A zoo slug requires internet access on the first run.
       read_only: true
-    fps:
+    max_rate:
       type: int
       default_value: 5
-      description: Neural network inference rate. Frames are dropped on the device to reach it, so it cannot exceed rgb.fps.
+      description: Maximum neural network inference rate in frames per second. Frames are dropped on the device to reach it, so it cannot exceed rgb.fps.
       validation:
         bounds<>: [1, 30]
       read_only: true

@@ -361,7 +361,7 @@ PipelineDetails create_dai_pipeline(
       // Gate the RGB stream before resizing, so that neither the resize nor the inference runs
       // while nobody is subscribed. The network is fed from the existing RGB output rather than
       // a separate camera output, which RVC2 devices do not have the resources for. The gate also
-      // limits the inference rate, as it is opened with nn.fps (see OakWrapper::check_publishers).
+      // limits the inference rate, as it is opened with nn.max_rate (see OakWrapper::check_publishers).
       auto nn_gate = make_gate(*rgb_output, Control::Nn);
 
       // Letterboxing keeps the full RGB field of view, at the cost of padding the frame

@@ -466,7 +466,7 @@ void OakWrapper::apply_demand(const Demand & demand)
     if (gate == Control::PointCloud) {
       fps = pointcloud_fps;
     } else if (gate == Control::Nn) {
-      fps = static_cast<int>(params_.nn.fps);
+      fps = static_cast<int>(params_.nn.max_rate);
     }
     set_gate(gate, wanted_gates.is_open(gate), fps);
   }
