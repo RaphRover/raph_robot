@@ -143,8 +143,6 @@ private:
   void update_parameters();
   void send_parameters() const;
   void publish_image(ImageStreamId id, const std::shared_ptr<dai::ADatatype> & message);
-  std::unique_ptr<sensor_msgs::msg::Image> to_ros_image(
-    const std::shared_ptr<dai::ImgFrame> & in_data, const std_msgs::msg::Header & header) const;
   void publish_compressed_image(ImageStreamId id, const std::shared_ptr<dai::ADatatype> & message);
   void publish_imu(const std::shared_ptr<dai::ADatatype> & message);
   void publish_pointcloud(const std::shared_ptr<dai::ADatatype> & message);

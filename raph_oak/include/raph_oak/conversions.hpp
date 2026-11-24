@@ -21,18 +21,32 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
 #include <deque>
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
+#include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
 #include "raph_oak/frame_clock.hpp"
+#include "rclcpp/logger.hpp"
+#include "sensor_msgs/msg/compressed_image.hpp"
+#include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
+#include "std_msgs/msg/header.hpp"
 
 namespace raph_oak
 {
+
+std::unique_ptr<sensor_msgs::msg::Image> to_ros_image(
+  dai::ImgFrame & data, const std_msgs::msg::Header & header, const rclcpp::Logger & logger);
+
+std::unique_ptr<sensor_msgs::msg::CompressedImage> to_ros_compressed_image(
+  dai::EncodedFrame & data, const std_msgs::msg::Header & header);
 
 /**
  * Converts the IMU reports of the camera to sensor_msgs/Imu.
