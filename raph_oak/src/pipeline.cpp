@@ -184,7 +184,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
     {params.rgb.width, params.rgb.height}, dai::ImgFrame::Type::NV12, dai::ImgResizeMode::CROP,
     params.rgb.fps);
   make_image_queue_set(
-    *rgb_output, ImageStreamId::Rgb, params.rgb.fps, params.rgb_compressed.jpeg_quality);
+    *rgb_output, ImageStreamId::RGB, params.rgb.fps, params.rgb_compressed.jpeg_quality);
 
   // Undistorted RGB image, computed on the camera from its calibration. It is a second output of
   // the same sensor, so it shares CAM_A's rotation, and has its own raw and encoder gates.
@@ -196,7 +196,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
     {params.rgb.width, params.rgb.height}, dai::ImgFrame::Type::NV12, dai::ImgResizeMode::CROP,
     params.rgb.fps, true, rect_alpha_scaling);
   make_image_queue_set(
-    *rgb_rect_output, ImageStreamId::RgbRect, params.rgb.fps, params.rgb_compressed.jpeg_quality);
+    *rgb_rect_output, ImageStreamId::RGB_RECT, params.rgb.fps, params.rgb_compressed.jpeg_quality);
 
   // Stereo depth
   auto stereo_depth_node = pipeline->create<dai::node::StereoDepth>()->build(
@@ -218,9 +218,9 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
       continue;
     }
     if (camera->getBoardSocket() == dai::CameraBoardSocket::CAM_B) {
-      control_output(Control::CameraB).link(camera->inputControl);
+      control_output(Control::CAMERA_B).link(camera->inputControl);
     } else if (camera->getBoardSocket() == dai::CameraBoardSocket::CAM_C) {
-      control_output(Control::CameraC).link(camera->inputControl);
+      control_output(Control::CAMERA_C).link(camera->inputControl);
     }
   }
 
@@ -228,17 +228,17 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   //                                \-> point cloud gate -> point cloud node
   // Robotics preset outputs depth at half the input resolution
   auto & depth_rotated = make_rotation(
-    stereo_depth_node->depth, ImageStreamId::Depth, params.mono.width / 2, params.mono.height / 2,
+    stereo_depth_node->depth, ImageStreamId::DEPTH, params.mono.width / 2, params.mono.height / 2,
     dai::ImgFrame::Type::RAW16);
-  make_image_queue_set(depth_rotated, ImageStreamId::Depth, params.mono.fps, 0);
+  make_image_queue_set(depth_rotated, ImageStreamId::DEPTH, params.mono.fps, 0);
 
   auto depth_config_queue = stereo_depth_node->inputConfig.createInputQueue(1, false);
 
   // Left is the physically right camera and the other way round
-  make_rotated_mono(stereo_depth_node->syncedRight, ImageStreamId::Left);
-  make_rotated_mono(stereo_depth_node->rectifiedRight, ImageStreamId::LeftRect);
-  make_rotated_mono(stereo_depth_node->syncedLeft, ImageStreamId::Right);
-  make_rotated_mono(stereo_depth_node->rectifiedLeft, ImageStreamId::RightRect);
+  make_rotated_mono(stereo_depth_node->syncedRight, ImageStreamId::LEFT);
+  make_rotated_mono(stereo_depth_node->rectifiedRight, ImageStreamId::LEFT_RECT);
+  make_rotated_mono(stereo_depth_node->syncedLeft, ImageStreamId::RIGHT);
+  make_rotated_mono(stereo_depth_node->rectifiedLeft, ImageStreamId::RIGHT_RECT);
 
   // Imu node
   auto imu_node = pipeline->create<dai::node::IMU>();
@@ -246,14 +246,14 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   imu_node->enableIMUSensor(dai::IMUSensor::GYROSCOPE_RAW, 400);
   imu_node->setBatchReportThreshold(5);
   imu_node->setMaxBatchReports(20);
-  details.imu_queue = make_raw_queue(imu_node->out, Control::Imu, "imu");
+  details.imu_queue = make_raw_queue(imu_node->out, Control::IMU, "imu");
 
   // Pointcloud node (gating inputDepth so pointcloud calculations only run when subscribed)
   auto pointcloud_node = pipeline->create<dai::node::PointCloud>();
   pointcloud_node->initialConfig->setOrganized(true);
   pointcloud_node->initialConfig->setTargetCoordinateSystem(dai::CameraBoardSocket::CAM_C);
   pointcloud_node->initialConfig->setLengthUnit(dai::LengthUnit::METER);
-  make_gate(depth_rotated, Control::PointCloud)->output.link(pointcloud_node->inputDepth);
+  make_gate(depth_rotated, Control::POINT_CLOUD)->output.link(pointcloud_node->inputDepth);
   details.pointcloud_queue = pointcloud_node->outputPointCloud.createOutputQueue(1, false);
   details.pointcloud_queue->setName("pointcloud");
 
@@ -263,7 +263,7 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   // media subsystem.
   auto * still_output = rgb_node->requestFullResolutionOutput(
     dai::ImgFrame::Type::NV12, static_cast<float>(params.rgb.fps));
-  details.still_image_queue = make_raw_queue(*still_output, Control::Still, "still_image");
+  details.still_image_queue = make_raw_queue(*still_output, Control::STILL, "still_image");
 
   // Create pipeline details
   details.pipeline = pipeline;

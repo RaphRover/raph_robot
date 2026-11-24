@@ -30,7 +30,7 @@ namespace raph_oak
 {
 
 /**
- * The image streams of the camera. Every one of them is described once, in ImageStreamSpecs, and the
+ * The image streams of the camera. Every one of them is described once, in kImageStreamSpecs, and the
  * pipeline, the publishers, the callbacks and the subscriber based activation are all driven by
  * that table. Adding an image stream means adding an entry here and building its nodes in
  * create_dai_pipeline().
@@ -39,17 +39,17 @@ namespace raph_oak
  */
 enum class ImageStreamId : uint8_t
 {
-  Rgb,
-  RgbRect,
-  Left,
-  LeftRect,
-  Right,
-  RightRect,
-  Depth,
-  Count
+  RGB,
+  RGB_RECT,
+  LEFT,
+  LEFT_RECT,
+  RIGHT,
+  RIGHT_RECT,
+  DEPTH,
+  COUNT
 };
 
-constexpr std::size_t ImageStreamCount = static_cast<std::size_t>(ImageStreamId::Count);
+constexpr std::size_t kImageStreamCount = static_cast<std::size_t>(ImageStreamId::COUNT);
 
 constexpr std::size_t get_image_index(ImageStreamId stream_id)
 {
@@ -69,11 +69,11 @@ struct ImageStreamSpec
   const char * info_topic;
   /// TF frame id, without the tf_frame_prefix parameter
   const char * frame_id;
-  /// Gate in front of the ImageManip of the stream, Control::None if the stream has no ImageManip
+  /// Gate in front of the ImageManip of the stream, Control::NONE if the stream has no ImageManip
   Control in_gate;
   /// Gate in front of the raw image
   Control raw_gate;
-  /// Gate in front of the JPEG encoder, Control::None if the stream has no compressed variant
+  /// Gate in front of the JPEG encoder, Control::NONE if the stream has no compressed variant
   Control enc_gate;
   /// The stream comes from the stereo sensors, which have to be streaming for it
   bool stereo;
@@ -91,34 +91,34 @@ struct ImageStreamSpec
 // Left is the physically right camera and the other way round, because the camera is mounted
 // upside down: see create_dai_pipeline()
 // clang-format off
-inline constexpr std::array<ImageStreamSpec, ImageStreamCount> ImageStreamSpecs{{
-  {ImageStreamId::Rgb, "rgb", "rgb/image_raw", "rgb/camera_info",
-   "oak_rgb_camera_optical_frame", Control::None, Control::RgbRaw, Control::RgbEnc,
+inline constexpr std::array<ImageStreamSpec, kImageStreamCount> kImageStreamSpecs{{
+  {ImageStreamId::RGB, "rgb", "rgb/image_raw", "rgb/camera_info",
+   "oak_rgb_camera_optical_frame", Control::NONE, Control::RGB_RAW, Control::RGB_ENC,
    false, false, false},
-  {ImageStreamId::RgbRect, "rgb_rect", "rgb_rect/image_rect", "rgb_rect/camera_info",
-   "oak_rgb_camera_optical_frame", Control::None, Control::RgbRectRaw, Control::RgbRectEnc,
+  {ImageStreamId::RGB_RECT, "rgb_rect", "rgb_rect/image_rect", "rgb_rect/camera_info",
+   "oak_rgb_camera_optical_frame", Control::NONE, Control::RGB_RECT_RAW, Control::RGB_RECT_ENC,
    false, true, true},
-  {ImageStreamId::Left, "left", "left/image_raw", "left/camera_info",
-   "oak_left_camera_optical_frame", Control::LeftIn, Control::LeftRaw, Control::LeftEnc,
+  {ImageStreamId::LEFT, "left", "left/image_raw", "left/camera_info",
+   "oak_left_camera_optical_frame", Control::LEFT_IN, Control::LEFT_RAW, Control::LEFT_ENC,
    true, false, false},
-  {ImageStreamId::LeftRect, "left_rect", "left_rect/image_rect", "left_rect/camera_info",
-   "oak_left_camera_optical_frame", Control::LeftRectIn, Control::LeftRectRaw,
-   Control::LeftRectEnc, true, true, false},
-  {ImageStreamId::Right, "right", "right/image_raw", "right/camera_info",
-   "oak_right_camera_optical_frame", Control::RightIn, Control::RightRaw, Control::RightEnc,
+  {ImageStreamId::LEFT_RECT, "left_rect", "left_rect/image_rect", "left_rect/camera_info",
+   "oak_left_camera_optical_frame", Control::LEFT_RECT_IN, Control::LEFT_RECT_RAW,
+   Control::LEFT_RECT_ENC, true, true, false},
+  {ImageStreamId::RIGHT, "right", "right/image_raw", "right/camera_info",
+   "oak_right_camera_optical_frame", Control::RIGHT_IN, Control::RIGHT_RAW, Control::RIGHT_ENC,
    true, false, false},
-  {ImageStreamId::RightRect, "right_rect", "right_rect/image_rect", "right_rect/camera_info",
-   "oak_right_camera_optical_frame", Control::RightRectIn, Control::RightRectRaw,
-   Control::RightRectEnc, true, true, false},
-  {ImageStreamId::Depth, "depth", "stereo/image_raw", "stereo/camera_info",
-   "oak_stereo_camera_optical_frame", Control::DepthIn, Control::DepthRaw, Control::None,
+  {ImageStreamId::RIGHT_RECT, "right_rect", "right_rect/image_rect", "right_rect/camera_info",
+   "oak_right_camera_optical_frame", Control::RIGHT_RECT_IN, Control::RIGHT_RECT_RAW,
+   Control::RIGHT_RECT_ENC, true, true, false},
+  {ImageStreamId::DEPTH, "depth", "stereo/image_raw", "stereo/camera_info",
+   "oak_stereo_camera_optical_frame", Control::DEPTH_IN, Control::DEPTH_RAW, Control::NONE,
    true, true, false},
 }};
 // clang-format on
 
 constexpr const ImageStreamSpec & get_image_stream_spec(ImageStreamId stream_id)
 {
-  return ImageStreamSpecs[get_image_index(stream_id)];
+  return kImageStreamSpecs[get_image_index(stream_id)];
 }
 
 }  // namespace raph_oak
