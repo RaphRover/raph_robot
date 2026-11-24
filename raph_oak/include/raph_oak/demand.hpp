@@ -50,8 +50,10 @@ struct SubscriberCounts
   std::array<ImageSubscriberCounts, ImageStreamCount> images{};
   std::size_t pointcloud{0};
   std::size_t imu{0};
-  /// Subscribers of ~/nn/detections and ~/nn/image_raw combined, 0 when nn.enabled is false
+  /// Subscribers of ~/nn/detections and ~/nn/overlay, 0 when nn.enabled is false
   std::size_t nn{0};
+  /// Subscribers of the ~/nn/passthrough topics, 0 when nn.enabled is false
+  ImageSubscriberCounts nn_passthrough{};
 };
 
 /// Which gates are open. Only the gates that follow the demand are meaningful, see
@@ -98,7 +100,13 @@ public:
   }
   bool pointcloud() const { return pointcloud_; }
   bool imu() const { return imu_; }
-  bool nn() const { return nn_; }
+  /// What the passthrough of the network input needs. The raw image comes out of the network, so
+  /// it needs the network to run, while the compressed one is encoded from the camera output
+  const ImageDemand & nn_passthrough() const { return nn_passthrough_; }
+  /// The network has to run (detections, overlay or the raw passthrough are wanted)
+  bool nn() const { return nn_ || nn_passthrough_.raw(); }
+  /// The JPEG compressed passthrough is wanted
+  bool nn_encoded() const { return nn_passthrough_.encoded(); }
 
   /// The depth is needed for the depth image and for the point cloud
   bool depth_needed() const;
@@ -114,6 +122,7 @@ private:
   bool pointcloud_{false};
   bool imu_{false};
   bool nn_{false};
+  ImageDemand nn_passthrough_;
 };
 
 enum class StereoSensorAction

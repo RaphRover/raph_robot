@@ -61,6 +61,10 @@ std::unique_ptr<sensor_msgs::msg::Image> to_ros_image(
 std::unique_ptr<sensor_msgs::msg::CompressedImage> to_ros_compressed_image(
   dai::EncodedFrame & data, const std_msgs::msg::Header & header);
 
+/// Draws the bounding boxes and labels of the detections on a bgr8 or rgb8 image, in place
+void draw_detections(
+  sensor_msgs::msg::Image & image, const vision_msgs::msg::Detection2DArray & detections);
+
 vision_msgs::msg::Detection2DArray to_ros_detections(
   const dai::ImgDetections & data, const std_msgs::msg::Header & header);
 

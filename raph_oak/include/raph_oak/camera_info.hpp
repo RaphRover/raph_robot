@@ -41,10 +41,12 @@ sensor_msgs::msg::CameraInfo get_rotated_camera_info(
 // The rectification rotation and the baseline are taken from calibration_info (a camera info that
 // was already rotated with get_rotated_camera_info); the baseline is kept in metres, so the Tx term
 // of P follows the new focal length. If the frame carries no valid transformation, calibration_info
-// is used as is, with its distortion removed.
+// is used as is, with its distortion removed. An image that was resized but not undistorted
+// (undistorted = false) keeps the distortion of calibration_info.
 sensor_msgs::msg::CameraInfo get_rectified_camera_info(
   const dai::ImgTransformation & transformation, uint32_t width, uint32_t height,
-  const sensor_msgs::msg::CameraInfo & calibration_info, bool rotated_at_sensor = false);
+  const sensor_msgs::msg::CameraInfo & calibration_info, bool rotated_at_sensor = false,
+  bool undistorted = true);
 
 // Camera info of the same camera at a different resolution
 sensor_msgs::msg::CameraInfo get_scaled_camera_info(

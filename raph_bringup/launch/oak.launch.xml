@@ -4,10 +4,6 @@
     default=""
     description="The prefix added to each published TF frame id" />
 
-  <arg name="nn_overlay"
-    default="false"
-    description="Whether to draw the neural network detections on the passthrough frame and publish them on ~/nn/detections_overlay. Keeps the network running continuously, so it is meant for debugging rather than normal operation." />
-
   <node_container namespace=""
     name="oak_container"
     pkg="rclcpp_components"
@@ -28,15 +24,6 @@
       <param name="out_transport" value="compressedDepth" />
       <remap from="in" to="image_raw" />
       <remap from="out/compressedDepth" to="image_raw/compressedDepth" />
-    </composable_node>
-    <composable_node namespace="oak"
-      name="detection_overlay"
-      pkg="depthai_filters_v3"
-      plugin="depthai_filters::Detection2DOverlay"
-      if="$(var nn_overlay)">
-      <extra_arg name="use_intra_process_comms" value="true" />
-      <remap from="nn/passthrough/image_raw" to="nn/image_raw" />
-      <remap from="overlay" to="nn/detections_overlay" />
     </composable_node>
   </node_container>
 

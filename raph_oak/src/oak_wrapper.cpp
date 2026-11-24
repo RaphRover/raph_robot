@@ -25,6 +25,7 @@
 #include <exception>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -140,7 +141,13 @@ void OakWrapper::create_ros_publishers()
   // Neural network
   if (params_.nn.enabled) {
     nn_detections_pub_ = create_publisher<vision_msgs::msg::Detection2DArray>("~/nn/detections", 1);
-    nn_img_pub_ = create_publisher<sensor_msgs::msg::Image>("~/nn/image_raw", 1);
+    nn_passthrough_set_.image_pub =
+      create_publisher<sensor_msgs::msg::Image>("~/nn/passthrough", 1);
+    nn_passthrough_set_.compressed_pub =
+      create_publisher<sensor_msgs::msg::CompressedImage>("~/nn/passthrough/compressed", 1);
+    nn_passthrough_set_.camera_info_pub =
+      create_publisher<sensor_msgs::msg::CameraInfo>("~/nn/passthrough/camera_info", 1);
+    nn_overlay_pub_ = create_publisher<sensor_msgs::msg::Image>("~/nn/overlay", 1);
   }
 }
 
@@ -200,6 +207,9 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
     publisher_calibration_info(spec.id).header.frame_id = tf_frame(spec.frame_id);
   }
 
+  // The network input comes from the RGB camera
+  nn_passthrough_set_.calibration_info = publisher_calibration_info(ImageStreamId::Rgb);
+
   // Invalidate the cached still image camera info, it is rebuilt on the next capture
   still_camera_info_ = sensor_msgs::msg::CameraInfo();
 }
@@ -254,6 +264,13 @@ void OakWrapper::run_pipeline()
   if (pipeline_details_.nn_queue) {
     pipeline_details_.nn_queue->addCallback(
       [this](const std::shared_ptr<dai::ADatatype> & message) { publish_detections(message); });
+  }
+
+  if (pipeline_details_.nn_compressed_queue) {
+    pipeline_details_.nn_compressed_queue->addCallback(
+      [this](const std::shared_ptr<dai::ADatatype> & message) {
+        publish_nn_compressed_image(message);
+      });
   }
 
   if (pipeline_details_.nn_image_queue) {
@@ -428,9 +445,13 @@ SubscriberCounts OakWrapper::count_subscribers() const
   counts.pointcloud = pointcloud_pub_->get_subscription_count();
   counts.imu = imu_pub_->get_subscription_count();
   // The publishers only exist when nn.enabled is set
-  if (nn_detections_pub_ && nn_img_pub_) {
+  if (nn_detections_pub_) {
     counts.nn =
-      nn_detections_pub_->get_subscription_count() + nn_img_pub_->get_subscription_count();
+      nn_detections_pub_->get_subscription_count() + nn_overlay_pub_->get_subscription_count();
+    counts.nn_passthrough = {
+      nn_passthrough_set_.image_pub->get_subscription_count(),
+      nn_passthrough_set_.compressed_pub->get_subscription_count(),
+      nn_passthrough_set_.camera_info_pub->get_subscription_count()};
   }
   return counts;
 }
@@ -450,13 +471,12 @@ void OakWrapper::apply_demand(const Demand & demand)
   }
 
   // The point cloud gate limits the rate of the depth frames fed to the point cloud node. The
-  // neural network gate limits the inference rate the same way, but only exists when the network
-  // made it into the pipeline (nn.enabled can be true while the model failed to load, see
-  // run_pipeline()).
+  // neural network gates only exist when the network made it into the pipeline (nn.enabled can be
+  // true while the model failed to load, see run_pipeline()).
   const int pointcloud_fps = static_cast<int>(params_.pointcloud.max_rate);
   const bool nn_in_pipeline = pipeline_details_.nn_queue != nullptr;
   for (const auto gate : Control::all()) {
-    if (gate == Control::Nn && !nn_in_pipeline) {
+    if ((gate == Control::Nn || gate == Control::NnEnc) && !nn_in_pipeline) {
       continue;
     }
     if (!gate.follows_demand()) {
@@ -465,8 +485,6 @@ void OakWrapper::apply_demand(const Demand & demand)
     int fps = -1;
     if (gate == Control::PointCloud) {
       fps = pointcloud_fps;
-    } else if (gate == Control::Nn) {
-      fps = static_cast<int>(params_.nn.max_rate);
     }
     set_gate(gate, wanted_gates.is_open(gate), fps);
   }
@@ -692,7 +710,18 @@ void OakWrapper::publish_detections(const std::shared_ptr<dai::ADatatype> & mess
   std_msgs::msg::Header header;
   header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
   header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
-  nn_detections_pub_->publish(to_ros_detections(*in_data, header));
+  auto detections = to_ros_detections(*in_data, header);
+
+  if (nn_detections_pub_->get_subscription_count() > 0) {
+    nn_detections_pub_->publish(detections);
+  }
+
+  if (nn_overlay_pub_->get_subscription_count() > 0) {
+    const std::lock_guard<std::mutex> lock(nn_overlay_mutex_);
+    nn_overlay_detections_ = std::move(detections);
+    nn_overlay_detections_sequence_ = in_data->getSequenceNum();
+    publish_nn_overlay_if_ready();
+  }
 }
 
 void OakWrapper::publish_nn_image(const std::shared_ptr<dai::ADatatype> & message)
@@ -707,10 +736,78 @@ void OakWrapper::publish_nn_image(const std::shared_ptr<dai::ADatatype> & messag
   header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
   header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
 
-  auto image = to_ros_image(*in_data, header, get_logger());
-  if (image) {
-    nn_img_pub_->publish(std::move(image));
+  const bool want_raw = nn_passthrough_set_.image_pub->get_subscription_count() > 0;
+  if (want_raw && nn_passthrough_set_.camera_info_pub->get_subscription_count() > 0) {
+    // The frame is resized and letterboxed but not undistorted, so the distortion of the RGB
+    // calibration still applies. CAM_A is rotated at the sensor, which the frame does not know.
+    auto cam_info = get_rectified_camera_info(
+      in_data->getTransformation(), in_data->getWidth(), in_data->getHeight(),
+      nn_passthrough_set_.calibration_info, true, false);
+    cam_info.header.stamp = header.stamp;
+    nn_passthrough_set_.camera_info_pub->publish(cam_info);
   }
+  const bool want_overlay = nn_overlay_pub_->get_subscription_count() > 0;
+  if (!want_raw && !want_overlay) {
+    return;
+  }
+
+  auto image = to_ros_image(*in_data, header, get_logger());
+  if (!image) {
+    return;
+  }
+
+  if (want_overlay) {
+    const std::lock_guard<std::mutex> lock(nn_overlay_mutex_);
+    nn_overlay_image_ = *image;
+    nn_overlay_image_sequence_ = in_data->getSequenceNum();
+    publish_nn_overlay_if_ready();
+  }
+
+  if (want_raw) {
+    nn_passthrough_set_.image_pub->publish(std::move(image));
+  }
+}
+
+void OakWrapper::publish_nn_compressed_image(const std::shared_ptr<dai::ADatatype> & message)
+{
+  const auto in_data = std::dynamic_pointer_cast<dai::EncodedFrame>(message);
+  if (!in_data) {
+    RCLCPP_WARN(get_logger(), "Received a message that is not an encoded frame");
+    return;
+  }
+
+  std_msgs::msg::Header header;
+  header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
+  header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
+  // The raw passthrough publishes the camera info while it is requested
+  if (
+    nn_passthrough_set_.image_pub->get_subscription_count() == 0 &&
+    nn_passthrough_set_.camera_info_pub->get_subscription_count() > 0) {
+    auto cam_info = get_rectified_camera_info(
+      in_data->transformation, in_data->getWidth(), in_data->getHeight(),
+      nn_passthrough_set_.calibration_info, true, false);
+    cam_info.header.stamp = header.stamp;
+    nn_passthrough_set_.camera_info_pub->publish(cam_info);
+  }
+
+  if (nn_passthrough_set_.compressed_pub->get_subscription_count() > 0) {
+    nn_passthrough_set_.compressed_pub->publish(to_ros_compressed_image(*in_data, header));
+  }
+}
+
+void OakWrapper::publish_nn_overlay_if_ready()
+{
+  if (
+    !nn_overlay_image_ || !nn_overlay_detections_ ||
+    nn_overlay_image_sequence_ != nn_overlay_detections_sequence_) {
+    return;
+  }
+
+  auto overlay = std::make_unique<sensor_msgs::msg::Image>(std::move(*nn_overlay_image_));
+  draw_detections(*overlay, *nn_overlay_detections_);
+  nn_overlay_image_.reset();
+  nn_overlay_detections_.reset();
+  nn_overlay_pub_->publish(std::move(overlay));
 }
 
 void OakWrapper::capture_still(

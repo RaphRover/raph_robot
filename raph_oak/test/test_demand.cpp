@@ -280,7 +280,48 @@ TEST(Demand, NnDoesNotNeedTheStereoSensors)
 
   const auto states = demand.gate_states();
   EXPECT_TRUE(gate(states, Control::Nn));
+  EXPECT_FALSE(gate(states, Control::NnEnc));
   EXPECT_EQ(open_gates(states), 1U);
+}
+
+TEST(Demand, CompressedNnOpensTheNetworkAndTheEncoder)
+{
+  SubscriberCounts counts;
+  counts.nn_passthrough.compressed = 1;
+  const auto demand = Demand(counts);
+  EXPECT_FALSE(demand.nn());
+  EXPECT_TRUE(demand.nn_encoded());
+
+  const auto states = demand.gate_states();
+  EXPECT_FALSE(gate(states, Control::Nn));
+  EXPECT_TRUE(gate(states, Control::NnEnc));
+  EXPECT_EQ(open_gates(states), 1U);
+}
+
+TEST(Demand, NnCameraInfoAloneOpensOnlyTheEncoder)
+{
+  SubscriberCounts counts;
+  counts.nn_passthrough.camera_info = 1;
+  const auto demand = Demand(counts);
+  EXPECT_FALSE(demand.nn_passthrough().raw());
+  EXPECT_TRUE(demand.nn_passthrough().encoded());
+
+  const auto states = demand.gate_states();
+  EXPECT_FALSE(gate(states, Control::Nn));
+  EXPECT_TRUE(gate(states, Control::NnEnc));
+}
+
+TEST(Demand, RawNnPassthroughNeedsTheNetwork)
+{
+  SubscriberCounts counts;
+  counts.nn_passthrough.image = 1;
+  const auto demand = Demand(counts);
+  EXPECT_TRUE(demand.nn());
+  EXPECT_FALSE(demand.nn_encoded());
+
+  const auto states = demand.gate_states();
+  EXPECT_TRUE(gate(states, Control::Nn));
+  EXPECT_FALSE(gate(states, Control::NnEnc));
 }
 
 TEST(Demand, EverythingSubscribed)
@@ -292,11 +333,12 @@ TEST(Demand, EverythingSubscribed)
   counts.pointcloud = 1;
   counts.imu = 1;
   counts.nn = 1;
+  counts.nn_passthrough = {1, 1, 1};
   const auto states = Demand(counts).gate_states();
 
   // 6 streams with compressed variant: 2 gates each, the 4 stereo ones also an input gate, plus the
   // depth input and output, the point cloud, the imu and the neural network
-  EXPECT_EQ(open_gates(states), 6U * 2U + 4U + 2U + 1U + 1U + 1U);
+  EXPECT_EQ(open_gates(states), 6U * 2U + 4U + 2U + 1U + 1U + 2U);
 }
 
 TEST(Demand, TheGatesOfDifferentStreamsAreIndependent)

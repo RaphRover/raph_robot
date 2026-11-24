@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 
@@ -89,7 +90,19 @@ private:
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> still_image_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> still_cam_info_pub_;
   std::shared_ptr<rclcpp::Publisher<vision_msgs::msg::Detection2DArray>> nn_detections_pub_;
-  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> nn_img_pub_;
+  /// The passthrough of the network input. Its calibration_info is the one of the RGB camera, as the
+  /// frame is resized and letterboxed but not undistorted
+  ImagePublisherSet nn_passthrough_set_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> nn_overlay_pub_;
+
+  // The passthrough frame and its detections arrive on separate queues. Whichever comes first
+  // waits here (matched by sequence number) until the other one arrives, so the overlay is drawn
+  // on the frame the detections belong to.
+  std::mutex nn_overlay_mutex_;
+  std::optional<sensor_msgs::msg::Image> nn_overlay_image_;
+  std::int64_t nn_overlay_image_sequence_ = -1;
+  std::optional<vision_msgs::msg::Detection2DArray> nn_overlay_detections_;
+  std::int64_t nn_overlay_detections_sequence_ = -1;
 
   // ROS Services
   std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> capture_still_srv_;
@@ -158,6 +171,8 @@ private:
   void publish_pointcloud(const std::shared_ptr<dai::ADatatype> & message);
   void publish_detections(const std::shared_ptr<dai::ADatatype> & message);
   void publish_nn_image(const std::shared_ptr<dai::ADatatype> & message);
+  void publish_nn_compressed_image(const std::shared_ptr<dai::ADatatype> & message);
+  void publish_nn_overlay_if_ready();  // nn_overlay_mutex_ has to be held
   void capture_still(
     std_srvs::srv::Trigger::Request::SharedPtr request,
     std_srvs::srv::Trigger::Response::SharedPtr response);

@@ -59,6 +59,7 @@ struct PipelineDetails
   // not be loaded.
   std::shared_ptr<dai::MessageQueue> nn_queue;
   std::shared_ptr<dai::MessageQueue> nn_image_queue;
+  std::shared_ptr<dai::MessageQueue> nn_compressed_queue;
 
   // Control channel (see Control)
   std::shared_ptr<dai::InputQueue> control_queue;

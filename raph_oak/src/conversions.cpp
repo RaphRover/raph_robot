@@ -20,14 +20,17 @@
 
 #include "raph_oak/conversions.hpp"
 
+#include <opencv2/core/hal/interface.h>
+
+#include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <memory>
 #include <opencv2/core.hpp>
-#include <opencv2/core/hal/interface.h>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgproc.hpp>
@@ -181,6 +184,56 @@ std::unique_ptr<sensor_msgs::msg::CompressedImage> to_ros_compressed_image(
   image->format = "jpeg";
   image->data.assign(data.getData().begin(), data.getData().end());
   return image;
+}
+
+void draw_detections(
+  sensor_msgs::msg::Image & image, const vision_msgs::msg::Detection2DArray & detections)
+{
+  if (image.encoding != "bgr8" && image.encoding != "rgb8") {
+    return;
+  }
+
+  cv::Mat mat(
+    static_cast<int>(image.height), static_cast<int>(image.width), CV_8UC3, image.data.data(),
+    image.step);
+  // Green in both channel orders
+  const cv::Scalar color(0, 255, 0);
+  constexpr double CoordinateLimit = 1000000.0;
+
+  for (const auto & detection : detections.detections) {
+    const auto & box = detection.bbox;
+    const double center_x = box.center.position.x;
+    const double center_y = box.center.position.y;
+    if (
+      !std::isfinite(center_x) || !std::isfinite(center_y) || !std::isfinite(box.size_x) ||
+      !std::isfinite(box.size_y) || std::abs(center_x) > CoordinateLimit ||
+      std::abs(center_y) > CoordinateLimit || box.size_x <= 0.0 || box.size_y <= 0.0 ||
+      box.size_x > CoordinateLimit || box.size_y > CoordinateLimit) {
+      continue;
+    }
+
+    const cv::Point top_left(
+      static_cast<int>(std::lround(center_x - (box.size_x / 2.0))),
+      static_cast<int>(std::lround(center_y - (box.size_y / 2.0))));
+    const cv::Point bottom_right(
+      static_cast<int>(std::lround(center_x + (box.size_x / 2.0))),
+      static_cast<int>(std::lround(center_y + (box.size_y / 2.0))));
+    cv::rectangle(mat, top_left, bottom_right, color, 2);
+
+    if (!detection.results.empty()) {
+      const auto & hypothesis = detection.results.front().hypothesis;
+      std::string label = hypothesis.class_id;
+      if (std::isfinite(hypothesis.score)) {
+        label +=
+          " " + std::to_string(std::lround(std::clamp(hypothesis.score, 0.0, 1.0) * 100.0)) + "%";
+      }
+      const int label_x = std::clamp(top_left.x, 0, std::max(mat.cols - 1, 0));
+      const int label_y = std::clamp(top_left.y - 5, 12, std::max(mat.rows - 1, 12));
+      cv::putText(
+        mat, label, cv::Point(label_x, label_y), cv::FONT_HERSHEY_SIMPLEX, 0.5, color, 1,
+        cv::LINE_AA);
+    }
+  }
 }
 
 vision_msgs::msg::Detection2DArray to_ros_detections(

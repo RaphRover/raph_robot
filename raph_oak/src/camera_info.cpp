@@ -72,12 +72,14 @@ sensor_msgs::msg::CameraInfo get_rotated_camera_info(
 
 sensor_msgs::msg::CameraInfo get_rectified_camera_info(
   const dai::ImgTransformation & transformation, uint32_t width, uint32_t height,
-  const sensor_msgs::msg::CameraInfo & calibration_info, bool rotated_at_sensor)
+  const sensor_msgs::msg::CameraInfo & calibration_info, bool rotated_at_sensor, bool undistorted)
 {
   sensor_msgs::msg::CameraInfo info = calibration_info;
   info.width = width;
   info.height = height;
-  std::fill(info.d.begin(), info.d.end(), 0.0);
+  if (undistorted) {
+    std::fill(info.d.begin(), info.d.end(), 0.0);
+  }
 
   // Baseline in metres: P[3] = fx * Tx
   const double translation_x =

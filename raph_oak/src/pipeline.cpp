@@ -47,7 +47,6 @@
 #include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/datatype/ADatatype.hpp"
 #include "depthai/pipeline/datatype/Buffer.hpp"
-#include "depthai/pipeline/datatype/ImageManipConfig.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai/pipeline/node/Camera.hpp"
@@ -358,24 +357,17 @@ PipelineDetails create_dai_pipeline(
         throw std::runtime_error("The model does not declare its input size");
       }
 
-      // Gate the RGB stream before resizing, so that neither the resize nor the inference runs
-      // while nobody is subscribed. The network is fed from the existing RGB output rather than
-      // a separate camera output, which RVC2 devices do not have the resources for. The gate also
-      // limits the inference rate, as it is opened with nn.max_rate (see OakWrapper::check_publishers).
-      auto nn_gate = make_gate(*rgb_output, Control::Nn);
-
-      // Letterboxing keeps the full RGB field of view, at the cost of padding the frame
-      auto nn_resize = pipeline->create<dai::node::ImageManip>();
-      nn_resize->initialConfig->setOutputSize(
-        input_size->first, input_size->second, dai::ImageManipConfig::ResizeMode::LETTERBOX);
-      nn_resize->initialConfig->setFrameType(get_nn_frame_type(archive, device->getPlatform()));
-      nn_resize->setMaxOutputFrameSize(
-        static_cast<int>(input_size->first * input_size->second * 3));
-      nn_resize->inputImage.setBlocking(false);
-      nn_gate->output.link(nn_resize->inputImage);
+      // The network gets its own CAM_A output at the size and format it takes, so there is no
+      // resize node. The output runs at nn.fps. Letterboxing keeps the full field of view, at the
+      // cost of padding the frame. The gate keeps the inference idle while nobody is subscribed.
+      const auto nn_frame_type = get_nn_frame_type(archive, device->getPlatform());
+      auto * nn_output = rgb_node->requestOutput(
+        {input_size->first, input_size->second}, nn_frame_type, dai::ImgResizeMode::LETTERBOX,
+        static_cast<float>(params.nn.fps));
+      auto nn_gate = make_gate(*nn_output, Control::Nn);
 
       auto nn_node =
-        pipeline->create<dai::node::DetectionNetwork>()->build(nn_resize->out, archive);
+        pipeline->create<dai::node::DetectionNetwork>()->build(nn_gate->output, archive);
 
       // RVC2 models ship as a superblob that has to be compiled for a specific number of SHAVE
       // cores. The default does not fit next to the rest of the pipeline, so ask for the
@@ -390,6 +382,29 @@ PipelineDetails create_dai_pipeline(
       details.nn_queue->setName("nn");
       details.nn_image_queue = nn_node->passthrough.createOutputQueue(1, false);
       details.nn_image_queue->setName("nn_image");
+
+      // JPEG compressed passthrough, encoded on the camera. The encoder only takes NV12, so the
+      // frame is converted first (unless the network already takes NV12). Both sit behind their
+      // own gate, so neither runs unless the compressed topic is subscribed.
+      auto nn_enc_gate = make_gate(*nn_output, Control::NnEnc);
+      auto nn_encoder = pipeline->create<dai::node::VideoEncoder>();
+      nn_encoder->setDefaultProfilePreset(
+        static_cast<float>(params.nn.fps), dai::VideoEncoderProperties::Profile::MJPEG);
+      nn_encoder->setQuality(params.rgb_compressed.jpeg_quality);
+      nn_encoder->input.setBlocking(false);
+      if (nn_frame_type == dai::ImgFrame::Type::NV12) {
+        nn_enc_gate->output.link(nn_encoder->input);
+      } else {
+        auto nn_to_nv12 = pipeline->create<dai::node::ImageManip>();
+        nn_to_nv12->initialConfig->setFrameType(dai::ImgFrame::Type::NV12);
+        nn_to_nv12->setMaxOutputFrameSize(
+          static_cast<int>(input_size->first * input_size->second * 3 / 2));
+        nn_to_nv12->inputImage.setBlocking(false);
+        nn_enc_gate->output.link(nn_to_nv12->inputImage);
+        nn_to_nv12->out.link(nn_encoder->input);
+      }
+      details.nn_compressed_queue = nn_encoder->out.createOutputQueue(1, false);
+      details.nn_compressed_queue->setName("nn_image_compressed");
 
       RCLCPP_INFO_STREAM(
         logger, "Loaded neural network \"" << params.nn.model << "\" (" << input_size->first << "x"
