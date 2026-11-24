@@ -83,6 +83,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_conversions
     rclcpp::rclcpp
     ${sensor_msgs_TARGETS}
+    ${vision_msgs_TARGETS}
     depthai_v3::core
   )
 endif()

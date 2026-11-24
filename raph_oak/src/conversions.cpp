@@ -25,19 +25,196 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "depthai/common/CameraBoardSocket.hpp"
+#include "depthai/device/CalibrationHandler.hpp"
+#include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
+#include "depthai/pipeline/datatype/ImgDetections.hpp"
+#include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
 #include "raph_oak/frame_clock.hpp"
+#include "rclcpp/logging.hpp"
+#include "sensor_msgs/msg/camera_info.hpp"
+#include "sensor_msgs/msg/compressed_image.hpp"
+#include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/msg/point_field.hpp"
+#include "std_msgs/msg/header.hpp"
+#include "vision_msgs/msg/detection2_d.hpp"
+#include "vision_msgs/msg/object_hypothesis_with_pose.hpp"
 
 namespace raph_oak
 {
+
+sensor_msgs::msg::CameraInfo calibration_to_camera_info(
+  const dai::CalibrationHandler & calibration, dai::CameraBoardSocket socket, uint32_t width,
+  uint32_t height)
+{
+  constexpr std::size_t DistortionCoefficientCount = 8;
+  // DepthAI stores translations in centimetres
+  constexpr double MetresPerCentimetre = 0.01;
+
+  sensor_msgs::msg::CameraInfo info;
+  info.width = width;
+  info.height = height;
+  info.distortion_model = "rational_polynomial";
+
+  const auto intrinsics =
+    calibration.getCameraIntrinsics(socket, static_cast<int>(width), static_cast<int>(height));
+  for (std::size_t row = 0; row < 3; ++row) {
+    for (std::size_t col = 0; col < 3; ++col) {
+      info.k[row * 3 + col] = intrinsics[row][col];
+      info.p[row * 4 + col] = intrinsics[row][col];
+    }
+  }
+  info.r = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+
+  const auto distortion = calibration.getDistortionCoefficients(socket);
+  info.d.assign(DistortionCoefficientCount, 0.0);
+  for (std::size_t i = 0; i < DistortionCoefficientCount && i < distortion.size(); ++i) {
+    info.d[i] = distortion[i];
+  }
+
+  const auto left_socket = calibration.getStereoLeftCameraId();
+  const auto right_socket = calibration.getStereoRightCameraId();
+  if (
+    left_socket == dai::CameraBoardSocket::AUTO || right_socket == dai::CameraBoardSocket::AUTO ||
+    (socket != left_socket && socket != right_socket)) {
+    return info;
+  }
+
+  std::vector<std::vector<float>> rectification;
+  if (socket == left_socket) {
+    // Projection into the first camera of the pair, seen from the second one
+    info.p[3] = info.k[0] * calibration.getCameraExtrinsics(left_socket, right_socket)[0][3] *
+                MetresPerCentimetre;
+    rectification = calibration.getStereoLeftRectificationRotation();
+  } else {
+    rectification = calibration.getStereoRightRectificationRotation();
+  }
+  for (std::size_t row = 0; row < 3; ++row) {
+    for (std::size_t col = 0; col < 3; ++col) {
+      info.r[row * 3 + col] = rectification[row][col];
+    }
+  }
+  return info;
+}
+
+std::unique_ptr<sensor_msgs::msg::Image> to_ros_image(
+  dai::ImgFrame & data, const std_msgs::msg::Header & header, const rclcpp::Logger & logger)
+{
+  auto image = std::make_unique<sensor_msgs::msg::Image>();
+  image->header = header;
+  image->width = data.getWidth();
+  image->height = data.getHeight();
+  image->is_bigendian = 1U;
+
+  if (data.getType() == dai::ImgFrame::Type::NV12) {
+    image->encoding = "bgr8";
+    image->step = image->width * 3;
+    image->data.resize(image->width * image->height * 3);
+
+    cv::Mat const in_mat(
+      cv::Size(data.getWidth(), data.getHeight() * 3 / 2), CV_8UC1, data.getData().data());
+    cv::Mat out_mat(cv::Size(data.getWidth(), data.getHeight()), CV_8UC3, image->data.data());
+    cv::cvtColor(in_mat, out_mat, cv::ColorConversionCodes::COLOR_YUV2BGR_NV12);
+  } else if (
+    data.getType() == dai::ImgFrame::Type::BGR888i ||
+    data.getType() == dai::ImgFrame::Type::RGB888i) {
+    image->encoding = data.getType() == dai::ImgFrame::Type::BGR888i ? "bgr8" : "rgb8";
+    image->step = image->width * 3;
+    image->data.assign(data.getData().begin(), data.getData().end());
+  } else if (
+    data.getType() == dai::ImgFrame::Type::BGR888p ||
+    data.getType() == dai::ImgFrame::Type::RGB888p) {
+    // Planar frames (what RVC2 networks take) need the channels interleaved for ROS
+    image->encoding = data.getType() == dai::ImgFrame::Type::BGR888p ? "bgr8" : "rgb8";
+    image->step = image->width * 3;
+    image->data.resize(static_cast<size_t>(image->width) * image->height * 3);
+
+    const cv::Size plane_size(static_cast<int>(image->width), static_cast<int>(image->height));
+    const auto plane_bytes = static_cast<size_t>(image->width) * image->height;
+    auto * in_planes = data.getData().data();
+
+    const std::array<cv::Mat, 3> planes{
+      cv::Mat(plane_size, CV_8UC1, in_planes),
+      cv::Mat(plane_size, CV_8UC1, in_planes + plane_bytes),
+      cv::Mat(plane_size, CV_8UC1, in_planes + (2 * plane_bytes))};
+    cv::Mat out_mat(plane_size, CV_8UC3, image->data.data());
+    cv::merge(planes.data(), planes.size(), out_mat);
+  } else if (
+    data.getType() == dai::ImgFrame::Type::RAW8 || data.getType() == dai::ImgFrame::Type::GRAY8) {
+    image->encoding = "mono8";
+    image->step = image->width;
+    image->data.assign(data.getData().begin(), data.getData().end());
+  } else if (data.getType() == dai::ImgFrame::Type::RAW16) {
+    image->encoding = "16UC1";
+    image->is_bigendian = 0U;
+    image->step = image->width * 2;
+    image->data.assign(data.getData().begin(), data.getData().end());
+  } else {
+    RCLCPP_WARN_STREAM(
+      logger, "Unsupported image frame type: " << static_cast<int>(data.getType()));
+    return nullptr;
+  }
+  return image;
+}
+
+std::unique_ptr<sensor_msgs::msg::CompressedImage> to_ros_compressed_image(
+  dai::EncodedFrame & data, const std_msgs::msg::Header & header)
+{
+  auto image = std::make_unique<sensor_msgs::msg::CompressedImage>();
+  image->header = header;
+  image->format = "jpeg";
+  image->data.assign(data.getData().begin(), data.getData().end());
+  return image;
+}
+
+vision_msgs::msg::Detection2DArray to_ros_detections(
+  const dai::ImgDetections & data, const std_msgs::msg::Header & header)
+{
+  vision_msgs::msg::Detection2DArray msg;
+  msg.header = header;
+
+  // Detections are normalized to the network input frame. This may be a letterboxed version of
+  // the RGB stream, so bounding boxes do not line up with that stream without remapping.
+  double width = 1.0;
+  double height = 1.0;
+  if (data.transformation) {
+    const auto size = data.transformation->getSize();
+    width = static_cast<double>(size.first);
+    height = static_cast<double>(size.second);
+  }
+
+  msg.detections.reserve(data.detections.size());
+  for (const auto & detection : data.detections) {
+    vision_msgs::msg::Detection2D ros_detection;
+    ros_detection.header = msg.header;
+    ros_detection.id =
+      detection.labelName.empty() ? std::to_string(detection.label) : detection.labelName;
+
+    vision_msgs::msg::ObjectHypothesisWithPose hypothesis;
+    hypothesis.hypothesis.class_id = ros_detection.id;
+    hypothesis.hypothesis.score = detection.confidence;
+    ros_detection.results.push_back(hypothesis);
+
+    const auto bbox = detection.getOuterBoundingBox();
+    ros_detection.bbox.size_x = (bbox[2] - bbox[0]) * width;
+    ros_detection.bbox.size_y = (bbox[3] - bbox[1]) * height;
+    ros_detection.bbox.center.position.x = (bbox[0] * width) + (ros_detection.bbox.size_x / 2.0);
+    ros_detection.bbox.center.position.y = (bbox[1] * height) + (ros_detection.bbox.size_y / 2.0);
+    msg.detections.push_back(ros_detection);
+  }
+  return msg;
+}
 
 ImuConverter::ImuConverter(
   std::string frame_id, double linear_acceleration_covariance, double angular_velocity_covariance)

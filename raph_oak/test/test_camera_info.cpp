@@ -29,6 +29,7 @@
 #include "depthai/common/Point2f.hpp"
 #include "depthai/device/CalibrationHandler.hpp"
 #include "raph_oak/camera_info.hpp"
+#include "raph_oak/conversions.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
 
 namespace raph_oak

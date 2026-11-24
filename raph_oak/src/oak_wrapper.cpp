@@ -20,10 +20,7 @@
 
 #include "raph_oak/oak_wrapper.hpp"
 
-#include <array>
 #include <chrono>
-#include <cmath>
-#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -33,14 +30,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-// OpenCV
-#include <opencv2/core/hal/interface.h>
-
-#include <opencv2/core.hpp>
-#include <opencv2/core/mat.hpp>
-#include <opencv2/core/types.hpp>
-#include <opencv2/imgproc.hpp>
 
 // DepthAI
 #include "depthai/common/CameraBoardSocket.hpp"
@@ -65,6 +54,7 @@
 // ROS
 #include "raph_oak/camera_info.hpp"
 #include "raph_oak/control.hpp"
+#include "raph_oak/conversions.hpp"
 #include "raph_oak/demand.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/parameters.hpp"
@@ -82,9 +72,7 @@
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "std_msgs/msg/header.hpp"
 #include "std_srvs/srv/trigger.hpp"
-#include "vision_msgs/msg/detection2_d.hpp"
 #include "vision_msgs/msg/detection2_d_array.hpp"
-#include "vision_msgs/msg/object_hypothesis_with_pose.hpp"
 
 using namespace std::chrono_literals;
 
@@ -626,78 +614,13 @@ void OakWrapper::publish_image(
                     : publisher_set.calibration_info;
   cam_info.header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
 
-  auto image = to_ros_image(in_data, cam_info.header);
+  auto image = to_ros_image(*in_data, cam_info.header, get_logger());
   if (!image) {
     return;
   }
 
   publisher_set.camera_info_pub->publish(cam_info);
   publisher_set.image_pub->publish(std::move(image));
-}
-
-std::unique_ptr<sensor_msgs::msg::Image> OakWrapper::to_ros_image(
-  const std::shared_ptr<dai::ImgFrame> & in_data, const std_msgs::msg::Header & header) const
-{
-  auto image = std::make_unique<sensor_msgs::msg::Image>();
-
-  image->header = header;
-  image->width = in_data->getWidth();
-  image->height = in_data->getHeight();
-  image->is_bigendian = 1U;
-
-  if (in_data->getType() == dai::ImgFrame::Type::NV12) {
-    image->encoding = "bgr8";
-    image->step = image->width * 3;
-    image->data.resize(image->width * image->height * 3);
-
-    cv::Mat const in_mat(
-      cv::Size(in_data->getWidth(), in_data->getHeight() * 3 / 2), CV_8UC1,
-      in_data->getData().data());
-    cv::Mat out_mat(
-      cv::Size(in_data->getWidth(), in_data->getHeight()), CV_8UC3, image->data.data());
-    cv::cvtColor(in_mat, out_mat, cv::ColorConversionCodes::COLOR_YUV2BGR_NV12);
-  } else if (
-    in_data->getType() == dai::ImgFrame::Type::BGR888i ||
-    in_data->getType() == dai::ImgFrame::Type::RGB888i) {
-    image->encoding = in_data->getType() == dai::ImgFrame::Type::BGR888i ? "bgr8" : "rgb8";
-    image->step = image->width * 3;
-    image->data.assign(in_data->getData().begin(), in_data->getData().end());
-  } else if (
-    in_data->getType() == dai::ImgFrame::Type::BGR888p ||
-    in_data->getType() == dai::ImgFrame::Type::RGB888p) {
-    // Planar frames (what RVC2 networks take) need the channels interleaved for ROS
-    image->encoding = in_data->getType() == dai::ImgFrame::Type::BGR888p ? "bgr8" : "rgb8";
-    image->step = image->width * 3;
-    image->data.resize(static_cast<size_t>(image->width) * image->height * 3);
-
-    const cv::Size plane_size(static_cast<int>(image->width), static_cast<int>(image->height));
-    const auto plane_bytes = static_cast<size_t>(image->width) * image->height;
-    auto * in_planes = in_data->getData().data();
-
-    const std::array<cv::Mat, 3> planes{
-      cv::Mat(plane_size, CV_8UC1, in_planes),
-      cv::Mat(plane_size, CV_8UC1, in_planes + plane_bytes),
-      cv::Mat(plane_size, CV_8UC1, in_planes + (2 * plane_bytes))};
-    cv::Mat out_mat(plane_size, CV_8UC3, image->data.data());
-    cv::merge(planes.data(), planes.size(), out_mat);
-  } else if (
-    in_data->getType() == dai::ImgFrame::Type::RAW8 ||
-    in_data->getType() == dai::ImgFrame::Type::GRAY8) {
-    image->encoding = "mono8";
-    image->step = image->width;
-    image->data.assign(in_data->getData().begin(), in_data->getData().end());
-  } else if (in_data->getType() == dai::ImgFrame::Type::RAW16) {
-    image->encoding = "16UC1";
-    image->is_bigendian = 0U;
-    image->step = image->width * 2;
-    image->data.assign(in_data->getData().begin(), in_data->getData().end());
-  } else {
-    RCLCPP_WARN_STREAM(
-      get_logger(), "Unsupported image frame type: " << static_cast<int>(in_data->getType()));
-    return nullptr;
-  }
-
-  return image;
 }
 
 void OakWrapper::publish_compressed_image(
@@ -729,13 +652,9 @@ void OakWrapper::publish_compressed_image(
     return;
   }
 
-  auto image = std::make_unique<sensor_msgs::msg::CompressedImage>();
-  image->header.stamp = stamp;
-  image->header.frame_id = publisher_set.calibration_info.header.frame_id;
-  image->format = "jpeg";
-  image->data.assign(in_data->getData().begin(), in_data->getData().end());
-
-  publisher_set.compressed_pub->publish(std::move(image));
+  auto header = publisher_set.calibration_info.header;
+  header.stamp = stamp;
+  publisher_set.compressed_pub->publish(to_ros_compressed_image(*in_data, header));
 }
 
 void OakWrapper::publish_imu(const std::shared_ptr<dai::ADatatype> & message)
@@ -770,45 +689,10 @@ void OakWrapper::publish_detections(const std::shared_ptr<dai::ADatatype> & mess
     return;
   }
 
-  vision_msgs::msg::Detection2DArray msg;
-  msg.header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
-  msg.header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
-
-  // Detections are normalized to the network input frame, which is what ~/nn/image_raw
-  // publishes, so scale them into that frame's pixel coordinates. Note that this frame is a
-  // letterboxed version of the RGB stream, so bounding boxes do not line up with ~/rgb/image_raw
-  // without remapping.
-  double width = 1.0;
-  double height = 1.0;
-  if (in_data->transformation) {
-    const auto size = in_data->transformation->getSize();
-    width = static_cast<double>(size.first);
-    height = static_cast<double>(size.second);
-  }
-
-  msg.detections.reserve(in_data->detections.size());
-  for (const auto & detection : in_data->detections) {
-    vision_msgs::msg::Detection2D ros_detection;
-    ros_detection.header = msg.header;
-    ros_detection.id =
-      detection.labelName.empty() ? std::to_string(detection.label) : detection.labelName;
-
-    vision_msgs::msg::ObjectHypothesisWithPose hypothesis;
-    hypothesis.hypothesis.class_id = ros_detection.id;
-    hypothesis.hypothesis.score = detection.confidence;
-    ros_detection.results.push_back(hypothesis);
-
-    // [xmin, ymin, xmax, ymax]
-    const auto bbox = detection.getOuterBoundingBox();
-    ros_detection.bbox.size_x = (bbox[2] - bbox[0]) * width;
-    ros_detection.bbox.size_y = (bbox[3] - bbox[1]) * height;
-    ros_detection.bbox.center.position.x = (bbox[0] * width) + (ros_detection.bbox.size_x / 2.0);
-    ros_detection.bbox.center.position.y = (bbox[1] * height) + (ros_detection.bbox.size_y / 2.0);
-
-    msg.detections.push_back(ros_detection);
-  }
-
-  nn_detections_pub_->publish(msg);
+  std_msgs::msg::Header header;
+  header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
+  header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
+  nn_detections_pub_->publish(to_ros_detections(*in_data, header));
 }
 
 void OakWrapper::publish_nn_image(const std::shared_ptr<dai::ADatatype> & message)
@@ -823,7 +707,7 @@ void OakWrapper::publish_nn_image(const std::shared_ptr<dai::ADatatype> & messag
   header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
   header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
 
-  auto image = to_ros_image(in_data, header);
+  auto image = to_ros_image(*in_data, header, get_logger());
   if (image) {
     nn_img_pub_->publish(std::move(image));
   }
@@ -860,7 +744,7 @@ void OakWrapper::capture_still(
     get_still_camera_info(in_data->getWidth(), in_data->getHeight());
   cam_info.header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
 
-  auto image = to_ros_image(in_data, cam_info.header);
+  auto image = to_ros_image(*in_data, cam_info.header, get_logger());
   if (!image) {
     response->success = false;
     response->message = "Failed to convert the still image frame";

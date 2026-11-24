@@ -27,10 +27,14 @@
 #include <vector>
 
 #include "depthai/common/Point3f.hpp"
+#include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
+#include "depthai/pipeline/datatype/ImgDetections.hpp"
+#include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
 #include "raph_oak/conversions.hpp"
 #include "raph_oak/frame_clock.hpp"
+#include "rclcpp/logger.hpp"
 #include "rclcpp/time.hpp"
 #include "sensor_msgs/msg/point_field.hpp"
 
@@ -83,6 +87,95 @@ dai::IMUData imu_data(std::vector<dai::IMUPacket> packets)
 double seconds(const builtin_interfaces::msg::Time & stamp)
 {
   return rclcpp::Time(stamp, RCL_SYSTEM_TIME).seconds();
+}
+
+TEST(ImageConversion, ConvertsPlanarAndRawFrames)
+{
+  dai::ImgFrame frame;
+  frame.setWidth(2).setHeight(1).setType(dai::ImgFrame::Type::RGB888p);
+  frame.setData(std::vector<std::uint8_t>{1, 2, 3, 4, 5, 6});
+  std_msgs::msg::Header header;
+  header.frame_id = "camera";
+  header.stamp.sec = 123;
+  auto image = to_ros_image(frame, header, rclcpp::get_logger("test"));
+  ASSERT_NE(image, nullptr);
+  EXPECT_EQ(image->header, header);
+  EXPECT_EQ(image->encoding, "rgb8");
+  EXPECT_EQ(image->step, 6U);
+  EXPECT_EQ(image->data, (std::vector<std::uint8_t>{1, 3, 5, 2, 4, 6}));
+
+  frame.setType(dai::ImgFrame::Type::RAW16);
+  frame.setData(std::vector<std::uint8_t>{1, 2, 3, 4});
+  image = to_ros_image(frame, header, rclcpp::get_logger("test"));
+  ASSERT_NE(image, nullptr);
+  EXPECT_EQ(image->encoding, "16UC1");
+  EXPECT_EQ(image->is_bigendian, 0U);
+  EXPECT_EQ(image->step, 4U);
+  EXPECT_EQ(image->data, (std::vector<std::uint8_t>{1, 2, 3, 4}));
+}
+
+TEST(ImageConversion, ConvertsNv12AndRejectsUnsupportedTypes)
+{
+  dai::ImgFrame frame;
+  frame.setWidth(2).setHeight(2).setType(dai::ImgFrame::Type::NV12);
+  frame.setData(std::vector<std::uint8_t>{16, 16, 16, 16, 128, 128});
+  const std_msgs::msg::Header header;
+  auto image = to_ros_image(frame, header, rclcpp::get_logger("test"));
+  ASSERT_NE(image, nullptr);
+  EXPECT_EQ(image->encoding, "bgr8");
+  EXPECT_EQ(image->data, std::vector<std::uint8_t>(12, 0));
+
+  frame.setType(dai::ImgFrame::Type::GRAYF16);
+  EXPECT_EQ(to_ros_image(frame, header, rclcpp::get_logger("test")), nullptr);
+}
+
+TEST(CompressedImageConversion, CopiesHeaderAndEncodedBytes)
+{
+  dai::EncodedFrame frame;
+  frame.setData(std::vector<std::uint8_t>{0xff, 0xd8, 0xff, 0xd9});
+  std_msgs::msg::Header header;
+  header.frame_id = "camera";
+  header.stamp.sec = 123;
+  const auto image = to_ros_compressed_image(frame, header);
+  EXPECT_EQ(image->header, header);
+  EXPECT_EQ(image->format, "jpeg");
+  EXPECT_EQ(image->data, (std::vector<std::uint8_t>{0xff, 0xd8, 0xff, 0xd9}));
+}
+
+TEST(DetectionConversion, ScalesBoxesAndPreservesLabelsAndHeader)
+{
+  dai::ImgDetections data;
+  data.transformation.emplace().setSize(200, 100);
+  dai::ImgDetection named;
+  named.labelName = "person";
+  named.confidence = 0.75F;
+  named.setOuterBoundingBox(0.25F, 0.1F, 0.75F, 0.9F);
+  auto numbered = named;
+  numbered.labelName.clear();
+  numbered.label = 42;
+  data.detections = {named, numbered};
+  std_msgs::msg::Header header;
+  header.frame_id = "camera";
+  header.stamp.sec = 123;
+
+  auto message = to_ros_detections(data, header);
+  ASSERT_EQ(message.detections.size(), 2U);
+  EXPECT_EQ(message.header, header);
+  EXPECT_EQ(message.detections[0].header, header);
+  EXPECT_EQ(message.detections[0].id, "person");
+  EXPECT_EQ(message.detections[1].id, "42");
+  ASSERT_EQ(message.detections[0].results.size(), 1U);
+  EXPECT_EQ(message.detections[0].results[0].hypothesis.class_id, "person");
+  EXPECT_DOUBLE_EQ(message.detections[0].results[0].hypothesis.score, 0.75);
+  EXPECT_NEAR(message.detections[0].bbox.size_x, 100.0, 1e-5);
+  EXPECT_NEAR(message.detections[0].bbox.size_y, 80.0, 1e-5);
+  EXPECT_NEAR(message.detections[0].bbox.center.position.x, 100.0, 1e-5);
+  EXPECT_NEAR(message.detections[0].bbox.center.position.y, 50.0, 1e-5);
+
+  data.transformation.reset();
+  message = to_ros_detections(data, header);
+  EXPECT_NEAR(message.detections[0].bbox.size_x, 0.5, 1e-5);
+  EXPECT_NEAR(message.detections[0].bbox.size_y, 0.8, 1e-5);
 }
 
 TEST(FrameClock, AddsTheElapsedSteadyTimeToTheRosTime)
