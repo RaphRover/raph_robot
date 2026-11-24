@@ -38,9 +38,9 @@ sensor_msgs::msg::CameraInfo calibration_to_camera_info(
   const dai::CalibrationHandler & calibration, dai::CameraBoardSocket socket, uint32_t width,
   uint32_t height)
 {
-  constexpr std::size_t DistortionCoefficientCount = 8;
+  constexpr std::size_t kDistortionCoefficientCount = 8;
   // DepthAI stores translations in centimetres
-  constexpr double MetresPerCentimetre = 0.01;
+  constexpr double kMetresPerCentimetre = 0.01;
 
   sensor_msgs::msg::CameraInfo info;
   info.width = width;
@@ -58,8 +58,8 @@ sensor_msgs::msg::CameraInfo calibration_to_camera_info(
   info.r = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
 
   const auto distortion = calibration.getDistortionCoefficients(socket);
-  info.d.assign(DistortionCoefficientCount, 0.0);
-  for (std::size_t i = 0; i < DistortionCoefficientCount && i < distortion.size(); ++i) {
+  info.d.assign(kDistortionCoefficientCount, 0.0);
+  for (std::size_t i = 0; i < kDistortionCoefficientCount && i < distortion.size(); ++i) {
     info.d[i] = distortion[i];
   }
 
@@ -75,7 +75,7 @@ sensor_msgs::msg::CameraInfo calibration_to_camera_info(
   if (socket == left_socket) {
     // Projection into the first camera of the pair, seen from the second one
     info.p[3] = info.k[0] * calibration.getCameraExtrinsics(left_socket, right_socket)[0][3] *
-                MetresPerCentimetre;
+                kMetresPerCentimetre;
     rectification = calibration.getStereoLeftRectificationRotation();
   } else {
     rectification = calibration.getStereoRightRectificationRotation();

@@ -62,7 +62,7 @@ class ImuConverter
 public:
   /// Gyroscope reports further apart than this are not interpolated between (the IMU gate was
   /// closed in between, for example)
-  static constexpr std::chrono::milliseconds MaxGyroscopeGap{50};
+  static constexpr std::chrono::milliseconds kMaxGyroscopeGap{50};
 
   ImuConverter(
     std::string frame_id, double linear_acceleration_covariance,

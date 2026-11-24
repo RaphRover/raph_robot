@@ -56,7 +56,9 @@ if(BUILD_TESTING)
     include(ProcessorCount)
     processorcount(N)
     set(ament_cmake_clang_tidy_JOBS ${N})
-    set(ament_cmake_clang_tidy_HEADER_FILTER "^(?!oak_wrapper_parameters\.hpp).*$")
+    # Only the headers of this package. clang-tidy's regex has no lookahead, and the generated
+    # parameter header lives in the build directory, so it is left out this way
+    set(ament_cmake_clang_tidy_HEADER_FILTER "${CMAKE_CURRENT_SOURCE_DIR}/include/.*")
   else()
     list(APPEND AMENT_LINT_AUTO_EXCLUDE
       ament_cmake_clang_tidy
