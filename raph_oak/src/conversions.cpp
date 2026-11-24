@@ -20,6 +20,8 @@
 
 #include "raph_oak/conversions.hpp"
 
+#include <opencv2/core/hal/interface.h>
+
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -27,7 +29,6 @@
 #include <cstring>
 #include <memory>
 #include <opencv2/core.hpp>
-#include <opencv2/core/hal/interface.h>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgproc.hpp>
