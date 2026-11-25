@@ -199,11 +199,10 @@ vision_msgs::msg::Detection2DArray to_ros_detections(
   for (const auto & detection : data.detections) {
     vision_msgs::msg::Detection2D ros_detection;
     ros_detection.header = msg.header;
-    ros_detection.id =
-      detection.labelName.empty() ? std::to_string(detection.label) : detection.labelName;
 
     vision_msgs::msg::ObjectHypothesisWithPose hypothesis;
-    hypothesis.hypothesis.class_id = ros_detection.id;
+    hypothesis.hypothesis.class_id =
+      detection.labelName.empty() ? std::to_string(detection.label) : detection.labelName;
     hypothesis.hypothesis.score = detection.confidence;
     ros_detection.results.push_back(hypothesis);
 
