@@ -141,19 +141,25 @@ TEST(ScaledCameraInfo, HalvesTheIntrinsicsAroundTheCorner)
   EXPECT_NEAR(scaled.p[2], scaled.k[2], 1e-9);
 }
 
-TEST(RectifiedCameraInfo, WithoutTransformationKeepsTheCalibration)
+TEST(CameraInfoFromFrame, WithoutTransformationKeepsTheCalibration)
 {
   const auto calibration = make_info(RightFx, LeftFy, 625.37, 380.44, -RightFx * Baseline);
-  const auto info = get_rectified_camera_info(dai::ImgTransformation(), Width, Height, calibration);
+  const auto info =
+    get_camera_info_from_frame(dai::ImgTransformation(), Width, Height, calibration);
   EXPECT_DOUBLE_EQ(info.k[0], RightFx);
   EXPECT_DOUBLE_EQ(info.k[2], 625.37);
   EXPECT_NEAR(info.p[3], -RightFx * Baseline, 1e-9);
-  for (const auto coefficient : info.d) {
-    EXPECT_DOUBLE_EQ(coefficient, 0.0);
-  }
 }
 
-TEST(RectifiedCameraInfo, ImageManipRotationGivesTheRotatedIntrinsics)
+TEST(CameraInfoFromFrame, KeepsTheDistortionOfTheCalibration)
+{
+  const auto calibration = make_info(LeftFx, LeftFy, 600.0, 400.0);
+  const dai::ImgTransformation transformation(Width, Height, matrix(LeftFx, LeftFy, 600.0, 400.0));
+  const auto info = get_camera_info_from_frame(transformation, Width, Height, calibration);
+  EXPECT_EQ(info.d, calibration.d);
+}
+
+TEST(CameraInfoFromFrame, ImageManipRotationGivesTheRotatedIntrinsics)
 {
   // Intrinsics of the unrotated sensor, rotated by 180 degrees like the ImageManip on the camera
   const double sensor_cx = Width - 1.0 - LeftCx;
@@ -163,7 +169,7 @@ TEST(RectifiedCameraInfo, ImageManipRotationGivesTheRotatedIntrinsics)
   transformation.addRotation(180.0F, dai::Point2f(Width / 2.0F, Height / 2.0F));
 
   const auto info =
-    get_rectified_camera_info(transformation, Width, Height, make_info(LeftFx, LeftFy, 0.0, 0.0));
+    get_camera_info_from_frame(transformation, Width, Height, make_info(LeftFx, LeftFy, 0.0, 0.0));
   EXPECT_NEAR(info.k[0], LeftFx, Tolerance);
   EXPECT_NEAR(info.k[4], LeftFy, Tolerance);
   EXPECT_NEAR(info.k[2], LeftCx, Tolerance);
@@ -172,31 +178,31 @@ TEST(RectifiedCameraInfo, ImageManipRotationGivesTheRotatedIntrinsics)
   EXPECT_DOUBLE_EQ(info.k[3], 0.0);
 }
 
-TEST(RectifiedCameraInfo, SensorRotationFlipsThePrincipalPoint)
+TEST(CameraInfoFromFrame, SensorRotationFlipsThePrincipalPoint)
 {
   const dai::ImgTransformation transformation(Width, Height, matrix(LeftFx, LeftFy, 600.0, 400.0));
-  const auto info = get_rectified_camera_info(
+  const auto info = get_camera_info_from_frame(
     transformation, Width, Height, make_info(LeftFx, LeftFy, 0.0, 0.0), true);
   EXPECT_NEAR(info.k[2], Width - 1.0 - 600.0, Tolerance);
   EXPECT_NEAR(info.k[5], Height - 1.0 - 400.0, Tolerance);
 }
 
-TEST(RectifiedCameraInfo, KeepsTheBaselineInMetres)
+TEST(CameraInfoFromFrame, KeepsTheBaselineInMetres)
 {
   // Both rectified images get the intrinsics of one sensor, the baseline follows its focal length
   const auto calibration = make_info(RightFx, 573.72, 625.37, 380.44, -RightFx * Baseline);
   const dai::ImgTransformation transformation(Width, Height, matrix(LeftFx, LeftFy, 600.0, 400.0));
-  const auto info = get_rectified_camera_info(transformation, Width, Height, calibration);
+  const auto info = get_camera_info_from_frame(transformation, Width, Height, calibration);
   EXPECT_NEAR(info.p[0], LeftFx, Tolerance);
   EXPECT_NEAR(info.p[3] / info.p[0], -Baseline, 1e-6);
   EXPECT_NEAR(info.p[3], -LeftFx * Baseline, Tolerance);
 }
 
-TEST(RectifiedCameraInfo, KeepsTheRectificationRotation)
+TEST(CameraInfoFromFrame, KeepsTheRectificationRotation)
 {
   const auto calibration = make_info(LeftFx, LeftFy, 600.0, 400.0);
   const dai::ImgTransformation transformation(Width, Height, matrix(LeftFx, LeftFy, 600.0, 400.0));
-  const auto info = get_rectified_camera_info(transformation, Width, Height, calibration);
+  const auto info = get_camera_info_from_frame(transformation, Width, Height, calibration);
   for (std::size_t i = 0; i < 9; ++i) {
     EXPECT_DOUBLE_EQ(info.r[i], calibration.r[i]) << i;
   }

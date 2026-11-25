@@ -535,13 +535,10 @@ void OakWrapper::publish_image(
   const auto & spec = get_image_stream_spec(stream_id);
   const auto & publisher_set = image_publisher_sets_[get_image_index(stream_id)];
 
-  // The intrinsics of a rectified or undistorted image are only known to DepthAI, so the camera
-  // info is built from the frame
-  auto cam_info = spec.rectified
-                    ? get_rectified_camera_info(
-                        in_data->getTransformation(), in_data->getWidth(), in_data->getHeight(),
-                        publisher_set.calibration_info, spec.rotated_at_sensor)
-                    : publisher_set.calibration_info;
+  // The intrinsics depend on the crop, resize and rotation of the frame, which only DepthAI knows
+  auto cam_info = get_camera_info_from_frame(
+    in_data->getTransformation(), in_data->getWidth(), in_data->getHeight(),
+    publisher_set.calibration_info, spec.rotated_at_sensor);
   cam_info.header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
 
   auto image = to_ros_image(*in_data, cam_info.header, get_logger());
@@ -569,11 +566,9 @@ void OakWrapper::publish_compressed_image(
   // The raw image publishes the camera info while the raw gate is open. Otherwise the compressed
   // stream (which is also opened for camera info subscribers) takes over.
   if (!is_gate_open(spec.raw_gate) && publisher_set.camera_info_pub->get_subscription_count() > 0) {
-    auto cam_info = spec.rectified
-                      ? get_rectified_camera_info(
-                          in_data->transformation, in_data->getWidth(), in_data->getHeight(),
-                          publisher_set.calibration_info, spec.rotated_at_sensor)
-                      : publisher_set.calibration_info;
+    auto cam_info = get_camera_info_from_frame(
+      in_data->transformation, in_data->getWidth(), in_data->getHeight(),
+      publisher_set.calibration_info, spec.rotated_at_sensor);
     cam_info.header.stamp = stamp;
     publisher_set.camera_info_pub->publish(cam_info);
   }
