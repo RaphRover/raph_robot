@@ -27,7 +27,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <string>
 
@@ -45,6 +44,8 @@
 #include "raph_oak/conversions.hpp"
 #include "raph_oak/demand.hpp"
 #include "raph_oak/frame_clock.hpp"
+#include "raph_oak/nn_model.hpp"
+#include "raph_oak/nn_overlay.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/pipeline.hpp"
 #include "raph_oak/streams.hpp"
@@ -58,7 +59,9 @@
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "std_msgs/msg/header.hpp"
 #include "std_srvs/srv/trigger.hpp"
+#include "vision_msgs/msg/classification.hpp"
 #include "vision_msgs/msg/detection2_d_array.hpp"
+#include "vision_msgs/msg/label_info.hpp"
 
 namespace raph_oak
 {
@@ -90,17 +93,14 @@ private:
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>> pointcloud_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> still_image_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> still_cam_info_pub_;
+  // The publishers of the results of the network are created once the pipeline is built, because
+  // the model decides which one of them it needs, see create_nn_publishers()
   std::shared_ptr<rclcpp::Publisher<vision_msgs::msg::Detection2DArray>> nn_detections_pub_;
+  std::shared_ptr<rclcpp::Publisher<vision_msgs::msg::Classification>> nn_classification_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> nn_segmentation_pub_;
+  std::shared_ptr<rclcpp::Publisher<vision_msgs::msg::LabelInfo>> nn_label_info_pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Image>> nn_overlay_pub_;
-
-  // The passthrough frame and its detections arrive on separate queues. Whichever comes first
-  // waits here (matched by sequence number) until the other one arrives, so the overlay is drawn
-  // on the frame the detections belong to.
-  std::mutex nn_overlay_mutex_;
-  std::optional<sensor_msgs::msg::Image> nn_overlay_image_;
-  std::int64_t nn_overlay_image_sequence_ = -1;
-  std::optional<vision_msgs::msg::Detection2DArray> nn_overlay_detections_;
-  std::int64_t nn_overlay_detections_sequence_ = -1;
+  NnOverlay nn_overlay_;
 
   // ROS Services
   std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> capture_still_srv_;
@@ -165,9 +165,13 @@ private:
     ImageStreamId stream_id, const std::shared_ptr<dai::ADatatype> & message);
   void publish_imu(const std::shared_ptr<dai::ADatatype> & message);
   void publish_pointcloud(const std::shared_ptr<dai::ADatatype> & message);
+  void create_nn_publishers(const PipelineDetails & details);
+  void publish_nn_result(NnKind kind, const std::shared_ptr<dai::ADatatype> & message);
   void publish_detections(const std::shared_ptr<dai::ADatatype> & message);
-  void set_nn_overlay_image(const sensor_msgs::msg::Image & image, std::int64_t sequence);
-  void publish_nn_overlay_if_ready();  // nn_overlay_mutex_ has to be held
+  void publish_classification(const std::shared_ptr<dai::ADatatype> & message);
+  void publish_segmentation(const std::shared_ptr<dai::ADatatype> & message);
+  /// Hands the result to the overlay if someone subscribed to it
+  void update_nn_overlay(NnResult result, std::int64_t sequence);
   void capture_still(
     std_srvs::srv::Trigger::Request::SharedPtr request,
     std_srvs::srv::Trigger::Response::SharedPtr response);

@@ -31,9 +31,11 @@ Names are relative to the node (`~/`).
 | `points` | PointCloud2 | organized, built by DepthAI's `PointCloud` node |
 | `imu/data_raw` | Imu | accelerometer 500 Hz, gyroscope 400 Hz |
 | `rgb_still/image_still`, `rgb_still/camera_info` | Image, CameraInfo | full resolution (4000×3000), transient local |
-| `nn/detections` | vision_msgs/Detection2DArray | only with `nn.enabled`: detections in pixels of the network input frame |
+| `nn/detections` | vision_msgs/Detection2DArray | only with a detection model: detections in pixels of the network input frame |
+| `nn/classification` | vision_msgs/Classification | only with a classification model: the best 5 classes with their scores, best first |
+| `nn/segmentation`, `nn/segmentation/label_info` | Image (mono8), vision_msgs/LabelInfo | only with a segmentation model: the class index of every pixel (255 is the background) at the size of the model output, covering the same area as `nn/passthrough`, and the class names indexed by it (transient local). An instance segmentation model (a detection model with masks, e.g. YOLOv8-seg) publishes its mask here too, with the index of the detection in `nn/detections` of the same frame as the value, and no `label_info`. FastSAM has instance numbers that change from frame to frame |
 | `nn/passthrough`, `nn/passthrough/compressed`, `nn/passthrough/camera_info` | Image, CompressedImage, CameraInfo | only with `nn.enabled`: the frame the network ran on (letterboxed RGB), with the distortion of the RGB calibration |
-| `nn/overlay` | Image | only with `nn.enabled`: the detections drawn on the passthrough frame by the host |
+| `nn/overlay` | Image | only with `nn.enabled`: the result of the model (boxes, the best classes or the coloured segmentation mask) drawn on the passthrough frame by the host |
 
 ## Services
 
@@ -54,7 +56,7 @@ and need a restart.
 | `device` | `id`, `usb_port_id` (read only), `ir_laser_dot_projector_intensity`, `ir_laser_dot_projector_lazy`, `ir_flood_light_intensity` |
 | `depth` | `confidence_threshold`, `lr_check_*`, `subpixel_*`, `extended_disparity_enabled`, `min_distance`, `max_distance` (not read only, changeable at runtime) |
 | `pointcloud` | `max_rate` (integer fps, default 5, changeable at runtime): rate limit of the depth frames fed to the point cloud node, set through the `fps` field of its gate |
-| `nn` | all read only: `enabled` (default false), `model` (path of a NNArchive or a Luxonis Model Zoo slug), `fps` (camera output and inference rate), `confidence_threshold`, `num_shaves` |
+| `nn` | all read only: `enabled` (default false), `model` (path of a NNArchive or a Luxonis Model Zoo slug; detection, classification and segmentation models are recognized from it), `fps` (camera output and inference rate), `confidence_threshold`, `num_shaves` |
 | `mono`, `mono_compressed` | resolution, fps, JPEG quality (read only) |
 | `rgb`, `rgb_compressed` | resolution, fps, JPEG quality, `rect_alpha_scaling` of the undistorted image (read only) |
 
@@ -131,14 +133,25 @@ few percent of CPU, independent of the requested fps).
 **Neural network.** With `nn.enabled` the network gets its own CAM_A output, requested at the
 size and frame type the model takes (letterboxed, at `nn.fps`), so there is no resize node and the
 frame is not shared with the RGB stream. The output goes through the `NN` gate into a
-`DetectionNetwork` that is built from the model (a local archive, or a Model Zoo slug that is
-downloaded on first use). It has two outputs, the detections and the passthrough of the frame it
-ran on, which are matched by sequence number on the host to draw `nn/overlay`. A second gate
+network that is built from the model (a local archive, or a Model Zoo slug that is downloaded on
+first use). The kind of the model is taken from the parsers of the heads in its NNArchive config: a
+detection model (YOLO, SSD) runs in a `DetectionNetwork`, a classification or a segmentation model
+(`SegmentationParser`, or FastSAM with its own parser) in a plain `NeuralNetwork` followed by the
+matching parser. A detection model that also outputs masks (YOLO instance segmentation) stays a
+detection model: its `ImgDetections` carry the mask, which is published beside the detections, and
+`nn/overlay` colours every instance by its class. A model without heads, with heads of more than one
+kind, or with any other parser
+(keypoints, classification sequences, ...) is not supported and the pipeline is built without the
+network. The class indices of FastSAM are instance indices, so it has no `label_info`. The result
+(detections,
+classes or the mask) and the passthrough of the frame it ran on are matched by sequence number on
+the host to draw `nn/overlay`. Only the topics of the kind of the model exist, they appear once the
+model is loaded. A second gate
 (`NN_ENC`) feeds that passthrough through an optional `ImageManip` to NV12 (the encoder only takes
 NV12) into a MJPEG `VideoEncoder`, which is the compressed passthrough. It is the frame the
 detections belong to, so the network runs for it as well, and the encoder only runs for the
 `nn/passthrough/compressed` topic and for its camera info. The
-network adds 3 XLink streams (detections, passthrough and compressed passthrough), 21 in total.
+network adds 3 XLink streams (the result, passthrough and compressed passthrough), 21 in total.
 If the model cannot be loaded or the pipeline does not start with it a few times in a row, the
 pipeline is built without the network and without these streams.
 
@@ -156,7 +169,7 @@ The node checks the subscriber counts every 100 ms.
 | `*/image_raw/compressed`, `*/image_rect/compressed` | the encoder gate (and the compute gate) |
 | only `rgb`, `rgb_rect`, `left`, `right`, `left_rect` or `right_rect` `*/camera_info` | the encoder gate: camera info is published from the compressed stream, which is cheaper to transfer than the raw image |
 | `stereo/camera_info` | the depth gates, like `stereo/image_raw` |
-| `nn/detections`, `nn/overlay` or `nn/passthrough` | the `NN` gate, which lets the frames into the network (the overlay is drawn on the passthrough) |
+| `nn/detections`, `nn/classification`, `nn/segmentation`, `nn/overlay` or `nn/passthrough` | the `NN` gate, which lets the frames into the network (the overlay is drawn on the passthrough) |
 | `nn/passthrough/compressed`, or only `nn/passthrough/camera_info` | the `NN` gate and the `NN_ENC` gate in front of the encoder |
 | `stereo/image_raw` or `points` | depth compute gate; the depth raw gate and/or the point cloud gate; the IR laser dot projector (if `ir_laser_dot_projector_lazy`) |
 | `imu/data_raw` | the IMU gate |
@@ -238,10 +251,12 @@ source, so correct them if the actual reasons differ.
 | `demand.hpp/.cpp` | `Demand`: subscriber counts → what each stream needs → gate states; plus the stereo sensor start/stop (with the restart delay), laser intensity and point cloud rate. No DepthAI, no ROS |
 | `pipeline.hpp/.cpp` | Builds the DepthAI pipeline and defines the control channel |
 | `camera_info.hpp/.cpp` | Camera info: from the factory calibration, for the 180° rotation, from the intrinsics of a frame, scaled |
-| `conversions.hpp/.cpp` | `ImuConverter` (gyroscope interpolated at the accelerometer timestamps) and `PointCloudConverter` |
+| `conversions.hpp/.cpp` | `ImuConverter` (gyroscope interpolated at the accelerometer timestamps), `PointCloudConverter`, and the conversions and overlay drawing of the results of the network |
+| `nn_model.hpp/.cpp` | `NnKind` and `get_nn_kind()`: which kind of model an NNArchive holds. No DepthAI, no ROS |
+| `nn_overlay.hpp/.cpp` | `NnOverlay`: pairs a frame with its result by sequence number and draws the overlay |
 | `frame_clock.hpp` | `FrameClock`: DepthAI host timestamps to ROS time |
 | `oak_wrapper.hpp/.cpp` | The node: connects to the camera, counts subscribers, applies the decisions of `demand` and publishes |
-| `test/` | Unit tests, no camera needed (`colcon test --packages-select raph_oak`): `test_demand` for the stream table and `demand`, `test_conversions` for the camera info, IMU and point cloud conversions (camera info cases use numbers of a real OAK-D Pro W) |
+| `test/` | Unit tests, no camera needed (`colcon test --packages-select raph_oak`): `test_demand` for the stream table and `demand`, `test_nn_model` for the model kinds, `test_conversions` for the camera info, IMU, point cloud and network result conversions and the overlay pairing (camera info cases use numbers of a real OAK-D Pro W) |
 
 To add an image stream, add an entry to `ImageStreamId` and `kImageStreamSpecs`, the gates it uses to
 `Control::Value` (and `Control::name()`), and build its nodes with `make_image_queue_set` in `pipeline.cpp`.

@@ -108,7 +108,7 @@ digraph raph_oak_pipeline {
       g_nn_enc [label="Gate\nctrl: NN_ENC\nencoder only"];
 
       node [fillcolor="#e2e8f0", color="#64748b"];
-      nn_node       [label="DetectionNetwork\nmodel from nn.model, confidence_threshold,\nnum_shaves on RVC2"];
+      nn_node       [label="DetectionNetwork, or NeuralNetwork\n+ ClassificationParser / SegmentationParser\nmodel from nn.model, confidence_threshold (detection),\nnum_shaves on RVC2"];
       nn_to_nv12    [label="ImageManip → NV12\nonly if the model input is not NV12"];
       enc_nn        [label="VideoEncoder MJPEG"];
     }
@@ -141,10 +141,10 @@ digraph raph_oak_pipeline {
     q_pointcloud    [label="pointcloud\n(host queue, no XLink)", style="rounded,filled,dashed"];
 
     // only with the neural network
-    q_nn                      [label="nn\n(detections)", style="rounded,filled,dashed"];
+    q_nn                      [label="nn\n(detections, classes or mask)", style="rounded,filled,dashed"];
     q_nn_passthrough          [label="nn_passthrough\n(network input)", style="rounded,filled,dashed"];
     q_nn_passthrough_compressed [label="nn_passthrough_compressed", style="rounded,filled,dashed"];
-    nn_overlay [label="Overlay (host)\ndetections drawn on the passthrough\n-> ~/nn/overlay", style="rounded,filled,dashed"];
+    nn_overlay [label="Overlay (host)\nresult drawn on the passthrough\n-> ~/nn/overlay", style="rounded,filled,dashed"];
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -234,7 +234,7 @@ digraph raph_oak_pipeline {
   g_right_rect_raw -> q_right_rect;
   enc_right_rect   -> q_right_rect_compressed;
   g_imu            -> q_imu;
-  nn_node          -> q_nn [label="detections"];
+  nn_node          -> q_nn [label="result"];
   nn_node          -> q_nn_passthrough [label="passthrough"];
   enc_nn           -> q_nn_passthrough_compressed;
   pc_sync          -> pointcloud_node [label="synced depth"];

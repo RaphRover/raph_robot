@@ -21,17 +21,21 @@
 #pragma once
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "depthai/beta/datatype/Classifications.hpp"
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
 #include "depthai/pipeline/datatype/ImgDetections.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
+#include "depthai/pipeline/datatype/SegmentationMask.hpp"
 #include "raph_oak/frame_clock.hpp"
 #include "rclcpp/logger.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
@@ -39,7 +43,9 @@
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "std_msgs/msg/header.hpp"
+#include "vision_msgs/msg/classification.hpp"
 #include "vision_msgs/msg/detection2_d_array.hpp"
+#include "vision_msgs/msg/label_info.hpp"
 
 namespace raph_oak
 {
@@ -56,6 +62,40 @@ void draw_detections(
 
 vision_msgs::msg::Detection2DArray to_ros_detections(
   const dai::ImgDetections & data, const std_msgs::msg::Header & header);
+
+/// The best max_results classes of a classification result, best first
+vision_msgs::msg::Classification to_ros_classification(
+  const dai::beta::Classifications & data, const std_msgs::msg::Header & header,
+  std::size_t max_results);
+
+/// Draws the best classes on a bgr8 or rgb8 image, in place
+void draw_classification(
+  sensor_msgs::msg::Image & image, const vision_msgs::msg::Classification & classification);
+
+/// A mono8 image of the class index of every pixel, 255 for the background. Empty if the mask has
+/// no data
+std::optional<sensor_msgs::msg::Image> to_ros_segmentation(
+  const dai::SegmentationMask & data, const std_msgs::msg::Header & header);
+
+/// Blends the classes of a segmentation mask (see to_ros_segmentation) over a bgr8 or rgb8 image,
+/// in place. The mask is stretched to the image
+void draw_segmentation(sensor_msgs::msg::Image & image, const sensor_msgs::msg::Image & mask);
+
+/// The mask of an instance segmentation model that comes with its detections, as mono8 like
+/// to_ros_segmentation(): the value i is the pixels of detection i, 255 is the background. Empty if
+/// the detections have no mask
+std::optional<sensor_msgs::msg::Image> to_ros_instance_mask(
+  const dai::ImgDetections & data, const std_msgs::msg::Header & header);
+
+/// Blends the mask of an instance segmentation model (see to_ros_instance_mask) over a bgr8 or
+/// rgb8 image and draws the boxes, in place. The pixels of a detection get a colour of its class
+void draw_instances(
+  sensor_msgs::msg::Image & image, const vision_msgs::msg::Detection2DArray & detections,
+  const sensor_msgs::msg::Image & mask);
+
+/// The names of the classes of a segmentation mask, indexed by the value in the mask
+vision_msgs::msg::LabelInfo to_ros_label_info(
+  const std::vector<std::string> & labels, const std_msgs::msg::Header & header);
 
 /**
  * Converts the IMU reports of the camera to sensor_msgs/Imu.

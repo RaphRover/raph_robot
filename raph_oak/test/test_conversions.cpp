@@ -20,23 +20,34 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <vector>
 
+#include "depthai/beta/datatype/Classifications.hpp"
 #include "depthai/common/Point3f.hpp"
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
 #include "depthai/pipeline/datatype/ImgDetections.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
+#include "depthai/pipeline/datatype/SegmentationMask.hpp"
 #include "raph_oak/conversions.hpp"
 #include "raph_oak/frame_clock.hpp"
 #include "rclcpp/logger.hpp"
 #include "rclcpp/time.hpp"
+#include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/point_field.hpp"
+#include "std_msgs/msg/header.hpp"
+#include "vision_msgs/msg/classification.hpp"
+#include "vision_msgs/msg/detection2_d.hpp"
+#include "vision_msgs/msg/detection2_d_array.hpp"
+#include "vision_msgs/msg/object_hypothesis.hpp"
+#include "vision_msgs/msg/object_hypothesis_with_pose.hpp"
 
 namespace raph_oak
 {
@@ -162,8 +173,8 @@ TEST(DetectionConversion, ScalesBoxesAndPreservesLabelsAndHeader)
   ASSERT_EQ(message.detections.size(), 2U);
   EXPECT_EQ(message.header, header);
   EXPECT_EQ(message.detections[0].header, header);
-  EXPECT_EQ(message.detections[0].id, "person");
-  EXPECT_EQ(message.detections[1].id, "42");
+  EXPECT_EQ(message.detections[0].id, "");
+  EXPECT_EQ(message.detections[1].id, "");
   ASSERT_EQ(message.detections[0].results.size(), 1U);
   EXPECT_EQ(message.detections[0].results[0].hypothesis.class_id, "person");
   EXPECT_DOUBLE_EQ(message.detections[0].results[0].hypothesis.score, 0.75);
@@ -176,6 +187,212 @@ TEST(DetectionConversion, ScalesBoxesAndPreservesLabelsAndHeader)
   message = to_ros_detections(data, header);
   EXPECT_NEAR(message.detections[0].bbox.size_x, 0.5, 1e-5);
   EXPECT_NEAR(message.detections[0].bbox.size_y, 0.8, 1e-5);
+}
+
+TEST(ClassificationConversion, KeepsTheBestClassesInOrder)
+{
+  dai::beta::Classifications data;
+  data.classes = {"cat", "dog", "bird"};
+  data.scores = {0.7F, 0.2F, 0.1F};
+  std_msgs::msg::Header header;
+  header.frame_id = "camera";
+
+  const auto message = to_ros_classification(data, header, 2);
+  EXPECT_EQ(message.header, header);
+  ASSERT_EQ(message.results.size(), 2U);
+  EXPECT_EQ(message.results[0].class_id, "cat");
+  EXPECT_NEAR(message.results[0].score, 0.7, 1e-6);
+  EXPECT_EQ(message.results[1].class_id, "dog");
+
+  EXPECT_EQ(to_ros_classification(data, header, 10).results.size(), 3U);
+  data.scores.pop_back();
+  EXPECT_EQ(to_ros_classification(data, header, 10).results.size(), 2U);
+}
+
+TEST(SegmentationConversion, PublishesTheClassIndicesAsMono8)
+{
+  const dai::SegmentationMask data(std::vector<std::uint8_t>{0, 1, 255, 2, 255, 0}, 3, 2);
+  std_msgs::msg::Header header;
+  header.frame_id = "camera";
+
+  const auto message = to_ros_segmentation(data, header);
+  ASSERT_TRUE(message.has_value());
+  EXPECT_EQ(message->header, header);
+  EXPECT_EQ(message->encoding, "mono8");
+  EXPECT_EQ(message->width, 3U);
+  EXPECT_EQ(message->height, 2U);
+  EXPECT_EQ(message->step, 3U);
+  EXPECT_EQ(message->data, (std::vector<std::uint8_t>{0, 1, 255, 2, 255, 0}));
+
+  EXPECT_FALSE(to_ros_segmentation(dai::SegmentationMask(), header).has_value());
+}
+
+TEST(SegmentationDrawing, BlendsOnlyTheClassesNotTheBackground)
+{
+  // A 2x1 mask stretched over a 4x2 image: the left half is class 0, the right half background
+  sensor_msgs::msg::Image mask;
+  mask.width = 2;
+  mask.height = 1;
+  mask.step = 2;
+  mask.encoding = "mono8";
+  mask.data = {0, 255};
+
+  sensor_msgs::msg::Image image;
+  image.width = 4;
+  image.height = 2;
+  image.step = 12;
+  image.encoding = "bgr8";
+  image.data.assign(24, 100);
+
+  draw_segmentation(image, mask);
+  // Class 0 has a colour, so the pixel changed. The background pixel is untouched
+  EXPECT_NE(image.data[0], 100);
+  EXPECT_EQ(image.data[3 * 3], 100);
+  EXPECT_EQ(image.data[3 * 3 + 1], 100);
+  EXPECT_EQ(image.data[3 * 3 + 2], 100);
+  // The colour of one class is the same everywhere
+  EXPECT_EQ(image.data[0], image.data[3]);
+  EXPECT_EQ(image.data[12], image.data[0]);
+}
+
+TEST(SegmentationDrawing, IgnoresAMaskItCannotUse)
+{
+  sensor_msgs::msg::Image mask;
+  mask.width = 2;
+  mask.height = 1;
+  mask.step = 2;
+  mask.encoding = "mono8";
+  mask.data = {0};  // too short
+
+  sensor_msgs::msg::Image image;
+  image.width = 1;
+  image.height = 1;
+  image.step = 3;
+  image.encoding = "bgr8";
+  image.data.assign(3, 100);
+
+  draw_segmentation(image, mask);
+  EXPECT_EQ(image.data, (std::vector<std::uint8_t>{100, 100, 100}));
+}
+
+TEST(InstanceMaskConversion, KeepsTheDetectionIndicesAsMono8)
+{
+  dai::ImgDetections data;
+  std_msgs::msg::Header header;
+  header.frame_id = "camera";
+  EXPECT_FALSE(to_ros_instance_mask(data, header).has_value());
+
+  data.setSegmentationMask(std::vector<std::uint8_t>{0, 1, 255, 1, 255, 0}, 3, 2);
+  const auto message = to_ros_instance_mask(data, header);
+  ASSERT_TRUE(message.has_value());
+  EXPECT_EQ(message->header, header);
+  EXPECT_EQ(message->encoding, "mono8");
+  EXPECT_EQ(message->width, 3U);
+  EXPECT_EQ(message->height, 2U);
+  EXPECT_EQ(message->step, 3U);
+  EXPECT_EQ(message->data, (std::vector<std::uint8_t>{0, 1, 255, 1, 255, 0}));
+}
+
+namespace
+{
+vision_msgs::msg::Detection2D make_detection(const std::string & class_id)
+{
+  vision_msgs::msg::Detection2D detection;
+  vision_msgs::msg::ObjectHypothesisWithPose result;
+  result.hypothesis.class_id = class_id;
+  detection.results.push_back(result);
+  // Outside the image, so that only the mask is drawn
+  detection.bbox.size_x = 0.0;
+  return detection;
+}
+}  // namespace
+
+TEST(InstanceDrawing, ColoursTheInstancesByTheClassOfTheirDetection)
+{
+  // Detections 0 and 1 are of the same class, 2 of another one. The 4x1 mask has one instance
+  // in each pixel and a background pixel at the end
+  vision_msgs::msg::Detection2DArray detections;
+  detections.detections = {make_detection("cat"), make_detection("cat"), make_detection("dog")};
+
+  sensor_msgs::msg::Image mask;
+  mask.width = 4;
+  mask.height = 1;
+  mask.step = 4;
+  mask.encoding = "mono8";
+  mask.data = {0, 1, 2, 255};
+
+  sensor_msgs::msg::Image image;
+  image.width = 4;
+  image.height = 1;
+  image.step = 12;
+  image.encoding = "bgr8";
+  image.data.assign(12, 100);
+
+  draw_instances(image, detections, mask);
+  const std::vector<std::uint8_t> first(image.data.begin(), image.data.begin() + 3);
+  const std::vector<std::uint8_t> second(image.data.begin() + 3, image.data.begin() + 6);
+  const std::vector<std::uint8_t> third(image.data.begin() + 6, image.data.begin() + 9);
+  const std::vector<std::uint8_t> background(image.data.begin() + 9, image.data.end());
+  EXPECT_EQ(first, second);
+  EXPECT_NE(first, third);
+  EXPECT_NE(first, (std::vector<std::uint8_t>{100, 100, 100}));
+  EXPECT_EQ(background, (std::vector<std::uint8_t>{100, 100, 100}));
+}
+
+TEST(InstanceDrawing, AMaskValueWithoutADetectionStillGetsAColour)
+{
+  const vision_msgs::msg::Detection2DArray detections;
+
+  sensor_msgs::msg::Image mask;
+  mask.width = 1;
+  mask.height = 1;
+  mask.step = 1;
+  mask.encoding = "mono8";
+  mask.data = {5};
+
+  sensor_msgs::msg::Image image;
+  image.width = 1;
+  image.height = 1;
+  image.step = 3;
+  image.encoding = "bgr8";
+  image.data.assign(3, 100);
+
+  draw_instances(image, detections, mask);
+  EXPECT_NE(image.data, (std::vector<std::uint8_t>{100, 100, 100}));
+}
+
+TEST(ClassificationDrawing, WritesTheBestClassOnTheImage)
+{
+  sensor_msgs::msg::Image image;
+  image.width = 64;
+  image.height = 32;
+  image.step = 192;
+  image.encoding = "bgr8";
+  image.data.assign(64 * 32 * 3, 0);
+
+  vision_msgs::msg::Classification classification;
+  vision_msgs::msg::ObjectHypothesis result;
+  result.class_id = "cat";
+  result.score = 0.9;
+  classification.results.push_back(result);
+
+  draw_classification(image, classification);
+  // The text is anti-aliased, so only some pixel is no longer black
+  EXPECT_TRUE(
+    std::any_of(image.data.begin(), image.data.end(), [](auto value) { return value != 0; }));
+}
+
+TEST(LabelInfoConversion, IndexesTheClassesByPosition)
+{
+  std_msgs::msg::Header header;
+  header.frame_id = "camera";
+  const auto message = to_ros_label_info({"road", "sky"}, header);
+  EXPECT_EQ(message.header, header);
+  ASSERT_EQ(message.class_map.size(), 2U);
+  EXPECT_EQ(message.class_map[0].class_id, 0);
+  EXPECT_EQ(message.class_map[0].class_name, "road");
+  EXPECT_EQ(message.class_map[1].class_id, 1);
+  EXPECT_EQ(message.class_map[1].class_name, "sky");
 }
 
 TEST(FrameClock, AddsTheElapsedSteadyTimeToTheRosTime)

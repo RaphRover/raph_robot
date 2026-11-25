@@ -85,7 +85,7 @@ raph_oak:
     enabled:
       type: bool
       default_value: false
-      description: Run a neural network on its own output of the RGB camera and publish detections
+      description: Run a neural network on its own output of the RGB camera and publish its results. The kind of the model (detection, classification or segmentation, with or without masks) is taken from its NNArchive
       read_only: true
     model:
       type: string
@@ -102,7 +102,7 @@ raph_oak:
     confidence_threshold:
       type: double
       default_value: 0.5
-      description: Detections with a lower confidence are discarded on the device
+      description: Detections with a lower confidence are discarded on the device. Only used by detection models
       validation:
         bounds<>: [0.0, 1.0]
       read_only: true

@@ -23,6 +23,9 @@
 #include <array>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <string>
+#include <vector>
 
 #include "depthai/device/Device.hpp"
 #include "depthai/pipeline/InputQueue.hpp"
@@ -31,6 +34,7 @@
 #include "depthai/pipeline/datatype/ADatatype.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "raph_oak/control.hpp"
+#include "raph_oak/nn_model.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/streams.hpp"
 #include "rclcpp/logger.hpp"
@@ -56,9 +60,15 @@ struct PipelineDetails
   std::shared_ptr<dai::MessageQueue> pointcloud_queue;
   std::shared_ptr<dai::MessageQueue> still_image_queue;
 
-  // Neural network detections. Stays null when the nn.enabled parameter is false or the model could
-  // not be loaded, which is also when the NN_PASSTHROUGH stream has no queues.
+  // Results of the neural network: ImgDetections, Classifications or a SegmentationMask, see
+  // nn_kind. Stays null when the nn.enabled parameter is false or the model could not be loaded,
+  // which is also when the NN_PASSTHROUGH stream has no queues.
   std::shared_ptr<dai::MessageQueue> nn_queue;
+  std::optional<NnKind> nn_kind;
+  // A detection model that also outputs a mask for every detection (instance segmentation)
+  bool nn_has_masks = false;
+  // Names of the classes of the model, indexed by the class index, empty if it does not list them
+  std::vector<std::string> nn_labels;
 
   // Control channel (see Control)
   std::shared_ptr<dai::InputQueue> control_queue;

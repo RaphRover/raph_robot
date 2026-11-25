@@ -22,11 +22,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <functional>
 #include <memory>
-#include <mutex>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -34,6 +35,7 @@
 #include <vector>
 
 // DepthAI
+#include "depthai/beta/datatype/Classifications.hpp"
 #include "depthai/common/CameraBoardSocket.hpp"
 #include "depthai/common/UsbSpeed.hpp"
 #include "depthai/device/CalibrationHandler.hpp"
@@ -47,6 +49,7 @@
 #include "depthai/pipeline/datatype/ImgDetections.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
+#include "depthai/pipeline/datatype/SegmentationMask.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai/xlink/XLinkConnection.hpp"
 
@@ -58,6 +61,8 @@
 #include "raph_oak/control.hpp"
 #include "raph_oak/conversions.hpp"
 #include "raph_oak/demand.hpp"
+#include "raph_oak/nn_model.hpp"
+#include "raph_oak/nn_overlay.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/parameters.hpp"
 #include "raph_oak/pipeline.hpp"
@@ -74,7 +79,9 @@
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "std_msgs/msg/header.hpp"
 #include "std_srvs/srv/trigger.hpp"
+#include "vision_msgs/msg/classification.hpp"
 #include "vision_msgs/msg/detection2_d_array.hpp"
+#include "vision_msgs/msg/label_info.hpp"
 
 using namespace std::chrono_literals;
 
@@ -90,6 +97,9 @@ static constexpr std::chrono::milliseconds kStillCaptureTimeout{2000};
 // Minimum time between stopping the stereo sensors and starting them again. A start sent shortly
 // after a stop is ignored by the camera and the stereo streams stay silent.
 static constexpr std::chrono::milliseconds kStereoRestartDelay{3000};
+
+// How many of the best classes a classification model publishes, a model can have a thousand
+static constexpr std::size_t kMaxClassifications = 5;
 
 OakWrapper::OakWrapper(rclcpp::NodeOptions options)
 : Node("oak_wrapper", options), param_listener_(get_node_parameters_interface())
@@ -141,10 +151,48 @@ void OakWrapper::create_ros_publishers()
     create_publisher<sensor_msgs::msg::Image>("~/rgb_still/image_still", still_qos);
   still_cam_info_pub_ =
     create_publisher<sensor_msgs::msg::CameraInfo>("~/rgb_still/camera_info", still_qos);
+}
 
-  // Neural network
-  if (params_.nn.enabled) {
-    nn_detections_pub_ = create_publisher<vision_msgs::msg::Detection2DArray>("~/nn/detections", 1);
+void OakWrapper::create_nn_publishers(const PipelineDetails & details)
+{
+  if (!details.nn_kind) {
+    return;
+  }
+
+  switch (*details.nn_kind) {
+    case NnKind::DETECTION:
+      if (!nn_detections_pub_) {
+        nn_detections_pub_ =
+          create_publisher<vision_msgs::msg::Detection2DArray>("~/nn/detections", 1);
+      }
+      // Instance segmentation: the mask of the detections
+      if (details.nn_has_masks && !nn_segmentation_pub_) {
+        nn_segmentation_pub_ = create_publisher<sensor_msgs::msg::Image>("~/nn/segmentation", 1);
+      }
+      break;
+    case NnKind::CLASSIFICATION:
+      if (!nn_classification_pub_) {
+        nn_classification_pub_ =
+          create_publisher<vision_msgs::msg::Classification>("~/nn/classification", 1);
+      }
+      break;
+    case NnKind::SEGMENTATION:
+      if (!nn_segmentation_pub_) {
+        nn_segmentation_pub_ = create_publisher<sensor_msgs::msg::Image>("~/nn/segmentation", 1);
+        nn_label_info_pub_ = create_publisher<vision_msgs::msg::LabelInfo>(
+          "~/nn/segmentation/label_info", rclcpp::QoS(1).transient_local());
+      }
+      // The names of the classes do not change, but a new pipeline gets a new start
+      if (!details.nn_labels.empty()) {
+        std_msgs::msg::Header header;
+        header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
+        header.stamp = now();
+        nn_label_info_pub_->publish(to_ros_label_info(details.nn_labels, header));
+      }
+      break;
+  }
+
+  if (!nn_overlay_pub_) {
     nn_overlay_pub_ = create_publisher<sensor_msgs::msg::Image>("~/nn/overlay", 1);
   }
 }
@@ -261,9 +309,13 @@ void OakWrapper::run_pipeline()
   pipeline_details_.pointcloud_queue->addCallback(
     [this](const std::shared_ptr<dai::ADatatype> & message) { publish_pointcloud(message); });
 
-  if (pipeline_details_.nn_queue) {
+  if (pipeline_details_.nn_queue && pipeline_details_.nn_kind) {
+    create_nn_publishers(pipeline_details_);
+    const auto nn_kind = *pipeline_details_.nn_kind;
     pipeline_details_.nn_queue->addCallback(
-      [this](const std::shared_ptr<dai::ADatatype> & message) { publish_detections(message); });
+      [this, nn_kind](const std::shared_ptr<dai::ADatatype> & message) {
+        publish_nn_result(nn_kind, message);
+      });
   }
 
   // All gates start closed and the sensors streaming
@@ -436,10 +488,18 @@ SubscriberCounts OakWrapper::count_subscribers() const
   }
   counts.pointcloud = pointcloud_pub_->get_subscription_count();
   counts.imu = imu_pub_->get_subscription_count();
-  // The publishers only exist when nn.enabled is set
+  // The publishers of the results only exist once the model is known
   if (nn_detections_pub_) {
-    counts.nn =
-      nn_detections_pub_->get_subscription_count() + nn_overlay_pub_->get_subscription_count();
+    counts.nn += nn_detections_pub_->get_subscription_count();
+  }
+  if (nn_classification_pub_) {
+    counts.nn += nn_classification_pub_->get_subscription_count();
+  }
+  if (nn_segmentation_pub_) {
+    counts.nn += nn_segmentation_pub_->get_subscription_count();
+  }
+  if (nn_overlay_pub_) {
+    counts.nn += nn_overlay_pub_->get_subscription_count();
   }
   return counts;
 }
@@ -608,8 +668,8 @@ void OakWrapper::publish_image(
   // The raw gate of a stream with a compressed variant is only open for the raw image, except for
   // the passthrough, which comes out of the network that also runs for the detections and the
   // overlay. The overlay is drawn on the same image
-  const bool overlay_wanted =
-    stream_id == ImageStreamId::NN_PASSTHROUGH && nn_overlay_pub_->get_subscription_count() > 0;
+  const bool overlay_wanted = stream_id == ImageStreamId::NN_PASSTHROUGH && nn_overlay_pub_ &&
+                              nn_overlay_pub_->get_subscription_count() > 0;
   if (
     spec.has_compressed() && publisher_set.image_pub->get_subscription_count() == 0 &&
     !overlay_wanted) {
@@ -628,7 +688,9 @@ void OakWrapper::publish_image(
   }
 
   if (overlay_wanted) {
-    set_nn_overlay_image(*image, in_data->getSequenceNum());
+    if (auto overlay = nn_overlay_.set_image(*image, in_data->getSequenceNum())) {
+      nn_overlay_pub_->publish(std::move(overlay));
+    }
   }
 
   publisher_set.camera_info_pub->publish(cam_info);
@@ -693,6 +755,31 @@ void OakWrapper::publish_pointcloud(const std::shared_ptr<dai::ADatatype> & mess
   pointcloud_pub_->publish(pointcloud_converter_->convert(*in_data, frame_clock_));
 }
 
+void OakWrapper::publish_nn_result(NnKind kind, const std::shared_ptr<dai::ADatatype> & message)
+{
+  switch (kind) {
+    case NnKind::DETECTION:
+      publish_detections(message);
+      break;
+    case NnKind::CLASSIFICATION:
+      publish_classification(message);
+      break;
+    case NnKind::SEGMENTATION:
+      publish_segmentation(message);
+      break;
+  }
+}
+
+void OakWrapper::update_nn_overlay(NnResult result, std::int64_t sequence)
+{
+  if (nn_overlay_pub_->get_subscription_count() == 0) {
+    return;
+  }
+  if (auto overlay = nn_overlay_.set_result(std::move(result), sequence)) {
+    nn_overlay_pub_->publish(std::move(overlay));
+  }
+}
+
 void OakWrapper::publish_detections(const std::shared_ptr<dai::ADatatype> & message)
 {
   const auto in_data = std::dynamic_pointer_cast<dai::ImgDetections>(message);
@@ -710,35 +797,58 @@ void OakWrapper::publish_detections(const std::shared_ptr<dai::ADatatype> & mess
     nn_detections_pub_->publish(detections);
   }
 
-  if (nn_overlay_pub_->get_subscription_count() > 0) {
-    const std::lock_guard<std::mutex> lock(nn_overlay_mutex_);
-    nn_overlay_detections_ = std::move(detections);
-    nn_overlay_detections_sequence_ = in_data->getSequenceNum();
-    publish_nn_overlay_if_ready();
+  // The publisher only exists for a model that has masks
+  auto mask = nn_segmentation_pub_ ? to_ros_instance_mask(*in_data, header) : std::nullopt;
+  if (mask) {
+    if (nn_segmentation_pub_->get_subscription_count() > 0) {
+      nn_segmentation_pub_->publish(*mask);
+    }
+    update_nn_overlay(
+      InstanceResult{std::move(detections), std::move(*mask)}, in_data->getSequenceNum());
+  } else {
+    update_nn_overlay(std::move(detections), in_data->getSequenceNum());
   }
 }
 
-void OakWrapper::set_nn_overlay_image(const sensor_msgs::msg::Image & image, std::int64_t sequence)
+void OakWrapper::publish_classification(const std::shared_ptr<dai::ADatatype> & message)
 {
-  const std::lock_guard<std::mutex> lock(nn_overlay_mutex_);
-  nn_overlay_image_ = image;
-  nn_overlay_image_sequence_ = sequence;
-  publish_nn_overlay_if_ready();
-}
-
-void OakWrapper::publish_nn_overlay_if_ready()
-{
-  if (
-    !nn_overlay_image_ || !nn_overlay_detections_ ||
-    nn_overlay_image_sequence_ != nn_overlay_detections_sequence_) {
+  const auto in_data = std::dynamic_pointer_cast<dai::beta::Classifications>(message);
+  if (!in_data) {
+    RCLCPP_WARN(get_logger(), "Received a message that is not a classification");
     return;
   }
 
-  auto overlay = std::make_unique<sensor_msgs::msg::Image>(std::move(*nn_overlay_image_));
-  draw_detections(*overlay, *nn_overlay_detections_);
-  nn_overlay_image_.reset();
-  nn_overlay_detections_.reset();
-  nn_overlay_pub_->publish(std::move(overlay));
+  std_msgs::msg::Header header;
+  header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
+  header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
+  auto classification = to_ros_classification(*in_data, header, kMaxClassifications);
+
+  if (nn_classification_pub_->get_subscription_count() > 0) {
+    nn_classification_pub_->publish(classification);
+  }
+  update_nn_overlay(std::move(classification), in_data->getSequenceNum());
+}
+
+void OakWrapper::publish_segmentation(const std::shared_ptr<dai::ADatatype> & message)
+{
+  const auto in_data = std::dynamic_pointer_cast<dai::SegmentationMask>(message);
+  if (!in_data) {
+    RCLCPP_WARN(get_logger(), "Received a message that is not a segmentation mask");
+    return;
+  }
+
+  std_msgs::msg::Header header;
+  header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
+  header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
+  auto mask = to_ros_segmentation(*in_data, header);
+  if (!mask) {
+    return;
+  }
+
+  if (nn_segmentation_pub_->get_subscription_count() > 0) {
+    nn_segmentation_pub_->publish(*mask);
+  }
+  update_nn_overlay(std::move(*mask), in_data->getSequenceNum());
 }
 
 void OakWrapper::capture_still(

@@ -33,6 +33,8 @@
 #include <vector>
 
 // DepthAI
+#include "depthai/beta/node/ClassificationParser.hpp"
+#include "depthai/beta/node/FastSAMParser.hpp"
 #include "depthai/capabilities/ImgFrameCapability.hpp"
 #include "depthai/common/CameraBoardSocket.hpp"
 #include "depthai/common/CameraImageOrientation.hpp"
@@ -54,8 +56,10 @@
 #include "depthai/pipeline/node/Gate.hpp"
 #include "depthai/pipeline/node/IMU.hpp"
 #include "depthai/pipeline/node/ImageManip.hpp"
+#include "depthai/pipeline/node/NeuralNetwork.hpp"
 #include "depthai/pipeline/node/PointCloud.hpp"
 #include "depthai/pipeline/node/Script.hpp"
+#include "depthai/pipeline/node/SegmentationParser.hpp"
 #include "depthai/pipeline/node/StereoDepth.hpp"
 #include "depthai/pipeline/node/VideoEncoder.hpp"
 #include "depthai/properties/IMUProperties.hpp"
@@ -64,6 +68,7 @@
 
 // ROS
 #include "raph_oak/control.hpp"
+#include "raph_oak/nn_model.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/parameters.hpp"
 #include "raph_oak/streams.hpp"
@@ -368,22 +373,74 @@ PipelineDetails create_dai_pipeline(
         static_cast<float>(params.nn.fps));
       auto nn_gate = make_gate(*nn_output, passthrough_spec.raw_gate);
 
-      auto nn_node =
-        pipeline->create<dai::node::DetectionNetwork>()->build(nn_gate->output, archive);
+      // The kind of the model decides the node that parses its output: DetectionNetwork does it
+      // for detection models, the others get the plain network followed by a parser for the head
+      const auto & heads = archive.getConfig<dai::nn_archive::v1::Config>().model.heads;
+      std::vector<std::string> parsers;
+      if (heads) {
+        for (const auto & head : *heads) {
+          parsers.push_back(head.parser);
+        }
+      }
+      const NnKind nn_kind = get_nn_kind(parsers);
 
       // RVC2 models ship as a superblob that has to be compiled for a specific number of SHAVE
       // cores. The default does not fit next to the rest of the pipeline, so ask for the
       // configured count instead.
-      if (archive.getModelType() == dai::model::ModelType::SUPERBLOB) {
-        nn_node->setNNArchive(archive, params.nn.num_shaves);
+      const bool is_superblob = archive.getModelType() == dai::model::ModelType::SUPERBLOB;
+
+      dai::Node::Output * nn_result = nullptr;
+      dai::Node::Output * nn_passthrough = nullptr;
+      if (nn_kind == NnKind::DETECTION) {
+        for (const auto & head : *heads) {
+          const auto & metadata = head.metadata;
+          if (
+            (metadata.maskOutputs && !metadata.maskOutputs->empty()) ||
+            (metadata.protosOutputs && !metadata.protosOutputs->empty())) {
+            details.nn_has_masks = true;
+          }
+        }
+        auto detection_network =
+          pipeline->create<dai::node::DetectionNetwork>()->build(nn_gate->output, archive);
+        if (is_superblob) {
+          detection_network->setNNArchive(archive, params.nn.num_shaves);
+        }
+        detection_network->setConfidenceThreshold(
+          static_cast<float>(params.nn.confidence_threshold));
+        nn_result = &detection_network->out;
+        nn_passthrough = &detection_network->passthrough;
+      } else {
+        auto network =
+          pipeline->create<dai::node::NeuralNetwork>()->build(nn_gate->output, archive);
+        if (is_superblob) {
+          network->setNNArchive(archive, params.nn.num_shaves);
+        }
+        nn_passthrough = &network->passthrough;
+
+        // All heads are of the kind of the model, so the first one is the one to parse
+        const auto & head = heads->front();
+        if (nn_kind == NnKind::CLASSIFICATION) {
+          nn_result = &pipeline->create<dai::beta::node::ClassificationParser>()
+                         ->build(network->out, head)
+                         ->out;
+        } else if (is_fastsam_parser(head.parser)) {
+          // The mask holds instance indices, not classes, so there are no names for them
+          nn_result =
+            &pipeline->create<dai::beta::node::FastSAMParser>()->build(network->out, head)->out;
+        } else {
+          if (head.metadata.classes) {
+            details.nn_labels = *head.metadata.classes;
+          }
+          nn_result =
+            &pipeline->create<dai::node::SegmentationParser>()->build(network->out, head)->out;
+        }
       }
+      details.nn_kind = nn_kind;
 
-      nn_node->setConfidenceThreshold(static_cast<float>(params.nn.confidence_threshold));
-
-      details.nn_queue = nn_node->out.createOutputQueue(1, false);
+      details.nn_queue = nn_result->createOutputQueue(1, false);
       details.nn_queue->setName("nn");
       // The raw passthrough comes out of the network, behind the gate of its input
-      passthrough_queues.raw_queue = nn_node->passthrough.createOutputQueue(1, false);
+      passthrough_queues.raw_queue = nn_passthrough->createOutputQueue(1, false);
       passthrough_queues.raw_queue->setName(passthrough_spec.name);
 
       // JPEG compressed passthrough, encoded on the camera from the same passthrough, so it is
@@ -391,7 +448,7 @@ PipelineDetails create_dai_pipeline(
       // takes NV12, so the frame is converted first (unless the network already takes NV12).
       // Both sit behind their own gate, so neither runs while only the detections or the raw
       // passthrough are subscribed.
-      auto nn_enc_gate = make_gate(nn_node->passthrough, passthrough_spec.enc_gate);
+      auto nn_enc_gate = make_gate(*nn_passthrough, passthrough_spec.enc_gate);
       auto nn_encoder = pipeline->create<dai::node::VideoEncoder>();
       nn_encoder->setDefaultProfilePreset(
         static_cast<float>(params.nn.fps), dai::VideoEncoderProperties::Profile::MJPEG);
@@ -413,12 +470,12 @@ PipelineDetails create_dai_pipeline(
         std::string(passthrough_spec.name) + "_compressed");
 
       RCLCPP_INFO_STREAM(
-        logger, "Loaded neural network \"" << params.nn.model << "\" (" << input_size->first << "x"
-                                           << input_size->second << " input)");
+        logger, "Loaded " << to_string(nn_kind) << " model \"" << params.nn.model << "\" ("
+                          << input_size->first << "x" << input_size->second << " input)");
     } catch (const std::exception & e) {
       RCLCPP_ERROR_STREAM(
         logger,
-        "Failed to set up the neural network: " << e.what() << ". Continuing without detections.");
+        "Failed to set up the neural network: " << e.what() << ". Continuing without the network.");
 
       // The nodes created before the failure are already linked into the pipeline (and a network
       // that got its model would still claim device resources on start), so start over instead

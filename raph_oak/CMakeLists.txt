@@ -20,6 +20,8 @@ add_library(raph_oak SHARED
   src/camera_info.cpp
   src/conversions.cpp
   src/demand.cpp
+  src/nn_model.cpp
+  src/nn_overlay.cpp
   src/oak_wrapper.cpp
   src/parameters.cpp
   src/pipeline.cpp
@@ -74,12 +76,17 @@ if(BUILD_TESTING)
   ament_add_gtest(test_demand test/test_demand.cpp src/demand.cpp)
   target_include_directories(test_demand PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+  ament_add_gtest(test_nn_model test/test_nn_model.cpp src/nn_model.cpp)
+  target_include_directories(test_nn_model PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
   # Conversions of camera info, IMU reports and point clouds, with DepthAI but without a camera
   ament_add_gtest(test_conversions
     test/test_camera_info.cpp
     test/test_conversions.cpp
+    test/test_nn_overlay.cpp
     src/camera_info.cpp
     src/conversions.cpp
+    src/nn_overlay.cpp
   )
   target_include_directories(test_conversions PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_link_libraries(test_conversions
