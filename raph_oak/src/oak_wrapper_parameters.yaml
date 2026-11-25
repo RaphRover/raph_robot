@@ -109,7 +109,7 @@ raph_oak:
     num_shaves:
       type: int
       default_value: 3
-      description: Number of SHAVE cores the network is compiled for. Only applies to RVC2 devices, where the cores left over by the rest of the pipeline limit this - the device names the available count when the pipeline fails to start.
+      description: Number of SHAVE cores the network is compiled for. The resources left over by the rest of the pipeline limit this. If it does not fit, the pipeline fails to start and the device names the available count.
       validation:
         bounds<>: [1, 16]
       read_only: true

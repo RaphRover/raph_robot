@@ -54,7 +54,7 @@ and need a restart.
 | `device` | `id`, `usb_port_id` (read only), `ir_laser_dot_projector_intensity`, `ir_laser_dot_projector_lazy`, `ir_flood_light_intensity` |
 | `depth` | `confidence_threshold`, `lr_check_*`, `subpixel_*`, `extended_disparity_enabled`, `min_distance`, `max_distance` (not read only, changeable at runtime) |
 | `pointcloud` | `max_rate` (integer fps, default 5, changeable at runtime): rate limit of the depth frames fed to the point cloud node, set through the `fps` field of its gate |
-| `nn` | all read only: `enabled` (default false), `model` (path of a NNArchive or a Luxonis Model Zoo slug), `fps` (camera output and inference rate), `confidence_threshold`, `num_shaves` (RVC2 only) |
+| `nn` | all read only: `enabled` (default false), `model` (path of a NNArchive or a Luxonis Model Zoo slug), `fps` (camera output and inference rate), `confidence_threshold`, `num_shaves` |
 | `mono`, `mono_compressed` | resolution, fps, JPEG quality (read only) |
 | `rgb`, `rgb_compressed` | resolution, fps, JPEG quality, `rect_alpha_scaling` of the undistorted image (read only) |
 
