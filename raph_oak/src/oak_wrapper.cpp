@@ -20,6 +20,7 @@
 
 #include "raph_oak/oak_wrapper.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <exception>
@@ -174,9 +175,10 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   publisher_calibration_info(ImageStreamId::RIGHT_RECT) =
     get_rotated_camera_info(camera_info(right_socket, mono_width, mono_height), true);
 
-  // The undistorted RGB image has the pose of the RGB camera
-  publisher_calibration_info(ImageStreamId::RGB_RECT) =
-    publisher_calibration_info(ImageStreamId::RGB);
+  // The undistorted RGB image has the pose of the RGB camera, without its distortion
+  auto & rgb_rect_info = publisher_calibration_info(ImageStreamId::RGB_RECT);
+  rgb_rect_info = publisher_calibration_info(ImageStreamId::RGB);
+  std::fill(rgb_rect_info.d.begin(), rgb_rect_info.d.end(), 0.0);
 
   // Depth: aligned to the rectified right sensor, which is the left image after the rotation, at
   // half the mono resolution. Only a fallback: the camera info of every depth frame is built from
