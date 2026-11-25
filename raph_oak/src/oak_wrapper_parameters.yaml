@@ -89,8 +89,8 @@ raph_oak:
       read_only: true
     model:
       type: string
-      default_value: ""
-      description: Path to a local NNArchive file (.tar.xz) or, if no such file exists, a Luxonis Model Zoo slug (e.g. luxonis/yolov6-nano:r2-coco-512x288). A zoo slug requires internet access on the first run.
+      default_value: "luxonis/yolov6-nano:r2-coco-512x384"
+      description: Path to a local NNArchive file (.tar.xz) or, if no such file exists, a Luxonis Model Zoo slug (e.g. luxonis/yolov6-nano:r2-coco-512x384). A zoo slug requires internet access on the first run.
       read_only: true
     fps:
       type: double
