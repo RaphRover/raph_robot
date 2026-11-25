@@ -91,17 +91,6 @@ TEST(StreamTable, OnlyThePassthroughNeedsTheNetwork)
   }
 }
 
-TEST(StreamTable, OnlyUndistortedStreamsAreRectified)
-{
-  // A stream that is not rectified takes the camera info of its calibration, so it cannot be
-  // undistorted. The passthrough is resized but keeps the distortion
-  for (const auto & spec : kImageStreamSpecs) {
-    EXPECT_TRUE(!spec.undistorted || spec.rectified) << spec.name;
-  }
-  EXPECT_TRUE(get_image_stream_spec(ImageStreamId::NN_PASSTHROUGH).rectified);
-  EXPECT_FALSE(get_image_stream_spec(ImageStreamId::NN_PASSTHROUGH).undistorted);
-}
-
 TEST(StreamTable, OnlyTheDepthHasNoCompressedVariant)
 {
   for (const auto & spec : kImageStreamSpecs) {

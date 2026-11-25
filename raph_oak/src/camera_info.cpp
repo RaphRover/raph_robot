@@ -128,16 +128,13 @@ sensor_msgs::msg::CameraInfo get_rotated_camera_info(
   return rotated_info;
 }
 
-sensor_msgs::msg::CameraInfo get_rectified_camera_info(
+sensor_msgs::msg::CameraInfo get_camera_info_from_frame(
   const dai::ImgTransformation & transformation, uint32_t width, uint32_t height,
-  const sensor_msgs::msg::CameraInfo & calibration_info, bool rotated_at_sensor, bool undistorted)
+  const sensor_msgs::msg::CameraInfo & calibration_info, bool rotated_at_sensor)
 {
   sensor_msgs::msg::CameraInfo info = calibration_info;
   info.width = width;
   info.height = height;
-  if (undistorted) {
-    std::fill(info.d.begin(), info.d.end(), 0.0);
-  }
 
   // Baseline in metres: P[3] = fx * Tx
   const double translation_x =
@@ -164,8 +161,8 @@ sensor_msgs::msg::CameraInfo get_rectified_camera_info(
     info.k = {focal_x, 0.0, principal_x, 0.0, focal_y, principal_y, 0.0, 0.0, 1.0};
   }
 
-  // Rectified image: the projection matrix is the intrinsic matrix, with the baseline for the
-  // second camera of a stereo pair
+  // The projection matrix is the intrinsic matrix, with the baseline for the second camera of a
+  // stereo pair
   info.p = {info.k[0], info.k[1], info.k[2], info.k[0] * translation_x,
             info.k[3], info.k[4], info.k[5], 0.0,
             info.k[6], info.k[7], info.k[8], 0.0};

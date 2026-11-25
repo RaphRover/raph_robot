@@ -81,18 +81,18 @@ The RGB camera is rotated at the sensor.
 own raw and encoder gates. `rgb_rect/camera_info` is built from the intrinsic matrix DepthAI
 attaches to each frame (`ImgFrame::getTransformation()`), because it depends on the alpha scaling
 (`rgb.rect_alpha_scaling`); the distortion coefficients are zero and the projection matrix is the
-intrinsic matrix. If a frame carries no valid transformation, the rotated `rgb/camera_info` is used
-with its distortion removed. Do not run `image_proc::RectifyNode` on `rgb/image_raw` next to it,
+intrinsic matrix. If a frame carries no valid transformation, the rotated `rgb/camera_info` is used. Do not run `image_proc::RectifyNode` on `rgb/image_raw` next to it,
 both would publish `rgb_rect/image_rect`.
 
-**Camera info of rectified images.** The intrinsics of a rectified or undistorted image are only
-known to DepthAI, not to the factory calibration, so `K` and `P` of `rgb_rect`, `left_rect`,
-`right_rect` and `stereo` (depth) are taken from every frame
-(`getTransformation().getIntrinsicMatrix()`) and the distortion is zero. DepthAI describes the
+**Camera info.** The intrinsics of a frame depend on the crop, resize, undistortion and rotation
+applied on the camera, which only DepthAI knows, so `K` and `P` of every image stream (`rgb`,
+`rgb_rect`, `left`, `left_rect`, `right`, `right_rect`, `stereo` (depth) and `rgb_still`) are taken
+from every frame (`getTransformation().getIntrinsicMatrix()`). The distortion comes from the factory
+calibration and is zero for the undistorted streams (`*_rect`, depth). DepthAI describes the
 180° rotation done by an `ImageManip` with negated focal lengths and a principal point flipped as
 `w - cx`; both are converted to the convention of the other camera infos (positive focal
 lengths, `w - 1 - cx`). The rotation done by the CAM_A sensor is not part of the transformation,
-so the principal point of `rgb_rect` is flipped here. The rectification rotation `R` and the
+so the principal point of `rgb` and `rgb_rect` is flipped here. The rectification rotation `R` and the
 baseline come from the calibration. `R` is conjugated with the 180° rotation (the terms coupling x
 or y with z change sign), and the baseline is kept in metres, so `P[3]` of `right_rect` is
 `-fx * baseline` with the `fx` of that frame and `P[3]` of `left_rect` is zero. `left_rect` and
@@ -237,7 +237,7 @@ source, so correct them if the actual reasons differ.
 | `control.hpp` | `Control`, a target of the control channel, with its log name and properties |
 | `demand.hpp/.cpp` | `Demand`: subscriber counts → what each stream needs → gate states; plus the stereo sensor start/stop (with the restart delay), laser intensity and point cloud rate. No DepthAI, no ROS |
 | `pipeline.hpp/.cpp` | Builds the DepthAI pipeline and defines the control channel |
-| `camera_info.hpp/.cpp` | Camera info: from the factory calibration, for the 180° rotation, from the intrinsics of a rectified frame, scaled |
+| `camera_info.hpp/.cpp` | Camera info: from the factory calibration, for the 180° rotation, from the intrinsics of a frame, scaled |
 | `conversions.hpp/.cpp` | `ImuConverter` (gyroscope interpolated at the accelerometer timestamps) and `PointCloudConverter` |
 | `frame_clock.hpp` | `FrameClock`: DepthAI host timestamps to ROS time |
 | `oak_wrapper.hpp/.cpp` | The node: connects to the camera, counts subscribers, applies the decisions of `demand` and publishes |
@@ -252,8 +252,8 @@ A stream that only exists when the neural network is in the pipeline sets `needs
 `NN_PASSTHROUGH` stream): its publishers are created only when `nn.enabled` is set and its queues
 are filled by the network setup in `pipeline.cpp`, which can leave them empty when the model fails
 to load. Its raw gate is the input gate of the network, so `Demand::nn()` also opens it for the
-detections and the overlay. Such a stream with `rectified` set and `undistorted` unset keeps the
-distortion of its calibration in the camera info.
+detections and the overlay. Its camera info is built from the frame like every other stream's, so
+the letterbox is included and the distortion of the calibration is kept.
 
 ## Editing the pipeline graph
 

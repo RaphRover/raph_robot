@@ -79,8 +79,9 @@ private:
     /// Empty if the stream has no compressed variant
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> compressed_pub;
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> camera_info_pub;
-    /// Camera info from the factory calibration. The streams with rectified images only use it for
-    /// the rectification rotation and the baseline, see get_rectified_camera_info()
+    /// Camera info from the factory calibration. It provides the distortion, the rectification
+    /// rotation and the baseline, the intrinsics come from the frame, see
+    /// get_camera_info_from_frame()
     sensor_msgs::msg::CameraInfo calibration_info;
   };
   std::array<ImagePublisherSet, kImageStreamCount> image_publisher_sets_;
@@ -120,9 +121,8 @@ private:
   std::chrono::steady_clock::time_point stereo_stopped_at_;
 
   // The still image resolution is only known once the first frame arrives, so its camera info is
-  // built on demand and cached here, together with the calibration it was derived from.
+  // built from the calibration and the frame on demand
   std::optional<dai::CalibrationHandler> calibration_handler_;
-  sensor_msgs::msg::CameraInfo still_camera_info_;
 
   std::shared_ptr<rclcpp::TimerBase> check_timer_;
 
@@ -147,7 +147,7 @@ private:
   std::string tf_frame(const std::string & frame) const;
   void create_ros_services();
   void fill_camera_info(const dai::CalibrationHandler & calibration_handler);
-  const sensor_msgs::msg::CameraInfo & get_still_camera_info(uint32_t width, uint32_t height);
+  sensor_msgs::msg::CameraInfo get_still_camera_info(dai::ImgFrame & frame);
   void check_timer_callback();
   void release_device();
   std::shared_ptr<dai::Device> connect_to_device();
