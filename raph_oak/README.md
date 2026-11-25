@@ -82,8 +82,8 @@ both would publish `rgb_rect/image_rect`.
 
 **Camera info.** The intrinsics of a frame depend on the crop, resize, undistortion and rotation
 applied on the camera, which only DepthAI knows, so `K` and `P` of every image stream (`rgb`,
-`rgb_rect`, `left`, `left_rect`, `right`, `right_rect` and `stereo` (depth)) are taken from every
-frame (`getTransformation().getIntrinsicMatrix()`). The distortion comes from the factory
+`rgb_rect`, `left`, `left_rect`, `right`, `right_rect`, `stereo` (depth) and `rgb_still`) are taken
+from every frame (`getTransformation().getIntrinsicMatrix()`). The distortion comes from the factory
 calibration and is zero for the undistorted streams (`*_rect`, depth). DepthAI describes the
 180° rotation done by an `ImageManip` with negated focal lengths and a principal point flipped as
 `w - cx`; both are converted to the convention of the other camera infos (positive focal

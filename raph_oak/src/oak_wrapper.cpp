@@ -193,24 +193,19 @@ void OakWrapper::fill_camera_info(const dai::CalibrationHandler & calibration_ha
   for (const auto & spec : kImageStreamSpecs) {
     publisher_calibration_info(spec.id).header.frame_id = tf_frame(spec.frame_id);
   }
-
-  // Invalidate the cached still image camera info, it is rebuilt on the next capture
-  still_camera_info_ = sensor_msgs::msg::CameraInfo();
 }
 
-const sensor_msgs::msg::CameraInfo & OakWrapper::get_still_camera_info(
-  uint32_t width, uint32_t height)
+sensor_msgs::msg::CameraInfo OakWrapper::get_still_camera_info(dai::ImgFrame & frame)
 {
-  if (still_camera_info_.width == width && still_camera_info_.height == height) {
-    return still_camera_info_;
-  }
+  // Same sensor as the RGB stream, but at the full resolution the still frame came in at. The
+  // calibration provides the distortion and the fallback if the frame has no intrinsics
+  auto calibration_info = get_rotated_camera_info(calibration_to_camera_info(
+    *calibration_handler_, dai::CameraBoardSocket::CAM_A, frame.getWidth(), frame.getHeight()));
+  calibration_info.header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
 
-  // Same sensor as the RGB stream, but at the full resolution the still frame came in at
-  still_camera_info_ = get_rotated_camera_info(calibration_to_camera_info(
-    *calibration_handler_, dai::CameraBoardSocket::CAM_A, width, height));
-  still_camera_info_.header.frame_id = tf_frame("oak_rgb_camera_optical_frame");
-
-  return still_camera_info_;
+  return get_camera_info_from_frame(
+    frame.getTransformation(), frame.getWidth(), frame.getHeight(), calibration_info,
+    get_image_stream_spec(ImageStreamId::RGB).rotated_at_sensor);
 }
 
 void OakWrapper::run_pipeline()
@@ -635,8 +630,7 @@ void OakWrapper::capture_still(
     return;
   }
 
-  sensor_msgs::msg::CameraInfo cam_info =
-    get_still_camera_info(in_data->getWidth(), in_data->getHeight());
+  sensor_msgs::msg::CameraInfo cam_info = get_still_camera_info(*in_data);
   cam_info.header.stamp = frame_clock_.to_ros_time(in_data->getTimestamp());
 
   auto image = to_ros_image(*in_data, cam_info.header, get_logger());
