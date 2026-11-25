@@ -42,17 +42,17 @@ sensor_msgs::msg::CameraInfo calibration_to_camera_info(
 sensor_msgs::msg::CameraInfo get_rotated_camera_info(
   const sensor_msgs::msg::CameraInfo & original_info, bool is_rectified = false);
 
-// Camera info of a rectified (or undistorted) image from the intrinsic matrix DepthAI attached to
-// the frame, which includes the crop, resize and any rotation done by an ImageManip. DepthAI
+// Camera info of an image frame from the intrinsic matrix DepthAI attached to it, which includes
+// the crop, resize and any rotation done by an ImageManip. DepthAI
 // describes a 180 degree rotation by negating the focal lengths and measures the flipped principal
 // point from w instead of w - 1; both are converted to the convention of the other camera infos
 // (positive focal lengths, pixel centres at integer coordinates). A rotation done by the sensor
 // itself is not part of the transformation, rotated_at_sensor flips the principal point for it.
-// The rectification rotation and the baseline are taken from calibration_info (a camera info that
-// was already rotated with get_rotated_camera_info); the baseline is kept in metres, so the Tx term
-// of P follows the new focal length. If the frame carries no valid transformation, calibration_info
-// is used as is, with its distortion removed.
-sensor_msgs::msg::CameraInfo get_rectified_camera_info(
+// The distortion, the rectification rotation and the baseline are taken from calibration_info (a
+// camera info that was already rotated with get_rotated_camera_info, with zero distortion for an
+// undistorted stream); the baseline is kept in metres, so the Tx term of P follows the new focal
+// length. If the frame carries no valid transformation, K comes from calibration_info too.
+sensor_msgs::msg::CameraInfo get_camera_info_from_frame(
   const dai::ImgTransformation & transformation, uint32_t width, uint32_t height,
   const sensor_msgs::msg::CameraInfo & calibration_info, bool rotated_at_sensor = false);
 

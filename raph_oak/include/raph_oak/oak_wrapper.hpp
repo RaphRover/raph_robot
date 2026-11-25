@@ -77,8 +77,9 @@ private:
     /// Empty if the stream has no compressed variant
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CompressedImage>> compressed_pub;
     std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::CameraInfo>> camera_info_pub;
-    /// Camera info from the factory calibration. The streams with rectified images only use it for
-    /// the rectification rotation and the baseline, see get_rectified_camera_info()
+    /// Camera info from the factory calibration. It provides the distortion, the rectification
+    /// rotation and the baseline, the intrinsics come from the frame, see
+    /// get_camera_info_from_frame()
     sensor_msgs::msg::CameraInfo calibration_info;
   };
   std::array<ImagePublisherSet, kImageStreamCount> image_publisher_sets_;
