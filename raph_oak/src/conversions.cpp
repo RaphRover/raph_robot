@@ -22,24 +22,31 @@
 
 #include <opencv2/core/hal/interface.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <memory>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
+#include <opencv2/core/matx.hpp>
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgproc.hpp>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "depthai/beta/datatype/Classifications.hpp"
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "depthai/pipeline/datatype/IMUData.hpp"
+#include "depthai/pipeline/datatype/ImgDetections.hpp"
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
+#include "depthai/pipeline/datatype/SegmentationMask.hpp"
 #include "raph_oak/frame_clock.hpp"
 #include "rclcpp/logger.hpp"
 #include "rclcpp/logging.hpp"
@@ -49,6 +56,13 @@
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/msg/point_field.hpp"
 #include "std_msgs/msg/header.hpp"
+#include "vision_msgs/msg/classification.hpp"
+#include "vision_msgs/msg/detection2_d.hpp"
+#include "vision_msgs/msg/detection2_d_array.hpp"
+#include "vision_msgs/msg/label_info.hpp"
+#include "vision_msgs/msg/object_hypothesis.hpp"
+#include "vision_msgs/msg/object_hypothesis_with_pose.hpp"
+#include "vision_msgs/msg/vision_class.hpp"
 
 namespace raph_oak
 {
@@ -121,6 +135,298 @@ std::unique_ptr<sensor_msgs::msg::CompressedImage> to_ros_compressed_image(
   image->format = "jpeg";
   image->data.assign(data.getData().begin(), data.getData().end());
   return image;
+}
+
+void draw_detections(
+  sensor_msgs::msg::Image & image, const vision_msgs::msg::Detection2DArray & detections)
+{
+  if (image.encoding != "bgr8" && image.encoding != "rgb8") {
+    return;
+  }
+
+  cv::Mat mat(
+    static_cast<int>(image.height), static_cast<int>(image.width), CV_8UC3, image.data.data(),
+    image.step);
+  // Green in both channel orders
+  const cv::Scalar color(0, 255, 0);
+  constexpr double kCoordinateLimit = 1000000.0;
+
+  for (const auto & detection : detections.detections) {
+    const auto & box = detection.bbox;
+    const double center_x = box.center.position.x;
+    const double center_y = box.center.position.y;
+    if (
+      !std::isfinite(center_x) || !std::isfinite(center_y) || !std::isfinite(box.size_x) ||
+      !std::isfinite(box.size_y) || std::abs(center_x) > kCoordinateLimit ||
+      std::abs(center_y) > kCoordinateLimit || box.size_x <= 0.0 || box.size_y <= 0.0 ||
+      box.size_x > kCoordinateLimit || box.size_y > kCoordinateLimit) {
+      continue;
+    }
+
+    const cv::Point top_left(
+      static_cast<int>(std::lround(center_x - (box.size_x / 2.0))),
+      static_cast<int>(std::lround(center_y - (box.size_y / 2.0))));
+    const cv::Point bottom_right(
+      static_cast<int>(std::lround(center_x + (box.size_x / 2.0))),
+      static_cast<int>(std::lround(center_y + (box.size_y / 2.0))));
+    cv::rectangle(mat, top_left, bottom_right, color, 2);
+
+    if (!detection.results.empty()) {
+      const auto & hypothesis = detection.results.front().hypothesis;
+      std::string label = hypothesis.class_id;
+      if (std::isfinite(hypothesis.score)) {
+        label +=
+          " " + std::to_string(std::lround(std::clamp(hypothesis.score, 0.0, 1.0) * 100.0)) + "%";
+      }
+      const int label_x = std::clamp(top_left.x, 0, std::max(mat.cols - 1, 0));
+      const int label_y = std::clamp(top_left.y - 5, 12, std::max(mat.rows - 1, 12));
+      cv::putText(
+        mat, label, cv::Point(label_x, label_y), cv::FONT_HERSHEY_SIMPLEX, 0.5, color, 1,
+        cv::LINE_AA);
+    }
+  }
+}
+
+vision_msgs::msg::Detection2DArray to_ros_detections(
+  const dai::ImgDetections & data, const std_msgs::msg::Header & header)
+{
+  vision_msgs::msg::Detection2DArray msg;
+  msg.header = header;
+
+  // Detections are normalized to the network input frame. This may be a letterboxed version of
+  // the RGB stream, so bounding boxes do not line up with that stream without remapping.
+  double width = 1.0;
+  double height = 1.0;
+  if (data.transformation) {
+    const auto size = data.transformation->getSize();
+    width = static_cast<double>(size.first);
+    height = static_cast<double>(size.second);
+  }
+
+  msg.detections.reserve(data.detections.size());
+  for (const auto & detection : data.detections) {
+    vision_msgs::msg::Detection2D ros_detection;
+    ros_detection.header = msg.header;
+
+    vision_msgs::msg::ObjectHypothesisWithPose hypothesis;
+    hypothesis.hypothesis.class_id =
+      detection.labelName.empty() ? std::to_string(detection.label) : detection.labelName;
+    hypothesis.hypothesis.score = detection.confidence;
+    ros_detection.results.push_back(hypothesis);
+
+    const auto bbox = detection.getOuterBoundingBox();
+    ros_detection.bbox.size_x = (bbox[2] - bbox[0]) * width;
+    ros_detection.bbox.size_y = (bbox[3] - bbox[1]) * height;
+    ros_detection.bbox.center.position.x = (bbox[0] * width) + (ros_detection.bbox.size_x / 2.0);
+    ros_detection.bbox.center.position.y = (bbox[1] * height) + (ros_detection.bbox.size_y / 2.0);
+    msg.detections.push_back(ros_detection);
+  }
+  return msg;
+}
+
+vision_msgs::msg::Classification to_ros_classification(
+  const dai::beta::Classifications & data, const std_msgs::msg::Header & header,
+  std::size_t max_results)
+{
+  vision_msgs::msg::Classification msg;
+  msg.header = header;
+
+  const std::size_t count = std::min({data.classes.size(), data.scores.size(), max_results});
+  msg.results.reserve(count);
+  for (std::size_t i = 0; i < count; ++i) {
+    vision_msgs::msg::ObjectHypothesis result;
+    result.class_id = data.classes[i];
+    result.score = data.scores[i];
+    msg.results.push_back(result);
+  }
+  return msg;
+}
+
+void draw_classification(
+  sensor_msgs::msg::Image & image, const vision_msgs::msg::Classification & classification)
+{
+  if (image.encoding != "bgr8" && image.encoding != "rgb8") {
+    return;
+  }
+
+  cv::Mat mat(
+    static_cast<int>(image.height), static_cast<int>(image.width), CV_8UC3, image.data.data(),
+    image.step);
+  // Green in both channel orders
+  const cv::Scalar color(0, 255, 0);
+  constexpr int kMaxLines = 3;
+  constexpr int kLineHeight = 18;
+
+  int line = 0;
+  for (const auto & result : classification.results) {
+    if (line >= kMaxLines) {
+      break;
+    }
+    std::string label = result.class_id;
+    if (std::isfinite(result.score)) {
+      label += " " + std::to_string(std::lround(std::clamp(result.score, 0.0, 1.0) * 100.0)) + "%";
+    }
+    cv::putText(
+      mat, label, cv::Point(5, kLineHeight * (line + 1)), cv::FONT_HERSHEY_SIMPLEX, 0.5, color, 1,
+      cv::LINE_AA);
+    ++line;
+  }
+}
+
+std::optional<sensor_msgs::msg::Image> to_ros_segmentation(
+  const dai::SegmentationMask & data, const std_msgs::msg::Header & header)
+{
+  if (!data.hasValidMask() || data.getWidth() == 0 || data.getHeight() == 0) {
+    return std::nullopt;
+  }
+
+  sensor_msgs::msg::Image msg;
+  msg.header = header;
+  msg.width = static_cast<uint32_t>(data.getWidth());
+  msg.height = static_cast<uint32_t>(data.getHeight());
+  msg.encoding = "mono8";
+  msg.is_bigendian = 0;
+  msg.step = msg.width;
+  msg.data = data.getMaskData();
+  if (msg.data.size() != static_cast<std::size_t>(msg.step) * msg.height) {
+    return std::nullopt;
+  }
+  return msg;
+}
+
+namespace
+{
+using ColorTable = std::array<cv::Vec3b, 256>;
+constexpr uint8_t kMaskBackground = 255;
+
+// A fully saturated colour of the hue circle (0 to 179, as in OpenCV)
+cv::Vec3b hue_color(unsigned hue)
+{
+  const cv::Mat hsv(1, 1, CV_8UC3, cv::Scalar(static_cast<double>(hue % 180U), 255, 255));
+  cv::Mat bgr;
+  cv::cvtColor(hsv, bgr, cv::COLOR_HSV2BGR);
+  return bgr.at<cv::Vec3b>(0, 0);
+}
+
+// One colour per mask value, spread around the hue circle
+ColorTable default_colors()
+{
+  ColorTable colors{};
+  for (std::size_t i = 0; i < colors.size(); ++i) {
+    colors[i] = hue_color(static_cast<unsigned>(i * 47U));
+  }
+  return colors;
+}
+
+// The same name gets the same colour, in every frame and every run (FNV-1a)
+unsigned name_hue(const std::string & name)
+{
+  uint32_t hash = 2166136261U;
+  for (const char character : name) {
+    hash ^= static_cast<uint8_t>(character);
+    hash *= 16777619U;
+  }
+  return hash % 180U;
+}
+
+// Blends the colours of the mask values over the image, the mask is stretched to the image
+void blend_mask(
+  sensor_msgs::msg::Image & image, const sensor_msgs::msg::Image & mask, const ColorTable & colors)
+{
+  if (
+    (image.encoding != "bgr8" && image.encoding != "rgb8") || mask.encoding != "mono8" ||
+    mask.width == 0 || mask.height == 0 ||
+    mask.data.size() != static_cast<std::size_t>(mask.step) * mask.height) {
+    return;
+  }
+
+  const bool is_rgb = image.encoding == "rgb8";
+  cv::Mat mat(
+    static_cast<int>(image.height), static_cast<int>(image.width), CV_8UC3, image.data.data(),
+    image.step);
+  // cv::Mat wants a mutable pointer, the mask is small
+  std::vector<uint8_t> mask_data = mask.data;
+  const cv::Mat source(
+    static_cast<int>(mask.height), static_cast<int>(mask.width), CV_8UC1, mask_data.data(),
+    mask.step);
+  cv::Mat stretched;
+  cv::resize(source, stretched, mat.size(), 0, 0, cv::INTER_NEAREST);
+
+  for (int row = 0; row < mat.rows; ++row) {
+    for (int col = 0; col < mat.cols; ++col) {
+      const uint8_t index = stretched.at<uint8_t>(row, col);
+      if (index == kMaskBackground) {
+        continue;
+      }
+      cv::Vec3b color = colors[index];
+      if (is_rgb) {
+        std::swap(color[0], color[2]);
+      }
+      auto & pixel = mat.at<cv::Vec3b>(row, col);
+      for (int channel = 0; channel < 3; ++channel) {
+        pixel[channel] = static_cast<uint8_t>((pixel[channel] + color[channel]) / 2);
+      }
+    }
+  }
+}
+}  // namespace
+
+void draw_segmentation(sensor_msgs::msg::Image & image, const sensor_msgs::msg::Image & mask)
+{
+  static const ColorTable kColors = default_colors();
+  blend_mask(image, mask, kColors);
+}
+
+std::optional<sensor_msgs::msg::Image> to_ros_instance_mask(
+  const dai::ImgDetections & data, const std_msgs::msg::Header & header)
+{
+  auto mask_data = data.getMaskData();
+  const auto width = data.getSegmentationMaskWidth();
+  const auto height = data.getSegmentationMaskHeight();
+  if (!mask_data || width == 0 || height == 0 || mask_data->size() != width * height) {
+    return std::nullopt;
+  }
+
+  sensor_msgs::msg::Image msg;
+  msg.header = header;
+  msg.width = static_cast<uint32_t>(width);
+  msg.height = static_cast<uint32_t>(height);
+  msg.encoding = "mono8";
+  msg.is_bigendian = 0;
+  msg.step = msg.width;
+  msg.data = std::move(*mask_data);
+  return msg;
+}
+
+void draw_instances(
+  sensor_msgs::msg::Image & image, const vision_msgs::msg::Detection2DArray & detections,
+  const sensor_msgs::msg::Image & mask)
+{
+  // The value i in the mask is the pixels of detection i, which gets the colour of its class
+  ColorTable colors = default_colors();
+  for (std::size_t i = 0; i < detections.detections.size() && i < colors.size(); ++i) {
+    const auto & results = detections.detections[i].results;
+    if (!results.empty()) {
+      colors[i] = hue_color(name_hue(results.front().hypothesis.class_id));
+    }
+  }
+  blend_mask(image, mask, colors);
+  draw_detections(image, detections);
+}
+
+vision_msgs::msg::LabelInfo to_ros_label_info(
+  const std::vector<std::string> & labels, const std_msgs::msg::Header & header)
+{
+  vision_msgs::msg::LabelInfo msg;
+  msg.header = header;
+  msg.class_map.reserve(labels.size());
+  for (std::size_t i = 0; i < labels.size(); ++i) {
+    vision_msgs::msg::VisionClass vision_class;
+    vision_class.class_id = static_cast<uint16_t>(i);
+    vision_class.class_name = labels[i];
+    msg.class_map.push_back(vision_class);
+  }
+  return msg;
 }
 
 ImuConverter::ImuConverter(

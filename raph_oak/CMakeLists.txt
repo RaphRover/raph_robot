@@ -9,6 +9,7 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(vision_msgs REQUIRED)
 
 generate_parameter_library(
   oak_wrapper_parameters
@@ -19,6 +20,8 @@ add_library(raph_oak SHARED
   src/camera_info.cpp
   src/conversions.cpp
   src/demand.cpp
+  src/nn_model.cpp
+  src/nn_overlay.cpp
   src/oak_wrapper.cpp
   src/parameters.cpp
   src/pipeline.cpp
@@ -28,6 +31,7 @@ target_link_libraries(raph_oak
   rclcpp_components::component
   ${sensor_msgs_TARGETS}
   ${std_srvs_TARGETS}
+  ${vision_msgs_TARGETS}
   oak_wrapper_parameters
   opencv_core
   opencv_imgproc
@@ -72,17 +76,23 @@ if(BUILD_TESTING)
   ament_add_gtest(test_demand test/test_demand.cpp src/demand.cpp)
   target_include_directories(test_demand PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+  ament_add_gtest(test_nn_model test/test_nn_model.cpp src/nn_model.cpp)
+  target_include_directories(test_nn_model PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
   # Conversions of camera info, IMU reports and point clouds, with DepthAI but without a camera
   ament_add_gtest(test_conversions
     test/test_camera_info.cpp
     test/test_conversions.cpp
+    test/test_nn_overlay.cpp
     src/camera_info.cpp
     src/conversions.cpp
+    src/nn_overlay.cpp
   )
   target_include_directories(test_conversions PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_link_libraries(test_conversions
     rclcpp::rclcpp
     ${sensor_msgs_TARGETS}
+    ${vision_msgs_TARGETS}
     opencv_core
     opencv_imgproc
     depthai_v3::core

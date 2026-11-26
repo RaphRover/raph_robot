@@ -81,6 +81,38 @@ raph_oak:
       description: Maximum point cloud rate in frames per second. The depth frames feeding the point cloud are limited to this rate, so less is computed on the host and nothing above it is published. Values above the depth rate have no effect
       validation:
         bounds<>: [1, 60]
+  nn:
+    enabled:
+      type: bool
+      default_value: false
+      description: Run a neural network on its own output of the RGB camera and publish its results. The kind of the model (detection, classification or segmentation, with or without masks) is taken from its NNArchive
+      read_only: true
+    model:
+      type: string
+      default_value: "luxonis/yolov6-nano:r2-coco-512x384"
+      description: Path to a local NNArchive file (.tar.xz) or, if no such file exists, a Luxonis Model Zoo slug (e.g. luxonis/yolov6-nano:r2-coco-512x384). A zoo slug requires internet access on the first run.
+      read_only: true
+    fps:
+      type: double
+      default_value: 5.0
+      description: Frame rate of the camera output feeding the neural network, which is also the inference rate
+      validation:
+        bounds<>: [1.0, 30.0]
+      read_only: true
+    confidence_threshold:
+      type: double
+      default_value: 0.5
+      description: Detections with a lower confidence are discarded on the device. Only used by detection models
+      validation:
+        bounds<>: [0.0, 1.0]
+      read_only: true
+    num_shaves:
+      type: int
+      default_value: 3
+      description: Number of SHAVE cores the network is compiled for. The resources left over by the rest of the pipeline limit this. If it does not fit, the pipeline fails to start and the device names the available count.
+      validation:
+        bounds<>: [1, 16]
+      read_only: true
   mono:
     width:
       type: int

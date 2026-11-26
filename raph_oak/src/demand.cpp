@@ -42,7 +42,7 @@ ImageDemand::ImageDemand(const ImageSubscriberCounts & subscribers, bool has_com
 }
 
 Demand::Demand(const SubscriberCounts & counts)
-: pointcloud_(counts.pointcloud > 0), imu_(counts.imu > 0)
+: pointcloud_(counts.pointcloud > 0), imu_(counts.imu > 0), nn_(counts.nn > 0)
 {
   for (const auto & spec : kImageStreamSpecs) {
     const auto index = get_image_index(spec.id);
@@ -81,6 +81,8 @@ GateStates Demand::gate_states() const
   states.set(Control::DEPTH_IN, depth_needed());
   states.set(Control::POINT_CLOUD, pointcloud_);
   states.set(Control::IMU, imu_);
+  // Both passthroughs come out of the network, which also runs for the detections and the overlay
+  states.set(Control::NN, nn());
   return states;
 }
 

@@ -23,6 +23,9 @@
 #include <array>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <string>
+#include <vector>
 
 #include "depthai/device/Device.hpp"
 #include "depthai/pipeline/InputQueue.hpp"
@@ -31,8 +34,10 @@
 #include "depthai/pipeline/datatype/ADatatype.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "raph_oak/control.hpp"
+#include "raph_oak/nn_model.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/streams.hpp"
+#include "rclcpp/logger.hpp"
 
 namespace raph_oak
 {
@@ -40,8 +45,9 @@ namespace raph_oak
 /// The queues of one image stream, see kImageStreamSpecs
 struct ImageQueueSet
 {
+  /// Empty if the stream does not exist, see ImageStreamSpec::needs_nn
   std::shared_ptr<dai::MessageQueue> raw_queue;
-  /// Empty if the stream has no compressed variant
+  /// Empty if the stream has no compressed variant or does not exist
   std::shared_ptr<dai::MessageQueue> compressed_queue;
 };
 
@@ -54,6 +60,16 @@ struct PipelineDetails
   std::shared_ptr<dai::MessageQueue> pointcloud_queue;
   std::shared_ptr<dai::MessageQueue> still_image_queue;
 
+  // Results of the neural network: ImgDetections, Classifications or a SegmentationMask, see
+  // nn_kind. Stays null when the nn.enabled parameter is false or the model could not be loaded,
+  // which is also when the NN_PASSTHROUGH stream has no queues.
+  std::shared_ptr<dai::MessageQueue> nn_queue;
+  std::optional<NnKind> nn_kind;
+  // A detection model that also outputs a mask for every detection (instance segmentation)
+  bool nn_has_masks = false;
+  // Names of the classes of the model, indexed by the class index, empty if it does not list them
+  std::vector<std::string> nn_labels;
+
   // Control channel (see Control)
   std::shared_ptr<dai::InputQueue> control_queue;
   std::shared_ptr<std::mutex> control_mutex;
@@ -65,6 +81,7 @@ struct PipelineDetails
 void send_control(
   const PipelineDetails & details, Control target, const std::shared_ptr<dai::ADatatype> & message);
 
-PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const Params & params);
+PipelineDetails create_dai_pipeline(
+  std::shared_ptr<dai::Device> & device, const Params & params, const rclcpp::Logger & logger);
 
 }  // namespace raph_oak

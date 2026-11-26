@@ -40,7 +40,8 @@ namespace raph_oak
  *  - *In gates sit in front of the (rotation) ImageManip, so a closed gate keeps the ImageManip and
  *    everything behind it idle,
  *  - *Raw gates sit in front of the XLinkOut of the raw image,
- *  - *Enc gates sit in front of the JPEG encoder.
+ *  - *Enc gates sit in front of the JPEG encoder (for the neural network, in front of the
+ *    conversion to NV12 that the encoder needs).
  *
  * The targets are written like enum values (Control::RGB_RAW) and converted implicitly, so they can
  * be compared and used in a switch.
@@ -72,6 +73,8 @@ public:
     RIGHT_RECT_RAW,
     RIGHT_RECT_ENC,
     IMU,
+    NN,
+    NN_ENC,
     STILL,
     CAMERA_B,  // left stereo sensor (CameraControl: start/stop streaming)
     CAMERA_C,  // right stereo sensor (CameraControl: start/stop streaming)
@@ -146,6 +149,10 @@ public:
         return "right_rect compressed";
       case IMU:
         return "imu";
+      case NN:
+        return "nn";
+      case NN_ENC:
+        return "nn compressed";
       case STILL:
         return "still image";
       case CAMERA_B:

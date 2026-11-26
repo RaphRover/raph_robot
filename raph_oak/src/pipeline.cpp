@@ -20,19 +20,31 @@
 
 #include "raph_oak/pipeline.hpp"
 
+#include <algorithm>
 #include <cstdint>
+#include <exception>
+#include <filesystem>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 // DepthAI
+#include "depthai/beta/node/ClassificationParser.hpp"
+#include "depthai/beta/node/FastSAMParser.hpp"
 #include "depthai/capabilities/ImgFrameCapability.hpp"
 #include "depthai/common/CameraBoardSocket.hpp"
 #include "depthai/common/CameraImageOrientation.hpp"
 #include "depthai/common/DepthUnit.hpp"
+#include "depthai/common/ModelType.hpp"
 #include "depthai/device/Device.hpp"
+#include "depthai/device/Platform.hpp"
+#include "depthai/modelzoo/Zoo.hpp"
+#include "depthai/nn_archive/NNArchive.hpp"
+#include "depthai/nn_archive/v1/Config.hpp"
 #include "depthai/pipeline/Node.hpp"
 #include "depthai/pipeline/Pipeline.hpp"
 #include "depthai/pipeline/datatype/ADatatype.hpp"
@@ -40,11 +52,14 @@
 #include "depthai/pipeline/datatype/ImgFrame.hpp"
 #include "depthai/pipeline/datatype/StereoDepthConfig.hpp"
 #include "depthai/pipeline/node/Camera.hpp"
+#include "depthai/pipeline/node/DetectionNetwork.hpp"
 #include "depthai/pipeline/node/Gate.hpp"
 #include "depthai/pipeline/node/IMU.hpp"
 #include "depthai/pipeline/node/ImageManip.hpp"
+#include "depthai/pipeline/node/NeuralNetwork.hpp"
 #include "depthai/pipeline/node/PointCloud.hpp"
 #include "depthai/pipeline/node/Script.hpp"
+#include "depthai/pipeline/node/SegmentationParser.hpp"
 #include "depthai/pipeline/node/StereoDepth.hpp"
 #include "depthai/pipeline/node/VideoEncoder.hpp"
 #include "depthai/properties/IMUProperties.hpp"
@@ -53,12 +68,70 @@
 
 // ROS
 #include "raph_oak/control.hpp"
+#include "raph_oak/nn_model.hpp"
 #include "raph_oak/oak_wrapper_parameters.hpp"
 #include "raph_oak/parameters.hpp"
 #include "raph_oak/streams.hpp"
+#include "rclcpp/logger.hpp"
+#include "rclcpp/logging.hpp"
 
 namespace raph_oak
 {
+namespace
+{
+// Loads the model from a local NNArchive file. If no such file exists, the parameter is treated
+// as a Model Zoo slug, which is downloaded unless it is already present in the zoo cache
+// (see the DEPTHAI_ZOO_CACHE_PATH environment variable).
+dai::NNArchive load_nn_archive(const std::string & model, const std::string & platform)
+{
+  const std::filesystem::path model_path(model);
+  if (std::filesystem::exists(model_path)) {
+    return dai::NNArchive(model_path);
+  }
+
+  dai::NNModelDescription description;
+  description.model = model;
+  description.platform = platform;
+  return dai::NNArchive(dai::getModelFromZoo(description, true));
+}
+
+// The frame type the network expects. Few archives declare it outright, so fall back to the
+// input layout (most do declare that) and finally to what the platform's inference backend uses.
+dai::ImgFrame::Type get_nn_frame_type(const dai::NNArchive & archive, dai::Platform platform)
+{
+  static const std::map<std::string, dai::ImgFrame::Type> kFrameTypes{
+    {"BGR888i", dai::ImgFrame::Type::BGR888i}, {"BGR888p", dai::ImgFrame::Type::BGR888p},
+    {"RGB888i", dai::ImgFrame::Type::RGB888i}, {"RGB888p", dai::ImgFrame::Type::RGB888p},
+    {"GRAY8", dai::ImgFrame::Type::GRAY8},     {"NV12", dai::ImgFrame::Type::NV12},
+  };
+
+  const auto & inputs = archive.getConfig<dai::nn_archive::v1::Config>().model.inputs;
+  if (!inputs.empty()) {
+    const auto & input = inputs.front();
+
+    if (input.preprocessing.daiType) {
+      const auto frame_type = kFrameTypes.find(*input.preprocessing.daiType);
+      if (frame_type != kFrameTypes.end()) {
+        return frame_type->second;
+      }
+    }
+
+    // NCHW keeps the channels in separate planes, NHWC interleaves them
+    if (input.layout) {
+      if (*input.layout == "NCHW") {
+        return dai::ImgFrame::Type::BGR888p;
+      }
+      if (*input.layout == "NHWC") {
+        return dai::ImgFrame::Type::BGR888i;
+      }
+    }
+  }
+
+  // RVC2 runs planar inputs, RVC4 interleaved ones
+  return platform == dai::Platform::RVC2 ? dai::ImgFrame::Type::BGR888p
+                                         : dai::ImgFrame::Type::BGR888i;
+}
+}  // namespace
 
 void send_control(
   const PipelineDetails & details, Control target, const std::shared_ptr<dai::ADatatype> & message)
@@ -77,7 +150,10 @@ void send_control(
   details.control_queue->send(message);
 }
 
-PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const Params & params)
+// Recurses at most once, to rebuild the pipeline with the neural network disabled
+// NOLINTNEXTLINE(misc-no-recursion)
+PipelineDetails create_dai_pipeline(
+  std::shared_ptr<dai::Device> & device, const Params & params, const rclcpp::Logger & logger)
 {
   PipelineDetails details;
   details.control_mutex = std::make_shared<std::mutex>();
@@ -264,6 +340,151 @@ PipelineDetails create_dai_pipeline(std::shared_ptr<dai::Device> & device, const
   auto * still_output = rgb_node->requestFullResolutionOutput(
     dai::ImgFrame::Type::NV12, static_cast<float>(params.rgb.fps));
   details.still_image_queue = make_raw_queue(*still_output, Control::STILL, "still_image");
+
+  // Neural network. A failure here rebuilds the pipeline without it, so that a missing or broken
+  // model never keeps the camera itself from coming up.
+  if (params.nn.enabled) {
+    try {
+      if (params.nn.model.empty()) {
+        throw std::runtime_error("The nn.model parameter is empty");
+      }
+
+      const auto archive = load_nn_archive(params.nn.model, device->getPlatformAsString());
+
+      const auto platforms = archive.getSupportedPlatforms();
+      if (std::find(platforms.begin(), platforms.end(), device->getPlatform()) == platforms.end()) {
+        throw std::runtime_error(
+          "The model does not support the " + device->getPlatformAsString() + " platform");
+      }
+
+      const auto input_size = archive.getInputSize();
+      if (!input_size) {
+        throw std::runtime_error("The model does not declare its input size");
+      }
+
+      // The network gets its own CAM_A output at the size and format it takes, so there is no
+      // resize node. The output runs at nn.fps. Letterboxing keeps the full field of view, at the
+      // cost of padding the frame. The gate keeps the inference idle while nobody is subscribed.
+      const auto & passthrough_spec = get_image_stream_spec(ImageStreamId::NN_PASSTHROUGH);
+      auto & passthrough_queues = details.image_queue_sets[get_image_index(passthrough_spec.id)];
+      const auto nn_frame_type = get_nn_frame_type(archive, device->getPlatform());
+      auto * nn_output = rgb_node->requestOutput(
+        {input_size->first, input_size->second}, nn_frame_type, dai::ImgResizeMode::LETTERBOX,
+        static_cast<float>(params.nn.fps));
+      auto nn_gate = make_gate(*nn_output, passthrough_spec.raw_gate);
+
+      // The kind of the model decides the node that parses its output: DetectionNetwork does it
+      // for detection models, the others get the plain network followed by a parser for the head
+      const auto & heads = archive.getConfig<dai::nn_archive::v1::Config>().model.heads;
+      std::vector<std::string> parsers;
+      if (heads) {
+        for (const auto & head : *heads) {
+          parsers.push_back(head.parser);
+        }
+      }
+      const NnKind nn_kind = get_nn_kind(parsers);
+
+      // RVC2 models ship as a superblob that has to be compiled for a specific number of SHAVE
+      // cores. The default does not fit next to the rest of the pipeline, so ask for the
+      // configured count instead.
+      const bool is_superblob = archive.getModelType() == dai::model::ModelType::SUPERBLOB;
+
+      dai::Node::Output * nn_result = nullptr;
+      dai::Node::Output * nn_passthrough = nullptr;
+      if (nn_kind == NnKind::DETECTION) {
+        for (const auto & head : *heads) {
+          const auto & metadata = head.metadata;
+          if (
+            (metadata.maskOutputs && !metadata.maskOutputs->empty()) ||
+            (metadata.protosOutputs && !metadata.protosOutputs->empty())) {
+            details.nn_has_masks = true;
+          }
+        }
+        auto detection_network =
+          pipeline->create<dai::node::DetectionNetwork>()->build(nn_gate->output, archive);
+        if (is_superblob) {
+          detection_network->setNNArchive(archive, params.nn.num_shaves);
+        }
+        detection_network->setConfidenceThreshold(
+          static_cast<float>(params.nn.confidence_threshold));
+        nn_result = &detection_network->out;
+        nn_passthrough = &detection_network->passthrough;
+      } else {
+        auto network =
+          pipeline->create<dai::node::NeuralNetwork>()->build(nn_gate->output, archive);
+        if (is_superblob) {
+          network->setNNArchive(archive, params.nn.num_shaves);
+        }
+        nn_passthrough = &network->passthrough;
+
+        // All heads are of the kind of the model, so the first one is the one to parse
+        const auto & head = heads->front();
+        if (nn_kind == NnKind::CLASSIFICATION) {
+          nn_result = &pipeline->create<dai::beta::node::ClassificationParser>()
+                         ->build(network->out, head)
+                         ->out;
+        } else if (is_fastsam_parser(head.parser)) {
+          // The mask holds instance indices, not classes, so there are no names for them
+          nn_result =
+            &pipeline->create<dai::beta::node::FastSAMParser>()->build(network->out, head)->out;
+        } else {
+          if (head.metadata.classes) {
+            details.nn_labels = *head.metadata.classes;
+          }
+          nn_result =
+            &pipeline->create<dai::node::SegmentationParser>()->build(network->out, head)->out;
+        }
+      }
+      details.nn_kind = nn_kind;
+
+      details.nn_queue = nn_result->createOutputQueue(1, false);
+      details.nn_queue->setName("nn");
+      // The raw passthrough comes out of the network, behind the gate of its input
+      passthrough_queues.raw_queue = nn_passthrough->createOutputQueue(1, false);
+      passthrough_queues.raw_queue->setName(passthrough_spec.name);
+
+      // JPEG compressed passthrough, encoded on the camera from the same passthrough, so it is
+      // the frame the detections belong to (the network runs while it is wanted). The encoder only
+      // takes NV12, so the frame is converted first (unless the network already takes NV12).
+      // Both sit behind their own gate, so neither runs while only the detections or the raw
+      // passthrough are subscribed.
+      auto nn_enc_gate = make_gate(*nn_passthrough, passthrough_spec.enc_gate);
+      auto nn_encoder = pipeline->create<dai::node::VideoEncoder>();
+      nn_encoder->setDefaultProfilePreset(
+        static_cast<float>(params.nn.fps), dai::VideoEncoderProperties::Profile::MJPEG);
+      nn_encoder->setQuality(params.rgb_compressed.jpeg_quality);
+      nn_encoder->input.setBlocking(false);
+      if (nn_frame_type == dai::ImgFrame::Type::NV12) {
+        nn_enc_gate->output.link(nn_encoder->input);
+      } else {
+        auto nn_to_nv12 = pipeline->create<dai::node::ImageManip>();
+        nn_to_nv12->initialConfig->setFrameType(dai::ImgFrame::Type::NV12);
+        nn_to_nv12->setMaxOutputFrameSize(
+          static_cast<int>(input_size->first * input_size->second * 3 / 2));
+        nn_to_nv12->inputImage.setBlocking(false);
+        nn_enc_gate->output.link(nn_to_nv12->inputImage);
+        nn_to_nv12->out.link(nn_encoder->input);
+      }
+      passthrough_queues.compressed_queue = nn_encoder->out.createOutputQueue(1, false);
+      passthrough_queues.compressed_queue->setName(
+        std::string(passthrough_spec.name) + "_compressed");
+
+      RCLCPP_INFO_STREAM(
+        logger, "Loaded " << to_string(nn_kind) << " model \"" << params.nn.model << "\" ("
+                          << input_size->first << "x" << input_size->second << " input)");
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR_STREAM(
+        logger,
+        "Failed to set up the neural network: " << e.what() << ". Continuing without the network.");
+
+      // The nodes created before the failure are already linked into the pipeline (and a network
+      // that got its model would still claim device resources on start), so start over instead
+      // of trying to take them out.
+      Params params_without_nn = params;
+      params_without_nn.nn.enabled = false;
+      return create_dai_pipeline(device, params_without_nn, logger);
+    }
+  }
 
   // Create pipeline details
   details.pipeline = pipeline;

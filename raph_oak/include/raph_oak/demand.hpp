@@ -50,6 +50,9 @@ struct SubscriberCounts
   std::array<ImageSubscriberCounts, kImageStreamCount> images{};
   std::size_t pointcloud{0};
   std::size_t imu{0};
+  /// Subscribers of ~/nn/detections and ~/nn/overlay, 0 when nn.enabled is false. The subscribers
+  /// of the passthrough topics are counted with the other image streams
+  std::size_t nn{0};
 };
 
 /// Which gates are open. Only the gates that follow the demand are meaningful, see
@@ -96,6 +99,9 @@ public:
   }
   bool pointcloud() const { return pointcloud_; }
   bool imu() const { return imu_; }
+  /// The network has to run: detections, the overlay or either passthrough (both come out of the
+  /// network) are wanted
+  bool nn() const { return nn_ || image(ImageStreamId::NN_PASSTHROUGH).any(); }
 
   /// The depth is needed for the depth image and for the point cloud
   bool depth_needed() const;
@@ -110,6 +116,7 @@ private:
   std::array<ImageDemand, kImageStreamCount> images_{};
   bool pointcloud_{false};
   bool imu_{false};
+  bool nn_{false};
 };
 
 enum class StereoSensorAction
