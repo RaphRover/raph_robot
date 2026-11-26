@@ -3,12 +3,18 @@
 """A module containing the RaphSystem node implementation."""
 
 import subprocess
+import time
 from pathlib import Path
 
 import rclpy
-from raph_interfaces.srv import GetOsVersion
+from raph_fw.status import FirmwareStatus, compare_versions, read_target_version, write_status
+from raph_interfaces.srv import GetControllerInfo, GetFirmwareStatus, GetOsVersion
 from rclpy.node import Node
+from rclpy.task import Future
 from std_srvs.srv import Trigger
+
+FIRMWARE_CHECK_INTERVAL = 15 * 60
+FIRMWARE_CHECK_TIMEOUT = 5.0
 
 
 class RaphSystem(Node):
@@ -38,7 +44,129 @@ class RaphSystem(Node):
             "~/get_os_version",
             self._get_os_version_callback,
         )
+        self.firmware_status = FirmwareStatus()
+        self.firmware_status_path = Path(
+            self.declare_parameter(
+                "firmware_status_path",
+                "/var/lib/raph/firmware-status/status.json",
+            )
+            .get_parameter_value()
+            .string_value,
+        )
+        self._firmware_future: Future | None = None
+        self._firmware_deadline = 0.0
+        self._next_firmware_check = 0.0
+        self.controller_info_client = self.create_client(
+            GetControllerInfo,
+            "controller/get_controller_info",
+        )
+        self.get_firmware_status_srv = self.create_service(
+            GetFirmwareStatus,
+            "~/get_firmware_status",
+            self._get_firmware_status_callback,
+        )
+        self.firmware_check_timer = self.create_timer(
+            1.0,
+            self._periodic_firmware_check,
+        )
+        self._start_firmware_check()
         self.get_logger().info("Raph system node started!")
+
+    def _periodic_firmware_check(self) -> None:
+        if self.firmware_status.checking:
+            self._check_firmware_timeout()
+        elif time.monotonic() >= self._next_firmware_check:
+            self._start_firmware_check()
+
+    def _get_firmware_status_callback(
+        self,
+        request: GetFirmwareStatus.Request,
+        response: GetFirmwareStatus.Response,
+    ) -> GetFirmwareStatus.Response:
+        if request.refresh:
+            self._start_firmware_check()
+        status = self.firmware_status
+        response.status = status.status
+        response.current_version = status.current_version
+        response.target_version = status.target_version
+        response.checking = status.checking
+        response.checked_at = status.checked_at
+        response.status_message = status.status_message
+        response.update_command = status.update_command
+        response.update_instructions = status.update_instructions
+        return response
+
+    def _start_firmware_check(self) -> None:
+        if self.firmware_status.checking:
+            return
+        self.firmware_status = FirmwareStatus(checking=True)
+        self._firmware_deadline = time.monotonic() + FIRMWARE_CHECK_TIMEOUT
+        try:
+            self.firmware_status.target_version = read_target_version()
+        except (OSError, ValueError, LookupError) as exc:
+            self._finish_firmware_check(f"Cannot read packaged firmware: {exc}")
+            return
+        self._request_controller_info()
+
+    def _request_controller_info(self) -> None:
+        if self._firmware_future is not None or not self.controller_info_client.service_is_ready():
+            return
+        try:
+            self._firmware_future = self.controller_info_client.call_async(
+                GetControllerInfo.Request(),
+            )
+        except RuntimeError as exc:
+            self._finish_firmware_check(f"Cannot request controller information: {exc}")
+            return
+        self._firmware_future.add_done_callback(self._controller_info_done)
+
+    def _controller_info_done(self, future: Future) -> None:
+        if future is not self._firmware_future:
+            return
+        self._firmware_future = None
+        if time.monotonic() >= self._firmware_deadline:
+            self._finish_firmware_check("Timed out waiting for controller firmware information.")
+            return
+        error = future.exception()
+        if error is not None:
+            self._finish_firmware_check(f"Cannot read running firmware: {error}")
+            return
+        response = future.result()
+        if response is None or not response.firmware_version:
+            self._finish_firmware_check("Controller returned an empty firmware version.")
+            return
+        self.firmware_status.current_version = response.firmware_version
+        self.firmware_status.status = compare_versions(
+            response.firmware_version,
+            self.firmware_status.target_version,
+        )
+        self._finish_firmware_check()
+
+    def _check_firmware_timeout(self) -> None:
+        if not self.firmware_status.checking:
+            return
+        if time.monotonic() >= self._firmware_deadline:
+            if self._firmware_future is not None:
+                future = self._firmware_future
+                self._firmware_future = None
+                self.controller_info_client.remove_pending_request(future)
+                future.cancel()
+            self._finish_firmware_check("Timed out waiting for controller firmware information.")
+            return
+        self._request_controller_info()
+
+    def _finish_firmware_check(self, error: str = "") -> None:
+        self.firmware_status.checking = False
+        self.firmware_status.checked_at = int(time.time())
+        self.firmware_status.status_message = error
+        self._next_firmware_check = time.monotonic() + (30.0 if error else FIRMWARE_CHECK_INTERVAL)
+        if error:
+            self.firmware_status.status = "unavailable"
+            self.get_logger().warning(error)
+        try:
+            write_status(self.firmware_status_path, self.firmware_status)
+        except OSError as exc:
+            self.get_logger().error(f"Cannot write firmware notification cache: {exc}")
 
     def _reboot_callback(
         self,

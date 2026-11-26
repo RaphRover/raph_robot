@@ -25,6 +25,7 @@ from typing import cast
 from ament_index_python import get_package_share_directory
 
 from raph_fw.commands import FlashCommand
+from raph_fw.versions import get_packaged_firmware_path
 
 
 class UpdateCommand(FlashCommand):
@@ -50,7 +51,7 @@ class UpdateCommand(FlashCommand):
         """
         share_dir = Path(get_package_share_directory("raph_fw"))
         bootloader_bin = share_dir / "data" / "bootloader" / "raphcore_bootloader_latest.bin"
-        firmware_bin = share_dir / "data" / "firmware" / "raphcore_firmware_latest.bin"
+        firmware_bin = get_packaged_firmware_path()
 
         if args.bootloader:
             binary_path = str(bootloader_bin.resolve())

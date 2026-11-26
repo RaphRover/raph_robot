@@ -24,6 +24,8 @@ import struct
 import zlib
 from pathlib import Path
 
+from ament_index_python.packages import get_package_share_directory
+
 _BOOTLOADER_INFO_OFFSET = 0x400
 _BOOTLOADER_MAGIC = 0x424F4F54  # 'BOOT'
 _MAX_VERSION_STRING_SIZE = 51  # 50 chars + null terminator
@@ -85,6 +87,16 @@ def get_bootloader_version(path: Path) -> str:
 
 
 _FW_VERSION_PREFIX = b"__FW_VER__:"
+
+
+def get_packaged_firmware_path() -> Path:
+    """Return the firmware image used by the installed package's update command."""
+    return (
+        Path(get_package_share_directory("raph_fw"))
+        / "data"
+        / "firmware"
+        / "raphcore_firmware_latest.bin"
+    )
 
 
 def get_firmware_version(path: Path) -> str:
