@@ -125,7 +125,7 @@ class ParameterBridge(Node):
         future = await self._call_with_retry(self.get_parameters_client, request)
 
         response = future.result()
-        if not response.values:
+        if not response.values or response.values[0].type != Parameter.Type.BOOL.value:
             self.get_logger().info(
                 f"No 'is_configured' parameter found for {self.target_node}. "
                 "Check if firmware updates are available.",
@@ -218,7 +218,7 @@ class ParameterBridge(Node):
             timeout_timer = self.create_timer(
                 5.0,
                 future.cancel,
-                callback_group=self.cancel_timer_cb_group
+                callback_group=self.cancel_timer_cb_group,
             )
             await future
             timeout_timer.cancel()
