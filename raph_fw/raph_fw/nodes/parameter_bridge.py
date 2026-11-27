@@ -20,21 +20,22 @@
 
 from raph_interfaces.srv import ApplyTfFramePrefix
 from rcl_interfaces.msg import ParameterDescriptor
-from rcl_interfaces.srv import SetParameters
+from rcl_interfaces.srv import GetParameters, SetParameters
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.client import Client
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.task import Future
-from std_msgs.msg import Empty
 
 WAIT_TIMEOUT = 2.0
+
 
 class ParameterBridge(Node):
     """Node that loads parameter overrides and forwards them to the controller node."""
 
     target_node: str
     apply_tf_frame_prefix_client: Client
+    get_parameters_client: Client
     set_parameters_client: Client
     tf_frame_prefix: str
     params_to_set: dict[str, Parameter]
@@ -61,13 +62,6 @@ class ParameterBridge(Node):
         self.service_cb_group = MutuallyExclusiveCallbackGroup()
         self.cancel_timer_cb_group = MutuallyExclusiveCallbackGroup()
 
-        self.param_trigger_sub = self.create_subscription(
-            Empty,
-            f"{self.target_node}/param_trigger",
-            self._on_parameter_trigger,
-            10,
-        )
-
         self.apply_tf_frame_prefix_client = self.create_client(
             ApplyTfFramePrefix,
             f"{self.target_node}/apply_tf_frame_prefix",
@@ -75,31 +69,70 @@ class ParameterBridge(Node):
         )
         self.tf_frame_prefix = self.get_parameter("tf_frame_prefix").value
 
+        self.get_parameters_client = self.create_client(
+            GetParameters,
+            f"{self.target_node}/get_parameters",
+            callback_group=self.service_cb_group,
+        )
+
         self.set_parameters_client = self.create_client(
             SetParameters,
             f"{self.target_node}/set_parameters",
             callback_group=self.service_cb_group,
         )
         self.params_to_set: dict[str, Parameter] = self._parse_overrides_file()
+        self.params_to_set["is_configured"] = Parameter("is_configured", value=True)
 
-        self.apply_firmware_config_timer = self.create_timer(0.1, self.apply_firmware_config)
+        self.startup_config_timer = self.create_timer(
+            0.1,
+            self.startup_config_apply,
+        )
+        self.is_configured_timer = self.create_timer(5.0, self.check_is_configured)
 
         self.get_logger().info(
             f"Parameter bridge initialized for {self.target_node} target node",
         )
 
-    def _on_parameter_trigger(self, _: Empty) -> None:
-        """Schedule controller parameter updates when firmware signals readiness."""
-        self.get_logger().info(
-            "Received param_trigger; scheduling controller parameter update.",
-        )
-        self.apply_firmware_config_timer.reset()
+    async def check_is_configured(self) -> None:
+        """Reapply controller configuration when firmware reports it is unconfigured."""
+        if await self._should_configure():
+            self.get_logger().info(
+                "Controller firmware is not configured. Applying configuration...",
+            )
+            await self.apply_firmware_config()
+
+    async def startup_config_apply(self) -> None:
+        """Apply firmware configuration during startup."""
+        self.startup_config_timer.cancel()
+        self.destroy_timer(self.startup_config_timer)
+        await self.apply_firmware_config()
 
     async def apply_firmware_config(self) -> None:
-        """Perform all the tasks of the parameter bridge."""
-        self.apply_firmware_config_timer.cancel()
+        """Apply firmware configuration."""
         await self.apply_controller_tf_frame_prefix()
         await self.apply_parameter_overrides()
+
+    async def _should_configure(self) -> bool:
+        """Determine if the controller firmware should be configured."""
+        if not self.get_parameters_client.service_is_ready():
+            self.get_logger().info(
+                f"Service {self.get_parameters_client.srv_name} not ready, skipping the check.",
+            )
+            return False
+
+        request = GetParameters.Request()
+        request.names = ["is_configured"]
+        future = await self._call_with_retry(self.get_parameters_client, request)
+
+        response = future.result()
+        if not response.values:
+            self.get_logger().info(
+                f"No 'is_configured' parameter found for {self.target_node}. "
+                "Check if firmware updates are available.",
+            )
+            return False
+
+        return not response.values[0].bool_value
 
     async def apply_controller_tf_frame_prefix(self) -> bool:
         """Wait for target service and apply TF frame prefix to the controller node."""
@@ -177,7 +210,7 @@ class ParameterBridge(Node):
     async def _call_with_retry(
         self,
         client: Client,
-        request: ApplyTfFramePrefix.Request | SetParameters.Request,
+        request: ApplyTfFramePrefix.Request | GetParameters.Request | SetParameters.Request,
     ) -> Future:
         """Retry timed out async service calls until the future completes."""
         while True:
