@@ -20,15 +20,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-import contextlib
-
 import rclpy
 from raph_fw.nodes import ParameterBridge
 
 rclpy.init()
 node = ParameterBridge()
 
-with contextlib.suppress(KeyboardInterrupt):
-    node.run()
+try:
+    rclpy.spin(node)
+except KeyboardInterrupt:
     node.destroy_node()
-    rclpy.shutdown()
+    rclpy.try_shutdown()
